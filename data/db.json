@@ -1,0 +1,1479 @@
+{
+  "buildings": [
+    {
+      "id": "b_q6myfzq",
+      "name": "Budynek Parkowa 21",
+      "address": "Budynek Parkowa 21, Polska",
+      "notes": "",
+      "createdAt": "2026-03-11"
+    },
+    {
+      "id": "b_bg7d6cl",
+      "name": "Rybnik kamienica",
+      "address": "Łony 8a Rybnik",
+      "notes": "",
+      "createdAt": "2026-03-11"
+    }
+  ],
+  "units": [
+    {
+      "id": "u_d8x7tkf",
+      "buildingId": "b_q6myfzq",
+      "code": "405",
+      "type": "3 pokoje",
+      "area": 68,
+      "floor": 4,
+      "rentDefault": 2850,
+      "serviceCharge": 380,
+      "status": "wolne",
+      "notes": ""
+    }
+  ],
+  "tenants": [
+    {
+      "id": "t_am3v7du",
+      "name": "Dominika Zielińska",
+      "phone": "50060026",
+      "email": "tenant17@mail.pl",
+      "unitId": "",
+      "status": "aktywny",
+      "notes": ""
+    },
+    {
+      "id": "t_j7xvmr2",
+      "name": "Robert Szymański",
+      "phone": "50060027",
+      "email": "tenant18@mail.pl",
+      "unitId": "",
+      "status": "aktywny",
+      "notes": ""
+    },
+    {
+      "id": "t_6muhyd9",
+      "name": "Patrycja Dąbrowska",
+      "phone": "50060028",
+      "email": "tenant19@mail.pl",
+      "unitId": "",
+      "status": "aktywny",
+      "notes": ""
+    }
+  ],
+  "leases": [],
+  "meters": [
+    {
+      "id": "m_bl95wu2",
+      "unitId": "u_xwdna4x",
+      "type": "prąd",
+      "serial": "PR-1-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_xol9xk3",
+      "unitId": "u_xwdna4x",
+      "type": "woda",
+      "serial": "WO-1-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_ld9gkdj",
+      "unitId": "u_xwdna4x",
+      "type": "gaz",
+      "serial": "GA-1-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_2kylq7q",
+      "unitId": "u_n0ek8ce",
+      "type": "prąd",
+      "serial": "PR-2-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_oj31cio",
+      "unitId": "u_n0ek8ce",
+      "type": "woda",
+      "serial": "WO-2-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_nl1hffy",
+      "unitId": "u_n0ek8ce",
+      "type": "gaz",
+      "serial": "GA-2-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_ygnqe86",
+      "unitId": "u_axc96io",
+      "type": "prąd",
+      "serial": "PR-3-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_r2fyc7n",
+      "unitId": "u_axc96io",
+      "type": "woda",
+      "serial": "WO-3-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_xr87uo5",
+      "unitId": "u_axc96io",
+      "type": "gaz",
+      "serial": "GA-3-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_lbw17sf",
+      "unitId": "u_c632i7m",
+      "type": "prąd",
+      "serial": "PR-4-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_rhcnt10",
+      "unitId": "u_c632i7m",
+      "type": "woda",
+      "serial": "WO-4-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_y3meitr",
+      "unitId": "u_c632i7m",
+      "type": "gaz",
+      "serial": "GA-4-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_qraux87",
+      "unitId": "u_v7z63pl",
+      "type": "prąd",
+      "serial": "PR-5-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_bzdh3uc",
+      "unitId": "u_v7z63pl",
+      "type": "woda",
+      "serial": "WO-5-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_mkr4gpb",
+      "unitId": "u_v7z63pl",
+      "type": "gaz",
+      "serial": "GA-5-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_pzrec01",
+      "unitId": "u_8cfls5h",
+      "type": "prąd",
+      "serial": "PR-6-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_i136dpp",
+      "unitId": "u_8cfls5h",
+      "type": "woda",
+      "serial": "WO-6-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_7iymv4k",
+      "unitId": "u_8cfls5h",
+      "type": "gaz",
+      "serial": "GA-6-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_5nx26ov",
+      "unitId": "u_s1w3fps",
+      "type": "prąd",
+      "serial": "PR-7-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_i42n4j0",
+      "unitId": "u_s1w3fps",
+      "type": "woda",
+      "serial": "WO-7-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_jfusy73",
+      "unitId": "u_s1w3fps",
+      "type": "gaz",
+      "serial": "GA-7-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_cfcy5nk",
+      "unitId": "u_wcw46cl",
+      "type": "prąd",
+      "serial": "PR-8-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_da8s3cs",
+      "unitId": "u_wcw46cl",
+      "type": "woda",
+      "serial": "WO-8-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_tl169gi",
+      "unitId": "u_wcw46cl",
+      "type": "gaz",
+      "serial": "GA-8-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_ckl77jl",
+      "unitId": "u_embvlu3",
+      "type": "prąd",
+      "serial": "PR-9-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_rbe5wda",
+      "unitId": "u_embvlu3",
+      "type": "woda",
+      "serial": "WO-9-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_8f6v119",
+      "unitId": "u_embvlu3",
+      "type": "gaz",
+      "serial": "GA-9-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_sll70g8",
+      "unitId": "u_72gjhod",
+      "type": "prąd",
+      "serial": "PR-10-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_twdddyp",
+      "unitId": "u_72gjhod",
+      "type": "woda",
+      "serial": "WO-10-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_qqr1z0t",
+      "unitId": "u_72gjhod",
+      "type": "gaz",
+      "serial": "GA-10-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_ur4vbaj",
+      "unitId": "u_baq7rx0",
+      "type": "prąd",
+      "serial": "PR-11-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_pa8btlc",
+      "unitId": "u_baq7rx0",
+      "type": "woda",
+      "serial": "WO-11-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_q6wc2bo",
+      "unitId": "u_baq7rx0",
+      "type": "gaz",
+      "serial": "GA-11-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_lg28957",
+      "unitId": "u_zo32rt2",
+      "type": "prąd",
+      "serial": "PR-12-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_0hf169n",
+      "unitId": "u_zo32rt2",
+      "type": "woda",
+      "serial": "WO-12-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_8kou1v6",
+      "unitId": "u_zo32rt2",
+      "type": "gaz",
+      "serial": "GA-12-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_myyqh99",
+      "unitId": "u_wisf8g5",
+      "type": "prąd",
+      "serial": "PR-13-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_n7sjjyx",
+      "unitId": "u_wisf8g5",
+      "type": "woda",
+      "serial": "WO-13-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_cnd42u5",
+      "unitId": "u_wisf8g5",
+      "type": "gaz",
+      "serial": "GA-13-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_d78wcxo",
+      "unitId": "u_5al28dz",
+      "type": "prąd",
+      "serial": "PR-14-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_qz7aijs",
+      "unitId": "u_5al28dz",
+      "type": "woda",
+      "serial": "WO-14-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_ukgztpw",
+      "unitId": "u_5al28dz",
+      "type": "gaz",
+      "serial": "GA-14-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_ro0ealu",
+      "unitId": "u_b0buu34",
+      "type": "prąd",
+      "serial": "PR-15-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_dxbe8mq",
+      "unitId": "u_b0buu34",
+      "type": "woda",
+      "serial": "WO-15-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_5p5hkzs",
+      "unitId": "u_b0buu34",
+      "type": "gaz",
+      "serial": "GA-15-3",
+      "rate": 4.2,
+      "unit": "m³"
+    },
+    {
+      "id": "m_yk19k2r",
+      "unitId": "u_d8x7tkf",
+      "type": "prąd",
+      "serial": "PR-20-1",
+      "rate": 1.35,
+      "unit": "kWh"
+    },
+    {
+      "id": "m_i092uzg",
+      "unitId": "u_d8x7tkf",
+      "type": "woda",
+      "serial": "WO-20-2",
+      "rate": 14.8,
+      "unit": "m³"
+    },
+    {
+      "id": "m_pw2es2i",
+      "unitId": "u_d8x7tkf",
+      "type": "gaz",
+      "serial": "GA-20-3",
+      "rate": 4.2,
+      "unit": "m³"
+    }
+  ],
+  "meterReadings": [
+    {
+      "id": "r_ryc9qf2",
+      "meterId": "m_bl95wu2",
+      "date": "2026-02-11",
+      "value": 1000,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_fcz4p1d",
+      "meterId": "m_bl95wu2",
+      "date": "2026-03-11",
+      "value": 1018,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_tsaqo7o",
+      "meterId": "m_xol9xk3",
+      "date": "2026-02-11",
+      "value": 1050,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_tvcq20l",
+      "meterId": "m_xol9xk3",
+      "date": "2026-03-11",
+      "value": 1070,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_ptx2ogh",
+      "meterId": "m_ld9gkdj",
+      "date": "2026-02-11",
+      "value": 1100,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_m506yba",
+      "meterId": "m_ld9gkdj",
+      "date": "2026-03-11",
+      "value": 1122,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_ps5y63r",
+      "meterId": "m_2kylq7q",
+      "date": "2026-02-11",
+      "value": 1030,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_k0u7i6d",
+      "meterId": "m_2kylq7q",
+      "date": "2026-03-11",
+      "value": 1051,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_24sbvmi",
+      "meterId": "m_oj31cio",
+      "date": "2026-02-11",
+      "value": 1080,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_egwkrzl",
+      "meterId": "m_oj31cio",
+      "date": "2026-03-11",
+      "value": 1103,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_7ytn94c",
+      "meterId": "m_nl1hffy",
+      "date": "2026-02-11",
+      "value": 1130,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_qj640yk",
+      "meterId": "m_nl1hffy",
+      "date": "2026-03-11",
+      "value": 1155,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_chr514z",
+      "meterId": "m_ygnqe86",
+      "date": "2026-02-11",
+      "value": 1060,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_b78csja",
+      "meterId": "m_ygnqe86",
+      "date": "2026-03-11",
+      "value": 1084,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_exv8lgm",
+      "meterId": "m_r2fyc7n",
+      "date": "2026-02-11",
+      "value": 1110,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_1vgixqt",
+      "meterId": "m_r2fyc7n",
+      "date": "2026-03-11",
+      "value": 1136,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_5efmdpk",
+      "meterId": "m_xr87uo5",
+      "date": "2026-02-11",
+      "value": 1160,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_eoiub0p",
+      "meterId": "m_xr87uo5",
+      "date": "2026-03-11",
+      "value": 1188,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_r0bwj71",
+      "meterId": "m_lbw17sf",
+      "date": "2026-02-11",
+      "value": 1090,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_7jjkeds",
+      "meterId": "m_lbw17sf",
+      "date": "2026-03-11",
+      "value": 1117,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_ou14op3",
+      "meterId": "m_rhcnt10",
+      "date": "2026-02-11",
+      "value": 1140,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_47zh1p7",
+      "meterId": "m_rhcnt10",
+      "date": "2026-03-11",
+      "value": 1169,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_48g9tzc",
+      "meterId": "m_y3meitr",
+      "date": "2026-02-11",
+      "value": 1190,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_hlat9fl",
+      "meterId": "m_y3meitr",
+      "date": "2026-03-11",
+      "value": 1221,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_2j9jyvj",
+      "meterId": "m_qraux87",
+      "date": "2026-02-11",
+      "value": 1120,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_ie3amu4",
+      "meterId": "m_qraux87",
+      "date": "2026-03-11",
+      "value": 1150,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_pbv2697",
+      "meterId": "m_bzdh3uc",
+      "date": "2026-02-11",
+      "value": 1170,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_5fwai5c",
+      "meterId": "m_bzdh3uc",
+      "date": "2026-03-11",
+      "value": 1202,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_u5vqq61",
+      "meterId": "m_mkr4gpb",
+      "date": "2026-02-11",
+      "value": 1220,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_wpdm4pl",
+      "meterId": "m_mkr4gpb",
+      "date": "2026-03-11",
+      "value": 1254,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_u8w7690",
+      "meterId": "m_pzrec01",
+      "date": "2026-02-11",
+      "value": 1150,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_n3zf3d6",
+      "meterId": "m_pzrec01",
+      "date": "2026-03-11",
+      "value": 1183,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_0k1u51k",
+      "meterId": "m_i136dpp",
+      "date": "2026-02-11",
+      "value": 1200,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_rgg137q",
+      "meterId": "m_i136dpp",
+      "date": "2026-03-11",
+      "value": 1235,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_wpphb8x",
+      "meterId": "m_7iymv4k",
+      "date": "2026-02-11",
+      "value": 1250,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_bctbvxh",
+      "meterId": "m_7iymv4k",
+      "date": "2026-03-11",
+      "value": 1287,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_pceg8qy",
+      "meterId": "m_5nx26ov",
+      "date": "2026-02-11",
+      "value": 1180,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_xnztp44",
+      "meterId": "m_5nx26ov",
+      "date": "2026-03-11",
+      "value": 1216,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_gqdrjet",
+      "meterId": "m_i42n4j0",
+      "date": "2026-02-11",
+      "value": 1230,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_8nlwugy",
+      "meterId": "m_i42n4j0",
+      "date": "2026-03-11",
+      "value": 1268,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_ed6mcgm",
+      "meterId": "m_jfusy73",
+      "date": "2026-02-11",
+      "value": 1280,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_28vflc2",
+      "meterId": "m_jfusy73",
+      "date": "2026-03-11",
+      "value": 1320,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_fafoflp",
+      "meterId": "m_cfcy5nk",
+      "date": "2026-02-11",
+      "value": 1210,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_326f2rc",
+      "meterId": "m_cfcy5nk",
+      "date": "2026-03-11",
+      "value": 1228,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_982g78s",
+      "meterId": "m_da8s3cs",
+      "date": "2026-02-11",
+      "value": 1260,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_ssyc3ya",
+      "meterId": "m_da8s3cs",
+      "date": "2026-03-11",
+      "value": 1280,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_c99buwo",
+      "meterId": "m_tl169gi",
+      "date": "2026-02-11",
+      "value": 1310,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_747z9q1",
+      "meterId": "m_tl169gi",
+      "date": "2026-03-11",
+      "value": 1332,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_eaflz1m",
+      "meterId": "m_ckl77jl",
+      "date": "2026-02-11",
+      "value": 1240,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_mac74mg",
+      "meterId": "m_ckl77jl",
+      "date": "2026-03-11",
+      "value": 1261,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_cm4b050",
+      "meterId": "m_rbe5wda",
+      "date": "2026-02-11",
+      "value": 1290,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_cj7jhxb",
+      "meterId": "m_rbe5wda",
+      "date": "2026-03-11",
+      "value": 1313,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_31nql2v",
+      "meterId": "m_8f6v119",
+      "date": "2026-02-11",
+      "value": 1340,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_ybaxukp",
+      "meterId": "m_8f6v119",
+      "date": "2026-03-11",
+      "value": 1365,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_xe8kwrg",
+      "meterId": "m_sll70g8",
+      "date": "2026-02-11",
+      "value": 1270,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_3lusgo0",
+      "meterId": "m_sll70g8",
+      "date": "2026-03-11",
+      "value": 1294,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_b67lfas",
+      "meterId": "m_twdddyp",
+      "date": "2026-02-11",
+      "value": 1320,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_ikq54ct",
+      "meterId": "m_twdddyp",
+      "date": "2026-03-11",
+      "value": 1346,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_kfttijk",
+      "meterId": "m_qqr1z0t",
+      "date": "2026-02-11",
+      "value": 1370,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_mtuwued",
+      "meterId": "m_qqr1z0t",
+      "date": "2026-03-11",
+      "value": 1398,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_7dc6b8m",
+      "meterId": "m_ur4vbaj",
+      "date": "2026-02-11",
+      "value": 1300,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_1d8ejoi",
+      "meterId": "m_ur4vbaj",
+      "date": "2026-03-11",
+      "value": 1327,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_p4zz2in",
+      "meterId": "m_pa8btlc",
+      "date": "2026-02-11",
+      "value": 1350,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_1tol0rs",
+      "meterId": "m_pa8btlc",
+      "date": "2026-03-11",
+      "value": 1379,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_bsxp4bs",
+      "meterId": "m_q6wc2bo",
+      "date": "2026-02-11",
+      "value": 1400,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_lpvmzgh",
+      "meterId": "m_q6wc2bo",
+      "date": "2026-03-11",
+      "value": 1431,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_adgfmq1",
+      "meterId": "m_lg28957",
+      "date": "2026-02-11",
+      "value": 1330,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_ui47yfw",
+      "meterId": "m_lg28957",
+      "date": "2026-03-11",
+      "value": 1360,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_mdp8daz",
+      "meterId": "m_0hf169n",
+      "date": "2026-02-11",
+      "value": 1380,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_ikj4twb",
+      "meterId": "m_0hf169n",
+      "date": "2026-03-11",
+      "value": 1412,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_fqlb66e",
+      "meterId": "m_8kou1v6",
+      "date": "2026-02-11",
+      "value": 1430,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_n5mt50p",
+      "meterId": "m_8kou1v6",
+      "date": "2026-03-11",
+      "value": 1464,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_vx39u5q",
+      "meterId": "m_myyqh99",
+      "date": "2026-02-11",
+      "value": 1360,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_0nkpbbc",
+      "meterId": "m_myyqh99",
+      "date": "2026-03-11",
+      "value": 1393,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_12hvlne",
+      "meterId": "m_n7sjjyx",
+      "date": "2026-02-11",
+      "value": 1410,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_2mgv0w2",
+      "meterId": "m_n7sjjyx",
+      "date": "2026-03-11",
+      "value": 1445,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_se07ead",
+      "meterId": "m_cnd42u5",
+      "date": "2026-02-11",
+      "value": 1460,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_yobk6pr",
+      "meterId": "m_cnd42u5",
+      "date": "2026-03-11",
+      "value": 1497,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_4me8xn6",
+      "meterId": "m_d78wcxo",
+      "date": "2026-02-11",
+      "value": 1390,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_yyir4br",
+      "meterId": "m_d78wcxo",
+      "date": "2026-03-11",
+      "value": 1426,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_ewvmt0u",
+      "meterId": "m_qz7aijs",
+      "date": "2026-02-11",
+      "value": 1440,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_lh6ygiu",
+      "meterId": "m_qz7aijs",
+      "date": "2026-03-11",
+      "value": 1478,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_0zkrgiq",
+      "meterId": "m_ukgztpw",
+      "date": "2026-02-11",
+      "value": 1490,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_8xs0xgb",
+      "meterId": "m_ukgztpw",
+      "date": "2026-03-11",
+      "value": 1530,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_x3fmysb",
+      "meterId": "m_ro0ealu",
+      "date": "2026-02-11",
+      "value": 1420,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_safh8xu",
+      "meterId": "m_ro0ealu",
+      "date": "2026-03-11",
+      "value": 1438,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_3dvsp6i",
+      "meterId": "m_dxbe8mq",
+      "date": "2026-02-11",
+      "value": 1470,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_prm72zk",
+      "meterId": "m_dxbe8mq",
+      "date": "2026-03-11",
+      "value": 1490,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_jdom8pc",
+      "meterId": "m_5p5hkzs",
+      "date": "2026-02-11",
+      "value": 1520,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_8epee6q",
+      "meterId": "m_5p5hkzs",
+      "date": "2026-03-11",
+      "value": 1542,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_4us9xg5",
+      "meterId": "m_yk19k2r",
+      "date": "2026-02-11",
+      "value": 1570,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_u9tufn0",
+      "meterId": "m_yk19k2r",
+      "date": "2026-03-11",
+      "value": 1603,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_eq7723e",
+      "meterId": "m_i092uzg",
+      "date": "2026-02-11",
+      "value": 1620,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_2im5ned",
+      "meterId": "m_i092uzg",
+      "date": "2026-03-11",
+      "value": 1655,
+      "notes": "Bieżący odczyt"
+    },
+    {
+      "id": "r_wvxu1r0",
+      "meterId": "m_pw2es2i",
+      "date": "2026-02-11",
+      "value": 1670,
+      "notes": "Poprzedni odczyt"
+    },
+    {
+      "id": "r_cy00z6l",
+      "meterId": "m_pw2es2i",
+      "date": "2026-03-11",
+      "value": 1707,
+      "notes": "Bieżący odczyt"
+    }
+  ],
+  "charges": [
+    {
+      "id": "c_dtqv5rb",
+      "leaseId": "l_lxt8934",
+      "type": "Czynsz miesięczny",
+      "amount": 2080,
+      "dueDate": "2026-03-11",
+      "status": "zaległe",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_e4hhf7z",
+      "leaseId": "l_gygwovq",
+      "type": "Czynsz miesięczny",
+      "amount": 2180,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_l9s2e04",
+      "leaseId": "l_njz0wxr",
+      "type": "Czynsz miesięczny",
+      "amount": 2280,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_c34kmcx",
+      "leaseId": "l_4us1qdc",
+      "type": "Czynsz miesięczny",
+      "amount": 2380,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_27uogs8",
+      "leaseId": "l_yr58m10",
+      "type": "Czynsz miesięczny",
+      "amount": 2480,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_77ny05o",
+      "leaseId": "l_uqkc0ui",
+      "type": "Czynsz miesięczny",
+      "amount": 2330,
+      "dueDate": "2026-03-11",
+      "status": "zaległe",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_q5xnfj7",
+      "leaseId": "l_vytjj4g",
+      "type": "Czynsz miesięczny",
+      "amount": 2430,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_k6831dk",
+      "leaseId": "l_lloftch",
+      "type": "Czynsz miesięczny",
+      "amount": 2530,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_fqvrjth",
+      "leaseId": "l_1dje5jj",
+      "type": "Czynsz miesięczny",
+      "amount": 2630,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_4ikiesy",
+      "leaseId": "l_xpwukgv",
+      "type": "Czynsz miesięczny",
+      "amount": 2730,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_vtxlkfm",
+      "leaseId": "l_o09czid",
+      "type": "Czynsz miesięczny",
+      "amount": 2580,
+      "dueDate": "2026-03-11",
+      "status": "zaległe",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_3tpvkvv",
+      "leaseId": "l_6dp3j0e",
+      "type": "Czynsz miesięczny",
+      "amount": 2680,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_2o8utzv",
+      "leaseId": "l_mi1539h",
+      "type": "Czynsz miesięczny",
+      "amount": 2780,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_59mc9jg",
+      "leaseId": "l_khtrcr5",
+      "type": "Czynsz miesięczny",
+      "amount": 2880,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_x7jzyb9",
+      "leaseId": "l_yzklhe1",
+      "type": "Czynsz miesięczny",
+      "amount": 2980,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_e8k32df",
+      "leaseId": "l_gyteq8r",
+      "type": "Czynsz miesięczny",
+      "amount": 2830,
+      "dueDate": "2026-03-11",
+      "status": "zaległe",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_m2k56i8",
+      "leaseId": "l_38rsxmq",
+      "type": "Czynsz miesięczny",
+      "amount": 2930,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_6mzzu1b",
+      "leaseId": "l_t88j5ca",
+      "type": "Czynsz miesięczny",
+      "amount": 3030,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    },
+    {
+      "id": "c_8dixg81",
+      "leaseId": "l_l839f7v",
+      "type": "Czynsz miesięczny",
+      "amount": 3130,
+      "dueDate": "2026-03-11",
+      "status": "oczekujące",
+      "notes": "Czynsz + opłata administracyjna"
+    }
+  ],
+  "payments": [
+    {
+      "id": "p_qu4bqcn",
+      "leaseId": "l_gygwovq",
+      "chargeId": "c_e4hhf7z",
+      "date": "2026-03-11",
+      "amount": 2180,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_zjfqy6y",
+      "leaseId": "l_njz0wxr",
+      "chargeId": "c_l9s2e04",
+      "date": "2026-03-11",
+      "amount": 2280,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_nx1ivhs",
+      "leaseId": "l_yr58m10",
+      "chargeId": "c_27uogs8",
+      "date": "2026-03-11",
+      "amount": 2280,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_wfdm024",
+      "leaseId": "l_uqkc0ui",
+      "chargeId": "c_77ny05o",
+      "date": "2026-03-11",
+      "amount": 2330,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_9xq2rb3",
+      "leaseId": "l_lloftch",
+      "chargeId": "c_k6831dk",
+      "date": "2026-03-11",
+      "amount": 2530,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_22xheqo",
+      "leaseId": "l_1dje5jj",
+      "chargeId": "c_fqvrjth",
+      "date": "2026-03-11",
+      "amount": 2430,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_63f50ef",
+      "leaseId": "l_o09czid",
+      "chargeId": "c_vtxlkfm",
+      "date": "2026-03-11",
+      "amount": 2580,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_l6yck2e",
+      "leaseId": "l_6dp3j0e",
+      "chargeId": "c_3tpvkvv",
+      "date": "2026-03-11",
+      "amount": 2680,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_o4crq1a",
+      "leaseId": "l_khtrcr5",
+      "chargeId": "c_59mc9jg",
+      "date": "2026-03-11",
+      "amount": 2880,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_7vqre2h",
+      "leaseId": "l_yzklhe1",
+      "chargeId": "c_x7jzyb9",
+      "date": "2026-03-11",
+      "amount": 2980,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_389jgxw",
+      "leaseId": "l_38rsxmq",
+      "chargeId": "c_m2k56i8",
+      "date": "2026-03-11",
+      "amount": 2730,
+      "method": "przelew",
+      "notes": ""
+    },
+    {
+      "id": "p_4hjn4v1",
+      "leaseId": "l_t88j5ca",
+      "chargeId": "c_6mzzu1b",
+      "date": "2026-03-11",
+      "amount": 3030,
+      "method": "przelew",
+      "notes": ""
+    }
+  ],
+  "expenses": [
+    {
+      "id": "e_34d4kop",
+      "date": "2026-03-11",
+      "buildingId": "b_yqugm9y",
+      "unitId": "",
+      "category": "Sprzątanie",
+      "amount": 380,
+      "vendor": "Clean Sp. z o.o.",
+      "notes": "Części wspólne"
+    },
+    {
+      "id": "e_hvv7st8",
+      "date": "2026-03-11",
+      "buildingId": "b_rh5h4pu",
+      "unitId": "",
+      "category": "Ubezpieczenie",
+      "amount": 1200,
+      "vendor": "TU Bezpieczny Dom",
+      "notes": "Roczne"
+    },
+    {
+      "id": "e_i2db8v9",
+      "date": "2026-03-11",
+      "buildingId": "b_d2tpfb8",
+      "unitId": "u_c632i7m",
+      "category": "Naprawa AGD",
+      "amount": 450,
+      "vendor": "Serwis AGD",
+      "notes": "Lodówka"
+    }
+  ],
+  "tickets": [
+    {
+      "id": "tk_2260788",
+      "createdAt": "2026-03-11",
+      "unitId": "u_xwdna4x",
+      "tenantId": "t_1u1p7h9",
+      "title": "Cieknący syfon w kuchni",
+      "priority": "średni",
+      "status": "otwarte",
+      "assignee": "Hydraulik",
+      "notes": "Do sprawdzenia po 16:00"
+    },
+    {
+      "id": "tk_xm8mx2d",
+      "createdAt": "2026-03-11",
+      "unitId": "u_axc96io",
+      "tenantId": "t_2j9skkw",
+      "title": "Nie działa piekarnik",
+      "priority": "wysoki",
+      "status": "w trakcie",
+      "assignee": "Serwis AGD",
+      "notes": ""
+    },
+    {
+      "id": "tk_evxbvug",
+      "createdAt": "2026-03-11",
+      "unitId": "u_8cfls5h",
+      "tenantId": "t_tezg8md",
+      "title": "Wymiana zamka",
+      "priority": "niski",
+      "status": "zamknięte",
+      "assignee": "Ślusarz",
+      "notes": "Zrealizowano"
+    }
+  ],
+  "settings": {
+    "companyName": "RentFlow Pro",
+    "ownerName": "Zarządca",
+    "baseCurrency": "PLN",
+    "utilityVAT": 23,
+    "lateFee": 50
+  }
+}

@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RentFlow Pro</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a2e;
+      --panel2: #1a2340;
+      --text: #eef4ff;
+      --muted: #9fb0d0;
+      --border: rgba(255,255,255,0.08);
+      --accent: #5ea1ff;
+      --green: #62d394;
+      --red: #ff7272;
+      --yellow: #ffd166;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: linear-gradient(180deg, #0a0f1d 0%, #0f1730 100%);
+      color: var(--text);
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 270px 1fr;
+      min-height: 100vh;
+    }
+    aside {
+      background: rgba(10,15,29,.95);
+      border-right: 1px solid var(--border);
+      padding: 20px;
+    }
+    .brand {
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+    .nav {
+      display: grid;
+      gap: 8px;
+    }
+    .nav button {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding: 12px 14px;
+      border-radius: 14px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .nav button.active,
+    .nav button:hover {
+      background: var(--panel2);
+    }
+    main {
+      padding: 24px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .title h1 {
+      margin: 0;
+      font-size: 30px;
+    }
+    .title p {
+      margin: 6px 0 0;
+      color: var(--muted);
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      border: none;
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 700;
+      color: white;
+      background: linear-gradient(135deg, var(--accent), #7e8cff);
+    }
+    .btn.secondary {
+      background: var(--panel);
+      border: 1px solid var(--border);
+    }
+    .btn.green {
+      background: linear-gradient(135deg, var(--green), #2db97c);
+    }
+    .btn.red {
+      background: linear-gradient(135deg, var(--red), #f54646);
+    }
+    .btn.yellow {
+      background: linear-gradient(135deg, #ffbe55, #ff8a47);
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+    .cards {
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+    }
+    .two {
+      grid-template-columns: 1.2fr 0.8fr;
+    }
+    .card {
+      background: rgba(19,26,46,.95);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+    .metric {
+      font-size: 30px;
+      font-weight: 800;
+      margin-top: 8px;
+    }
+    .muted {
+      color: var(--muted);
+    }
+    .small {
+      font-size: 12px;
+    }
+    .panel-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .panel-title h3 {
+      margin: 0;
+    }
+    input, select {
+      width: 100%;
+      padding: 11px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #0d1428;
+      color: var(--text);
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .form-grid.three {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .status-active { background: rgba(98,211,148,.14); color: #8ef0b1; }
+    .status-pending { background: rgba(255,209,102,.16); color: #ffd166; }
+    .status-overdue { background: rgba(255,114,114,.16); color: #ff9c9c; }
+    .status-open { background: rgba(94,161,255,.16); color: #9fc7ff; }
+    .status-closed { background: rgba(160,170,190,.16); color: #ced7ea; }
+    .hidden { display: none !important; }
+    .section { margin-top: 16px; }
+    .notice {
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(102,227,196,.1);
+      border: 1px solid rgba(102,227,196,.2);
+    }
+    .danger-box {
+      background: rgba(255,114,114,.1);
+      border-color: rgba(255,114,114,.2);
+    }
+    canvas {
+      width: 100%;
+      height: 230px;
+      background: #0d1428;
+      border-radius: 14px;
+    }
+    @media (max-width: 1200px) {
+      .cards, .two, .form-grid, .form-grid.three {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    @media (max-width: 840px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+      .cards, .two, .form-grid, .form-grid.three {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand">RentFlow Pro</div>
+      <div class="sub">System zarządzania najmem online</div>
+      <div class="nav" id="nav"></div>
+    </aside>
+
+    <main>
+      <div class="topbar">
+        <div class="title">
+          <h1 id="pageTitle">Dashboard</h1>
+          <p id="pageSubtitle">Podgląd portfela najmu, płatności i mediów.</p>
+        </div>
+        <div class="actions">
+          <button class="btn secondary" onclick="resetDemo()">Przywróć demo</button>
+          <button class="btn secondary" onclick="exportJSON()">Eksport JSON</button>
+          <button class="btn secondary" onclick="exportCSVBundle()">Eksport CSV</button>
+          <button class="btn yellow" onclick="importFile.click()">Import JSON</button>
+        </div>
+      </div>
+
+      <section id="dashboard" class="page"></section>
+      <section id="properties" class="page hidden"></section>
+      <section id="tenants" class="page hidden"></section>
+      <section id="leases" class="page hidden"></section>
+      <section id="meters" class="page hidden"></section>
+      <section id="payments" class="page hidden"></section>
+      <section id="expenses" class="page hidden"></section>
+      <section id="maintenance" class="page hidden"></section>
+      <section id="reports" class="page hidden"></section>
+      <section id="settings" class="page hidden"></section>
+    </main>
+  </div>
+
+  <input type="file" id="importFile" accept="application/json" class="hidden" />
+
+  <script>
+    let state = {
+      buildings: [],
+      units: [],
+      tenants: [],
+      leases: [],
+      meters: [],
+      meterReadings: [],
+      charges: [],
+      payments: [],
+      expenses: [],
+      tickets: [],
+      settings: {
+        companyName: "RentFlow Pro",
+        ownerName: "Zarządca",
+        baseCurrency: "PLN",
+        utilityVAT: 23,
+        lateFee: 50
+      }
+    };
+
+    const pages = [
+      ["dashboard", "Dashboard", "Podgląd portfela najmu, płatności i mediów."],
+      ["properties", "Budynki i lokale", "Zarządzanie budynkami i mieszkaniami."],
+      ["tenants", "Najemcy", "Baza najemców i kontaktów."],
+      ["leases", "Umowy", "Umowy najmu, czynsz i kaucje."],
+      ["meters", "Media", "Liczniki, odczyty i rozliczenia zużycia."],
+      ["payments", "Opłaty i płatności", "Należności, wpłaty i zaległości."],
+      ["expenses", "Koszty", "Koszty budynków i lokali."],
+      ["maintenance", "Usterki", "Zgłoszenia, priorytety i statusy."],
+      ["reports", "Raporty", "Obłożenie, wynik i zestawienia."],
+      ["settings", "Ustawienia", "Dane firmy i eksporty."]
+    ];
+
+    const importFile = document.getElementById("importFile");
+
+    function uid(prefix = "id") {
+      return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+    }
+
+    function today() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function fmt(n = 0) {
+      return new Intl.NumberFormat("pl-PL", {
+        style: "currency",
+        currency: state.settings.baseCurrency || "PLN"
+      }).format(Number(n || 0));
+    }
+
+    async function apiGet(url) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error("Błąd pobierania");
+      return r.json();
+    }
+
+    async function apiPost(url, data) {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+      if (!r.ok) throw new Error("Błąd zapisu");
+      return r.json();
+    }
+
+    async function save() {
+      await apiPost("/api/state", state);
+      renderAll();
+    }
+
+    async function load() {
+      state = await apiGet("/api/state");
+    }
+
+    async function resetDemo() {
+      if (!confirm("Na pewno przywrócić dane demo?")) return;
+      const res = await apiPost("/api/reset-demo", {});
+      state = res.data;
+      renderAll();
+    }
+
+    function buildingName(id) {
+      return state.buildings.find((b) => b.id === id)?.name || "—";
+    }
+
+    function unitLabel(id) {
+      const u = state.units.find((x) => x.id === id);
+      return u ? `${buildingName(u.buildingId)} / lokal ${u.code}` : "—";
+    }
+
+    function tenantName(id) {
+      return state.tenants.find((t) => t.id === id)?.name || "—";
+    }
+
+    function leaseLabel(id) {
+      const l = state.leases.find((x) => x.id === id);
+      return l ? `${tenantName(l.tenantId)} — ${unitLabel(l.unitId)}` : "—";
+    }
+
+    function activeLeaseByUnit(unitId) {
+      return state.leases.find((l) => l.unitId === unitId && l.status === "aktywna");
+    }
+
+    function chargePaidAmount(chargeId) {
+      return state.payments
+        .filter((p) => p.chargeId === chargeId)
+        .reduce((a, b) => a + Number(b.amount || 0), 0);
+    }
+
+    function calcChargeStatus(c) {
+      const paid = chargePaidAmount(c.id);
+      if (paid >= Number(c.amount)) return "opłacone";
+      if (new Date(c.dueDate) < new Date(today())) return "zaległe";
+      return "oczekujące";
+    }
+
+    function lastTwoReadings(meterId) {
+      return state.meterReadings
+        .filter((r) => r.meterId === meterId)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-2);
+    }
+
+    function meterConsumption(meterId) {
+      const pair = lastTwoReadings(meterId);
+      if (pair.length < 2) return { usage: 0, amount: 0 };
+      const prev = pair[0];
+      const curr = pair[1];
+      const meter = state.meters.find((m) => m.id === meterId);
+      const usage = Math.max(0, Number(curr.value) - Number(prev.value));
+      return { usage, amount: usage * Number(meter?.rate || 0) };
+    }
+
+    function occupancyRate() {
+      if (!state.units.length) return 0;
+      return Math.round((state.units.filter((u) => u.status === "wynajęte").length / state.units.length) * 100);
+    }
+
+    function totals() {
+      const due = state.charges.reduce((a, c) => a + Number(c.amount || 0), 0);
+      const paid = state.payments.reduce((a, p) => a + Number(p.amount || 0), 0);
+      const overdue = state.charges
+        .filter((c) => calcChargeStatus(c) === "zaległe")
+        .reduce((a, c) => a + Math.max(0, Number(c.amount) - chargePaidAmount(c.id)), 0);
+      const expenses = state.expenses.reduce((a, e) => a + Number(e.amount || 0), 0);
+      return { due, paid, overdue, expenses, net: paid - expenses };
+    }
+
+    function renderNav() {
+      const nav = document.getElementById("nav");
+      nav.innerHTML = pages
+        .map(([id, label]) => `<button onclick="showPage('${id}')" id="nav_${id}">${label}</button>`)
+        .join("");
+    }
+
+    function showPage(id) {
+      pages.forEach(([pid, label, sub]) => {
+        document.getElementById(pid).classList.toggle("hidden", pid !== id);
+        document.getElementById("nav_" + pid).classList.toggle("active", pid === id);
+        if (pid === id) {
+          document.getElementById("pageTitle").textContent = label;
+          document.getElementById("pageSubtitle").textContent = sub;
+        }
+      });
+    }
+
+    function renderDashboard() {
+      const { due, paid, overdue, expenses, net } = totals();
+      const openTickets = state.tickets.filter((t) => t.status !== "zamknięte").length;
+      const utilityNow = state.meters.reduce((a, m) => a + meterConsumption(m.id).amount, 0);
+
+      document.getElementById("dashboard").innerHTML = `
+        <div class="grid cards">
+          <div class="card"><div class="muted">Budynki</div><div class="metric">${state.buildings.length}</div></div>
+          <div class="card"><div class="muted">Lokale</div><div class="metric">${state.units.length}</div><div class="small muted">Obłożenie ${occupancyRate()}%</div></div>
+          <div class="card"><div class="muted">Należności</div><div class="metric">${fmt(due)}</div></div>
+          <div class="card"><div class="muted">Wpłaty</div><div class="metric">${fmt(paid)}</div></div>
+        </div>
+
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Szybki podgląd</h3></div>
+            <div class="grid cards" style="grid-template-columns:repeat(2,1fr)">
+              <div class="card"><div class="muted small">Zaległości</div><div class="metric" style="font-size:22px">${fmt(overdue)}</div></div>
+              <div class="card"><div class="muted small">Koszty</div><div class="metric" style="font-size:22px">${fmt(expenses)}</div></div>
+              <div class="card"><div class="muted small">Wynik netto</div><div class="metric" style="font-size:22px">${fmt(net)}</div></div>
+              <div class="card"><div class="muted small">Media bieżące</div><div class="metric" style="font-size:22px">${fmt(utilityNow)}</div></div>
+            </div>
+            <div class="section"><canvas id="cashflowChart"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>Zadania i alarmy</h3></div>
+            <div class="notice ${overdue > 0 ? "danger-box" : ""}">
+              ${overdue > 0 ? `Masz zaległości na ${fmt(overdue)}.` : "Brak przeterminowanych zaległości."}
+            </div>
+            <div class="section">
+              <div class="card">Wolne lokale: <strong>${state.units.filter((u) => u.status === "wolne").length}</strong></div>
+              <div class="card section">Otwarte usterki: <strong>${openTickets}</strong></div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      drawCashflowChart();
+    }
+
+    function renderProperties() {
+      document.getElementById("properties").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Dodaj budynek</h3></div>
+          <div class="form-grid three">
+            <input id="b_name" placeholder="Nazwa budynku" />
+            <input id="b_address" placeholder="Adres" />
+            <input id="b_notes" placeholder="Notatki" />
+          </div>
+          <div class="section"><button class="btn green" onclick="addBuilding()">Dodaj budynek</button></div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Dodaj lokal</h3></div>
+          <div class="form-grid">
+            <select id="u_building">${state.buildings.map((b) => `<option value="${b.id}">${b.name}</option>`).join("")}</select>
+            <input id="u_code" placeholder="Nr lokalu" />
+            <select id="u_type">
+              <option>kawalerka</option>
+              <option>2 pokoje</option>
+              <option>3 pokoje</option>
+              <option>4 pokoje</option>
+            </select>
+            <input id="u_area" type="number" placeholder="Metraż m²" />
+            <input id="u_floor" type="number" placeholder="Piętro" />
+            <input id="u_rent" type="number" placeholder="Czynsz bazowy" />
+            <input id="u_service" type="number" placeholder="Opłata adm." />
+            <select id="u_status">
+              <option>wynajęte</option>
+              <option>wolne</option>
+              <option>serwis</option>
+            </select>
+          </div>
+          <div class="section"><button class="btn green" onclick="addUnit()">Dodaj lokal</button></div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Budynki</h3></div>
+          <table>
+            <thead><tr><th>Nazwa</th><th>Adres</th><th>Lokale</th><th></th></tr></thead>
+            <tbody>
+              ${state.buildings.map((b) => `
+                <tr>
+                  <td>${b.name}</td>
+                  <td>${b.address || "—"}</td>
+                  <td>${state.units.filter((u) => u.buildingId === b.id).length}</td>
+                  <td><button class="btn secondary" onclick="removeBuilding('${b.id}')">Usuń</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Lokale</h3></div>
+          <table>
+            <thead><tr><th>Lokal</th><th>Typ</th><th>Status</th><th>Czynsz</th><th></th></tr></thead>
+            <tbody>
+              ${state.units.map((u) => `
+                <tr>
+                  <td>${unitLabel(u.id)}</td>
+                  <td>${u.type}, ${u.area} m²</td>
+                  <td><span class="badge ${u.status === "wynajęte" ? "status-active" : "status-pending"}">${u.status}</span></td>
+                  <td>${fmt(u.rentDefault)}</td>
+                  <td><button class="btn secondary" onclick="removeUnit('${u.id}')">Usuń</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderTenants() {
+      document.getElementById("tenants").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Dodaj najemcę</h3></div>
+          <div class="form-grid">
+            <input id="t_name" placeholder="Imię i nazwisko" />
+            <input id="t_phone" placeholder="Telefon" />
+            <input id="t_email" placeholder="E-mail" />
+            <select id="t_unit">
+              <option value="">Bez przypisania</option>
+              ${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}
+            </select>
+          </div>
+          <div class="section"><button class="btn green" onclick="addTenant()">Dodaj najemcę</button></div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Najemcy</h3></div>
+          <table>
+            <thead><tr><th>Najemca</th><th>Kontakt</th><th>Lokal</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${state.tenants.map((t) => `
+                <tr>
+                  <td><strong>${t.name}</strong></td>
+                  <td>${t.phone || "—"}<br><span class="muted small">${t.email || "—"}</span></td>
+                  <td>${t.unitId ? unitLabel(t.unitId) : "—"}</td>
+                  <td><span class="badge ${t.status === "aktywny" ? "status-active" : "status-closed"}">${t.status}</span></td>
+                  <td><button class="btn secondary" onclick="removeTenant('${t.id}')">Usuń</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderLeases() {
+      document.getElementById("leases").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Dodaj umowę</h3></div>
+          <div class="form-grid">
+            <select id="l_tenant">${state.tenants.map((t) => `<option value="${t.id}">${t.name}</option>`).join("")}</select>
+            <select id="l_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
+            <input id="l_start" type="date" value="${today()}" />
+            <input id="l_end" type="date" />
+            <input id="l_rent" type="number" placeholder="Czynsz" />
+            <input id="l_deposit" type="number" placeholder="Kaucja" />
+            <input id="l_billing" type="number" value="5" placeholder="Dzień rozliczenia" />
+            <select id="l_status">
+              <option>aktywna</option>
+              <option>wypowiedziana</option>
+              <option>zakończona</option>
+            </select>
+          </div>
+          <div class="section"><button class="btn green" onclick="addLease()">Dodaj umowę</button></div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title">
+            <h3>Umowy</h3>
+            <button class="btn secondary" onclick="generateMonthlyCharges()">Generuj miesięczne czynsze</button>
+          </div>
+          <table>
+            <thead><tr><th>Najemca</th><th>Lokal</th><th>Okres</th><th>Czynsz</th><th>Kaucja</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${state.leases.map((l) => `
+                <tr>
+                  <td>${tenantName(l.tenantId)}</td>
+                  <td>${unitLabel(l.unitId)}</td>
+                  <td>${l.startDate}<br><span class="muted small">do ${l.endDate || "bezterminowo"}</span></td>
+                  <td>${fmt(l.rent)}</td>
+                  <td>${fmt(l.deposit)}</td>
+                  <td><span class="badge ${l.status === "aktywna" ? "status-active" : "status-closed"}">${l.status}</span></td>
+                  <td><button class="btn secondary" onclick="removeLease('${l.id}')">Usuń</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderMeters() {
+      document.getElementById("meters").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Dodaj licznik</h3></div>
+          <div class="form-grid three">
+            <select id="m_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
+            <select id="m_type">
+              <option>prąd</option>
+              <option>woda</option>
+              <option>gaz</option>
+              <option>ciepło</option>
+            </select>
+            <input id="m_serial" placeholder="Nr seryjny" />
+            <input id="m_rate" type="number" step="0.01" placeholder="Stawka za jednostkę" />
+            <input id="m_unit_name" placeholder="Jednostka np. kWh / m³" />
+            <div><button class="btn green" onclick="addMeter()">Dodaj licznik</button></div>
+          </div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title">
+            <h3>Dodaj odczyt</h3>
+            <button class="btn secondary" onclick="generateUtilityCharges()">Wygeneruj opłaty za media</button>
+          </div>
+          <div class="form-grid three">
+            <select id="r_meter">${state.meters.map((m) => `<option value="${m.id}">${unitLabel(m.unitId)} — ${m.type} (${m.serial})</option>`).join("")}</select>
+            <input id="r_date" type="date" value="${today()}" />
+            <input id="r_value" type="number" step="0.01" placeholder="Stan licznika" />
+          </div>
+          <div class="section"><button class="btn green" onclick="addReading()">Dodaj odczyt</button></div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Liczniki i rozliczenie</h3></div>
+          <table>
+            <thead><tr><th>Lokal</th><th>Typ</th><th>Nr</th><th>Stawka</th><th>Zużycie</th><th>Kwota</th><th></th></tr></thead>
+            <tbody>
+              ${state.meters.map((m) => {
+                const cons = meterConsumption(m.id);
+                return `
+                  <tr>
+                    <td>${unitLabel(m.unitId)}</td>
+                    <td>${m.type}</td>
+                    <td>${m.serial}</td>
+                    <td>${Number(m.rate).toFixed(2)} / ${m.unit}</td>
+                    <td>${cons.usage} ${m.unit}</td>
+                    <td>${fmt(cons.amount)}</td>
+                    <td><button class="btn secondary" onclick="prefillReading('${m.id}')">Dodaj odczyt</button></td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderPayments() {
+      document.getElementById("payments").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Dodaj opłatę</h3></div>
+          <div class="form-grid">
+            <select id="c_lease">${state.leases.map((l) => `<option value="${l.id}">${leaseLabel(l.id)}</option>`).join("")}</select>
+            <input id="c_type" value="Czynsz miesięczny" placeholder="Typ opłaty" />
+            <input id="c_amount" type="number" step="0.01" placeholder="Kwota" />
+            <input id="c_due" type="date" value="${today()}" />
+          </div>
+          <div class="section"><button class="btn green" onclick="addCharge()">Dodaj opłatę</button></div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Zaksięguj wpłatę</h3></div>
+          <div class="form-grid">
+            <select id="p_charge">${state.charges.map((c) => `<option value="${c.id}">${leaseLabel(c.leaseId)} — ${c.type} — ${fmt(c.amount)}</option>`).join("")}</select>
+            <input id="p_date" type="date" value="${today()}" />
+            <input id="p_amount" type="number" step="0.01" placeholder="Kwota" />
+            <select id="p_method">
+              <option>przelew</option>
+              <option>gotówka</option>
+              <option>BLIK</option>
+              <option>karta</option>
+            </select>
+          </div>
+          <div class="section"><button class="btn green" onclick="addPayment()">Dodaj płatność</button></div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Opłaty</h3></div>
+          <table>
+            <thead><tr><th>Umowa</th><th>Typ</th><th>Termin</th><th>Kwota</th><th>Wpłacono</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${state.charges.map((c) => {
+                const status = calcChargeStatus(c);
+                const paid = chargePaidAmount(c.id);
+                const cls = status === "opłacone" ? "status-active" : status === "zaległe" ? "status-overdue" : "status-pending";
+                return `
+                  <tr>
+                    <td>${leaseLabel(c.leaseId)}</td>
+                    <td>${c.type}</td>
+                    <td>${c.dueDate}</td>
+                    <td>${fmt(c.amount)}</td>
+                    <td>${fmt(paid)}</td>
+                    <td><span class="badge ${cls}">${status}</span></td>
+                    <td><button class="btn secondary" onclick="removeCharge('${c.id}')">Usuń</button></td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderExpenses() {
+      document.getElementById("expenses").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Dodaj koszt</h3></div>
+          <div class="form-grid">
+            <input id="e_date" type="date" value="${today()}" />
+            <select id="e_building">
+              <option value="">Bez budynku</option>
+              ${state.buildings.map((b) => `<option value="${b.id}">${b.name}</option>`).join("")}
+            </select>
+            <select id="e_unit">
+              <option value="">Bez lokalu</option>
+              ${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}
+            </select>
+            <input id="e_category" placeholder="Kategoria" />
+            <input id="e_amount" type="number" step="0.01" placeholder="Kwota" />
+            <input id="e_vendor" placeholder="Dostawca / wykonawca" />
+            <input id="e_notes" placeholder="Notatki" />
+          </div>
+          <div class="section"><button class="btn green" onclick="addExpense()">Dodaj koszt</button></div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Koszty</h3></div>
+          <table>
+            <thead><tr><th>Data</th><th>Obiekt</th><th>Kategoria</th><th>Dostawca</th><th>Kwota</th><th></th></tr></thead>
+            <tbody>
+              ${state.expenses.map((e) => `
+                <tr>
+                  <td>${e.date}</td>
+                  <td>${e.unitId ? unitLabel(e.unitId) : e.buildingId ? buildingName(e.buildingId) : "—"}</td>
+                  <td>${e.category}</td>
+                  <td>${e.vendor || "—"}</td>
+                  <td>${fmt(e.amount)}</td>
+                  <td><button class="btn secondary" onclick="removeExpense('${e.id}')">Usuń</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderMaintenance() {
+      document.getElementById("maintenance").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Dodaj zgłoszenie</h3></div>
+          <div class="form-grid">
+            <select id="tk_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
+            <select id="tk_tenant">
+              <option value="">Bez najemcy</option>
+              ${state.tenants.map((t) => `<option value="${t.id}">${t.name}</option>`).join("")}
+            </select>
+            <input id="tk_title" placeholder="Tytuł zgłoszenia" />
+            <select id="tk_priority">
+              <option>niski</option>
+              <option>średni</option>
+              <option>wysoki</option>
+            </select>
+            <select id="tk_status">
+              <option>otwarte</option>
+              <option>w trakcie</option>
+              <option>zamknięte</option>
+            </select>
+            <input id="tk_assignee" placeholder="Wykonawca / opiekun" />
+            <input id="tk_notes" placeholder="Notatki" />
+          </div>
+          <div class="section"><button class="btn green" onclick="addTicket()">Dodaj zgłoszenie</button></div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Zgłoszenia</h3></div>
+          <table>
+            <thead><tr><th>Data</th><th>Lokal</th><th>Zgłoszenie</th><th>Priorytet</th><th>Status</th><th>Opiekun</th><th></th></tr></thead>
+            <tbody>
+              ${state.tickets.map((t) => {
+                const stCls = t.status === "zamknięte" ? "status-closed" : t.status === "w trakcie" ? "status-pending" : "status-open";
+                const prCls = t.priority === "wysoki" ? "status-overdue" : t.priority === "średni" ? "status-pending" : "status-active";
+                return `
+                  <tr>
+                    <td>${t.createdAt}</td>
+                    <td>${unitLabel(t.unitId)}</td>
+                    <td><strong>${t.title}</strong><br><span class="muted small">${tenantName(t.tenantId)} ${t.notes ? "• " + t.notes : ""}</span></td>
+                    <td><span class="badge ${prCls}">${t.priority}</span></td>
+                    <td><span class="badge ${stCls}">${t.status}</span></td>
+                    <td>${t.assignee || "—"}</td>
+                    <td><button class="btn secondary" onclick="removeTicket('${t.id}')">Usuń</button></td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderReports() {
+      const perBuilding = state.buildings.map((b) => {
+        const units = state.units.filter((u) => u.buildingId === b.id);
+        const leasedUnitIds = units.filter((u) => u.status === "wynajęte").map((u) => u.id);
+        const leaseIds = state.leases.filter((l) => leasedUnitIds.includes(l.unitId)).map((l) => l.id);
+        const income = state.payments.filter((p) => leaseIds.includes(p.leaseId)).reduce((a, b) => a + Number(b.amount || 0), 0);
+        const expense = state.expenses.filter((e) => e.buildingId === b.id || leasedUnitIds.includes(e.unitId)).reduce((a, b) => a + Number(b.amount || 0), 0);
+        return { name: b.name, units: units.length, occ: units.length ? Math.round((leasedUnitIds.length / units.length) * 100) : 0, income, expense, net: income - expense };
+      });
+
+      document.getElementById("reports").innerHTML = `
+        <div class="grid cards">
+          <div class="card"><div class="muted">Obłożenie</div><div class="metric">${occupancyRate()}%</div></div>
+          <div class="card"><div class="muted">Przychody</div><div class="metric">${fmt(totals().paid)}</div></div>
+          <div class="card"><div class="muted">Koszty</div><div class="metric">${fmt(totals().expenses)}</div></div>
+          <div class="card"><div class="muted">Wynik netto</div><div class="metric">${fmt(totals().net)}</div></div>
+        </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Wynik wg budynku</h3></div>
+          <table>
+            <thead><tr><th>Budynek</th><th>Lokale</th><th>Obłożenie</th><th>Przychód</th><th>Koszt</th><th>Netto</th></tr></thead>
+            <tbody>
+              ${perBuilding.map((r) => `
+                <tr>
+                  <td>${r.name}</td>
+                  <td>${r.units}</td>
+                  <td>${r.occ}%</td>
+                  <td>${fmt(r.income)}</td>
+                  <td>${fmt(r.expense)}</td>
+                  <td>${fmt(r.net)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderSettings() {
+      document.getElementById("settings").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Ustawienia</h3></div>
+          <div class="form-grid">
+            <input id="s_company" value="${state.settings.companyName || ""}" placeholder="Nazwa firmy" />
+            <input id="s_owner" value="${state.settings.ownerName || ""}" placeholder="Właściciel / zarządca" />
+            <input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" />
+            <input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" />
+            <input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" />
+          </div>
+          <div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div>
+        </div>
+      `;
+    }
+
+    function renderAll() {
+      renderDashboard();
+      renderProperties();
+      renderTenants();
+      renderLeases();
+      renderMeters();
+      renderPayments();
+      renderExpenses();
+      renderMaintenance();
+      renderReports();
+      renderSettings();
+    }
+
+    async function addBuilding() {
+      const name = document.getElementById("b_name").value.trim();
+      if (!name) return alert("Podaj nazwę budynku.");
+      state.buildings.push({
+        id: uid("b"),
+        name,
+        address: document.getElementById("b_address").value.trim(),
+        notes: document.getElementById("b_notes").value.trim(),
+        createdAt: today()
+      });
+      await save();
+    }
+
+    async function removeBuilding(id) {
+      if (!confirm("Usunąć budynek?")) return;
+      state.buildings = state.buildings.filter((x) => x.id !== id);
+      state.units = state.units.filter((u) => u.buildingId !== id);
+      await save();
+    }
+
+    async function addUnit() {
+      const buildingId = document.getElementById("u_building").value;
+      const code = document.getElementById("u_code").value.trim();
+      if (!buildingId || !code) return alert("Wybierz budynek i podaj numer lokalu.");
+      state.units.push({
+        id: uid("u"),
+        buildingId,
+        code,
+        type: document.getElementById("u_type").value,
+        area: Number(document.getElementById("u_area").value || 0),
+        floor: Number(document.getElementById("u_floor").value || 0),
+        rentDefault: Number(document.getElementById("u_rent").value || 0),
+        serviceCharge: Number(document.getElementById("u_service").value || 0),
+        status: document.getElementById("u_status").value,
+        notes: ""
+      });
+      await save();
+    }
+
+    async function removeUnit(id) {
+      if (!confirm("Usunąć lokal?")) return;
+      state.units = state.units.filter((x) => x.id !== id);
+      state.tenants.forEach((t) => { if (t.unitId === id) t.unitId = ""; });
+      state.leases = state.leases.filter((l) => l.unitId !== id);
+      state.meters = state.meters.filter((m) => m.unitId !== id);
+      state.meterReadings = state.meterReadings.filter((r) => {
+        const meter = state.meters.find((m) => m.id === r.meterId);
+        return !!meter;
+      });
+      await save();
+    }
+
+    async function addTenant() {
+      const name = document.getElementById("t_name").value.trim();
+      if (!name) return alert("Podaj imię i nazwisko.");
+      state.tenants.push({
+        id: uid("t"),
+        name,
+        phone: document.getElementById("t_phone").value.trim(),
+        email: document.getElementById("t_email").value.trim(),
+        unitId: document.getElementById("t_unit").value,
+        status: "aktywny",
+        notes: ""
+      });
+      await save();
+    }
+
+    async function removeTenant(id) {
+      if (!confirm("Usunąć najemcę?")) return;
+      state.tenants = state.tenants.filter((x) => x.id !== id);
+      state.leases = state.leases.filter((l) => l.tenantId !== id);
+      await save();
+    }
+
+    async function addLease() {
+      const tenantId = document.getElementById("l_tenant").value;
+      const unitId = document.getElementById("l_unit").value;
+      if (!tenantId || !unitId) return alert("Wybierz najemcę i lokal.");
+      state.leases.push({
+        id: uid("l"),
+        tenantId,
+        unitId,
+        startDate: document.getElementById("l_start").value,
+        endDate: document.getElementById("l_end").value,
+        rent: Number(document.getElementById("l_rent").value || 0),
+        deposit: Number(document.getElementById("l_deposit").value || 0),
+        billingDay: Number(document.getElementById("l_billing").value || 5),
+        status: document.getElementById("l_status").value,
+        notes: ""
+      });
+      const unit = state.units.find((u) => u.id === unitId);
+      if (unit) unit.status = "wynajęte";
+      const tenant = state.tenants.find((t) => t.id === tenantId);
+      if (tenant) tenant.unitId = unitId;
+      await save();
+    }
+
+    async function removeLease(id) {
+      if (!confirm("Usunąć umowę?")) return;
+      state.leases = state.leases.filter((x) => x.id !== id);
+      await save();
+    }
+
+    async function addMeter() {
+      const unitId = document.getElementById("m_unit").value;
+      if (!unitId) return alert("Wybierz lokal.");
+      state.meters.push({
+        id: uid("m"),
+        unitId,
+        type: document.getElementById("m_type").value,
+        serial: document.getElementById("m_serial").value.trim(),
+        rate: Number(document.getElementById("m_rate").value || 0),
+        unit: document.getElementById("m_unit_name").value.trim() || "szt."
+      });
+      await save();
+    }
+
+    function prefillReading(id) {
+      showPage("meters");
+      document.getElementById("r_meter").value = id;
+    }
+
+    async function addReading() {
+      const meterId = document.getElementById("r_meter").value;
+      if (!meterId) return alert("Wybierz licznik.");
+      state.meterReadings.push({
+        id: uid("r"),
+        meterId,
+        date: document.getElementById("r_date").value,
+        value: Number(document.getElementById("r_value").value || 0),
+        notes: ""
+      });
+      await save();
+    }
+
+    async function addCharge() {
+      const leaseId = document.getElementById("c_lease").value;
+      if (!leaseId) return alert("Wybierz umowę.");
+      state.charges.push({
+        id: uid("c"),
+        leaseId,
+        type: document.getElementById("c_type").value.trim(),
+        amount: Number(document.getElementById("c_amount").value || 0),
+        dueDate: document.getElementById("c_due").value,
+        status: "oczekujące",
+        notes: ""
+      });
+      await save();
+    }
+
+    async function removeCharge(id) {
+      if (!confirm("Usunąć opłatę?")) return;
+      state.charges = state.charges.filter((x) => x.id !== id);
+      state.payments = state.payments.filter((p) => p.chargeId !== id);
+      await save();
+    }
+
+    async function addPayment() {
+      const chargeId = document.getElementById("p_charge").value;
+      const charge = state.charges.find((c) => c.id === chargeId);
+      if (!charge) return alert("Wybierz opłatę.");
+      state.payments.push({
+        id: uid("p"),
+        leaseId: charge.leaseId,
+        chargeId,
+        date: document.getElementById("p_date").value,
+        amount: Number(document.getElementById("p_amount").value || 0),
+        method: document.getElementById("p_method").value,
+        notes: ""
+      });
+      await save();
+    }
+
+    async function addExpense() {
+      state.expenses.push({
+        id: uid("e"),
+        date: document.getElementById("e_date").value,
+        buildingId: document.getElementById("e_building").value,
+        unitId: document.getElementById("e_unit").value,
+        category: document.getElementById("e_category").value.trim(),
+        amount: Number(document.getElementById("e_amount").value || 0),
+        vendor: document.getElementById("e_vendor").value.trim(),
+        notes: document.getElementById("e_notes").value.trim()
+      });
+      await save();
+    }
+
+    async function removeExpense(id) {
+      if (!confirm("Usunąć koszt?")) return;
+      state.expenses = state.expenses.filter((x) => x.id !== id);
+      await save();
+    }
+
+    async function addTicket() {
+      state.tickets.push({
+        id: uid("tk"),
+        createdAt: today(),
+        unitId: document.getElementById("tk_unit").value,
+        tenantId: document.getElementById("tk_tenant").value,
+        title: document.getElementById("tk_title").value.trim(),
+        priority: document.getElementById("tk_priority").value,
+        status: document.getElementById("tk_status").value,
+        assignee: document.getElementById("tk_assignee").value.trim(),
+        notes: document.getElementById("tk_notes").value.trim()
+      });
+      await save();
+    }
+
+    async function removeTicket(id) {
+      if (!confirm("Usunąć zgłoszenie?")) return;
+      state.tickets = state.tickets.filter((x) => x.id !== id);
+      await save();
+    }
+
+    async function generateMonthlyCharges() {
+      const month = new Date().toISOString().slice(0, 7);
+      let created = 0;
+
+      state.leases
+        .filter((l) => l.status === "aktywna")
+        .forEach((l) => {
+          const exists = state.charges.some((c) => c.leaseId === l.id && c.type === `Czynsz ${month}`);
+          if (!exists) {
+            const unit = state.units.find((u) => u.id === l.unitId);
+            const amount = Number(l.rent || 0) + Number(unit?.serviceCharge || 0);
+            const due = new Date();
+            due.setDate(Number(l.billingDay || 5));
+            state.charges.push({
+              id: uid("c"),
+              leaseId: l.id,
+              type: `Czynsz ${month}`,
+              amount,
+              dueDate: due.toISOString().slice(0, 10),
+              status: "oczekujące",
+              notes: "Automatycznie wygenerowano"
+            });
+            created++;
+          }
+        });
+
+      await save();
+      alert(`Wygenerowano ${created} opłat.`);
+    }
+
+    async function generateUtilityCharges() {
+      let created = 0;
+
+      state.meters.forEach((m) => {
+        const cons = meterConsumption(m.id);
+        if (cons.amount <= 0) return;
+        const lease = activeLeaseByUnit(m.unitId);
+        if (!lease) return;
+
+        state.charges.push({
+          id: uid("c"),
+          leaseId: lease.id,
+          type: `Media: ${m.type}`,
+          amount: Number(cons.amount.toFixed(2)),
+          dueDate: today(),
+          status: "oczekujące",
+          notes: `Zużycie ${cons.usage} ${m.unit} × ${m.rate}`
+        });
+        created++;
+      });
+
+      await save();
+      alert(`Wygenerowano ${created} opłat za media.`);
+    }
+
+    async function saveSettings() {
+      state.settings.companyName = document.getElementById("s_company").value.trim();
+      state.settings.ownerName = document.getElementById("s_owner").value.trim();
+      state.settings.baseCurrency = document.getElementById("s_currency").value.trim() || "PLN";
+      state.settings.utilityVAT = Number(document.getElementById("s_vat").value || 23);
+      state.settings.lateFee = Number(document.getElementById("s_late").value || 50);
+      await save();
+      alert("Zapisano ustawienia.");
+    }
+
+    function downloadFile(filename, content, mime) {
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function exportJSON() {
+      downloadFile("rentflow_backup.json", JSON.stringify(state, null, 2), "application/json");
+    }
+
+    function csv(rows) {
+      if (!rows.length) return "";
+      const headers = Object.keys(rows[0]);
+      const esc = (v) => `"${String(v ?? "").replaceAll('"', '""')}"`;
+      return [headers.join(";"), ...rows.map((r) => headers.map((h) => esc(r[h])).join(";"))].join("\n");
+    }
+
+    function exportCSVBundle() {
+      const files = {
+        buildings: csv(state.buildings),
+        units: csv(state.units),
+        tenants: csv(state.tenants),
+        leases: csv(state.leases),
+        meters: csv(state.meters),
+        readings: csv(state.meterReadings),
+        charges: csv(state.charges),
+        payments: csv(state.payments),
+        expenses: csv(state.expenses),
+        tickets: csv(state.tickets)
+      };
+
+      Object.entries(files).forEach(([name, content], i) => {
+        setTimeout(() => downloadFile(`${name}.csv`, content, "text/csv;charset=utf-8;"), i * 250);
+      });
+    }
+
+    importFile.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      try {
+        state = JSON.parse(text);
+        await save();
+        alert("Import zakończony.");
+      } catch {
+        alert("Błędny plik JSON.");
+      }
+      e.target.value = "";
+    });
+
+    function drawCashflowChart() {
+      const canvas = document.getElementById("cashflowChart");
+      if (!canvas) return;
+
+      const ctx = canvas.getContext("2d");
+      const w = canvas.width = canvas.clientWidth;
+      const h = canvas.height = canvas.clientHeight;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const months = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        months.push(d.toISOString().slice(0, 7));
+      }
+
+      const income = months.map((m) => state.payments.filter((p) => p.date.startsWith(m)).reduce((a, b) => a + Number(b.amount || 0), 0));
+      const costs = months.map((m) => state.expenses.filter((e) => e.date.startsWith(m)).reduce((a, b) => a + Number(b.amount || 0), 0));
+
+      const max = Math.max(100, ...income, ...costs);
+      const pad = 34;
+
+      ctx.strokeStyle = "rgba(255,255,255,.10)";
+      for (let i = 0; i < 5; i++) {
+        const y = pad + ((h - pad * 2) / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(pad, y);
+        ctx.lineTo(w - pad, y);
+        ctx.stroke();
+      }
+
+      function drawSeries(arr, color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        arr.forEach((v, i) => {
+          const x = pad + i * ((w - pad * 2) / (arr.length - 1 || 1));
+          const y = h - pad - (v / max) * (h - pad * 2);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+
+      drawSeries(income, "#66e3c4");
+      drawSeries(costs, "#ff7272");
+
+      ctx.fillStyle = "#9fb0d0";
+      ctx.font = "12px Arial";
+      months.forEach((m, i) => {
+        const x = pad + i * ((w - pad * 2) / (months.length - 1 || 1));
+        ctx.fillText(m.slice(5), x - 8, h - 10);
+      });
+
+      ctx.fillStyle = "#66e3c4";
+      ctx.fillText("Przychody", pad, 16);
+      ctx.fillStyle = "#ff7272";
+      ctx.fillText("Koszty", pad + 90, 16);
+    }
+
+    async function init() {
+      renderNav();
+      await load();
+      renderAll();
+      showPage("dashboard");
+    }
+
+    init();
+  </script>
+</body>
+</html>

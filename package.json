@@ -1,0 +1,13 @@
+{
+    "name": "rentflow-online",
+    "version": "1.0.0",
+    "description": "System zarządzania najmem mieszkań online",
+    "main": "server.js",
+    "type": "commonjs",
+    "scripts": {
+      "start": "node server.js"
+    },
+    "dependencies": {
+      "express": "^4.21.2"
+    }
+  }
