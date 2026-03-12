@@ -695,6 +695,7 @@
       <section id="expenses" class="page hidden"></section>
       <section id="maintenance" class="page hidden"></section>
       <section id="documents" class="page hidden"></section>
+      <section id="tasks" class="page hidden"></section>
       <section id="communications" class="page hidden"></section>
       <section id="reports" class="page hidden"></section>
       <section id="settings" class="page hidden"></section>
@@ -716,6 +717,7 @@
       expenses: [],
       tickets: [],
       documents: [],
+      tasks: [],
       settlements: [],
       periodSettlements: [],
       settings: {
@@ -753,6 +755,7 @@
       ["expenses", "Koszty", "Koszty budynków i lokali."],
       ["maintenance", "Usterki", "Zgłoszenia, priorytety i statusy."],
       ["documents", "Dokumenty", "Rejestr umów, polis, protokołów i terminów ważności."],
+      ["tasks", "Zadania", "Checklisty operacyjne, onboarding i terminy."],
       ["communications", "Komunikacja", "Przypomnienia, kolejka kontaktu i gotowe wiadomości."],
       ["reports", "Raporty", "Obłożenie, wynik i zestawienia."],
       ["settings", "Ustawienia", "Dane firmy i eksporty."]
@@ -763,6 +766,7 @@
       ["tenantCard", "Mój lokal", "Umowa, saldo, rozliczenia i dane najmu."],
       ["payments", "Płatności", "Bieżące należności, historia wpłat i status rozliczeń."],
       ["documents", "Dokumenty", "Udostępnione umowy, protokoły i ważne terminy."],
+      ["tasks", "Moje zadania", "Checklista spraw do załatwienia i terminów."],
       ["maintenance", "Zgłoszenia", "Dodaj sprawę serwisową i śledź postęp obsługi."],
       ["settings", "Profil", "Dane kontaktowe i informacje rozliczeniowe."]
     ];
@@ -947,6 +951,7 @@
       state.expenses = state.expenses.filter((expense) => (!expense.buildingId || buildingIds.has(expense.buildingId)) && (!expense.unitId || unitIds.has(expense.unitId)));
       state.tickets = state.tickets.filter((ticket) => unitIds.has(ticket.unitId) && (!ticket.tenantId || tenantIds.has(ticket.tenantId)));
       state.documents = state.documents.filter((document) => (!document.tenantId || tenantIds.has(document.tenantId)) && (!document.leaseId || leaseIds.has(document.leaseId)) && (!document.unitId || unitIds.has(document.unitId)));
+      state.tasks = state.tasks.filter((task) => (!task.tenantId || tenantIds.has(task.tenantId)) && (!task.leaseId || leaseIds.has(task.leaseId)) && (!task.unitId || unitIds.has(task.unitId)));
       state.settlements = state.settlements.filter((settlement) => (!settlement.leaseId || leaseIds.has(settlement.leaseId)) && (!settlement.tenantId || tenantIds.has(settlement.tenantId)) && (!settlement.unitId || unitIds.has(settlement.unitId)));
       state.periodSettlements = state.periodSettlements.filter((settlement) => !settlement.tenantId || tenantIds.has(settlement.tenantId));
     }
@@ -964,6 +969,7 @@
       state.expenses ||= [];
       state.tickets ||= [];
       state.documents ||= [];
+      state.tasks ||= [];
       state.settlements ||= [];
       state.periodSettlements ||= [];
       state.settings ||= {};
@@ -994,6 +1000,15 @@
       }));
 
       state.tickets = state.tickets.map(normalizeTicket);
+      state.tasks = state.tasks.map((task) => ({
+        ...task,
+        title: sanitizeText(task?.title || ""),
+        category: sanitizeText(task?.category || "operacyjne"),
+        status: ["do zrobienia", "w toku", "gotowe"].includes(task?.status) ? task.status : "do zrobienia",
+        visibility: ["owner", "tenant", "shared"].includes(task?.visibility) ? task.visibility : "owner",
+        dueDate: task?.dueDate || "",
+        completedAt: task?.completedAt || ""
+      }));
 
       cleanupRelationships();
     }
@@ -1162,6 +1177,13 @@
           title: `${ticket.title} · ${unitLabel(ticket.unitId)}`,
           meta: `${ticket.status} · ${ticketSlaState(ticket).label}`,
           date: ticket.lastCommentAt || ticket.resolvedAt || ticket.createdAt || ""
+        })),
+        ...state.tasks.map((task) => ({
+          id: task.id,
+          type: "Zadanie",
+          title: `${task.title} · ${task.category || "operacyjne"}`,
+          meta: `${task.status} · ${task.dueDate || "bez terminu"}`,
+          date: task.completedAt || task.dueDate || ""
         })),
         ...state.documents.map((document) => ({
           id: document.id,
@@ -1350,6 +1372,26 @@
         { label: "Ostatnia wiadomość", value: ticket.lastCommentAt ? formatDateTime(ticket.lastCommentAt) : "brak" },
         { label: "Zamknięte", value: ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : "otwarte" }
       ];
+    }
+
+    function taskStatusClass(status) {
+      return status === "gotowe" ? "status-active" : status === "w toku" ? "status-pending" : "status-open";
+    }
+
+    function taskDueTone(task) {
+      if (task.status === "gotowe") return "ok";
+      const days = daysUntil(task.dueDate);
+      if (days !== null && days < 0) return "high";
+      if (days !== null && days <= 3) return "medium";
+      return "ok";
+    }
+
+    function taskFeed(limit = 6) {
+      return state.tasks
+        .slice()
+        .sort((a, b) => String(a.dueDate || "9999-99-99").localeCompare(String(b.dueDate || "9999-99-99")))
+        .filter((task) => task.status !== "gotowe")
+        .slice(0, limit);
     }
 
     function chargeOutstandingAmount(charge) {
@@ -1817,6 +1859,7 @@
         const balance = due - paid;
         const openTickets = state.tickets.filter((ticket) => ticket.status !== "zamknięte").length;
         const reminders = tenantReminderFeed();
+        const tasks = taskFeed(4);
         const nextCharge = state.charges
           .slice()
           .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")))
@@ -1859,6 +1902,17 @@
                   `).join("") : `<div class="empty-state">Na ten moment nie ma nic pilnego po Twojej stronie.</div>`}
                 </div>
               </div>
+              <div class="card">
+                <div class="panel-title"><h3>Moje zadania</h3></div>
+                <div class="ops-list">
+                  ${tasks.length ? tasks.map((task) => `
+                    <div class="ops-item ${taskDueTone(task) === "high" ? "danger-box" : ""}">
+                      <strong>${task.title}</strong>
+                      <div class="muted">${task.category || "zadanie"} · termin ${task.dueDate || "bez terminu"}</div>
+                    </div>
+                  `).join("") : `<div class="empty-state">Brak zadań przypisanych do Twojego lokalu.</div>`}
+                </div>
+              </div>
             </div>
           </div>
           <div class="grid cards">
@@ -1878,6 +1932,7 @@
       const signals = operationalSignals();
       const activities = recentActivity();
       const alerts = ticketAlerts();
+      const tasks = taskFeed(5);
       const buildings = buildingPerformance().slice(0, 5);
       const tenants = topTenantsByBalance(5);
       const collection = collectionRate();
@@ -1940,6 +1995,17 @@
                     </div>
                   </div>
                 `).join("") : `<div class="empty-state">Wszystkie aktywne zgłoszenia mieszczą się w SLA.</div>`}
+              </div>
+            </div>
+            <div class="card">
+              <div class="panel-title"><h3>Checklisty operacyjne</h3></div>
+              <div class="ops-list">
+                ${tasks.length ? tasks.map((task) => `
+                  <div class="ops-item ${taskDueTone(task) === "high" ? "danger-box" : ""}">
+                    <strong>${task.title}</strong>
+                    <div class="muted">${task.category || "zadanie"} · ${task.dueDate || "bez terminu"} · ${task.status}</div>
+                  </div>
+                `).join("") : `<div class="empty-state">Brak otwartych checklist operacyjnych.</div>`}
               </div>
             </div>
           </div>
@@ -2557,6 +2623,81 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         </div>`;
     }
 
+    function renderTasks() {
+      if (currentUser?.role === "tenant") {
+        document.getElementById("tasks").innerHTML = `
+          <div class="card">
+            <div class="panel-title"><h3>Moje zadania i checklisty</h3></div>
+            <div class="entity-list">
+              ${state.tasks.length ? state.tasks
+                .slice()
+                .sort((a, b) => String(a.dueDate || "9999-99-99").localeCompare(String(b.dueDate || "9999-99-99")))
+                .map((task) => `
+                  <div class="entity-item">
+                    <div>
+                      <strong>${task.title}</strong>
+                      <div class="meta">${task.category || "zadanie"} · termin ${task.dueDate || "bez terminu"} · ${task.description || "bez opisu"}</div>
+                    </div>
+                    <div class="inline-actions">
+                      <span class="badge ${taskStatusClass(task.status)}">${task.status}</span>
+                      <button class="btn small" onclick="toggleTaskStatus('${task.id}')">${task.status === "gotowe" ? "Oznacz jako otwarte" : "Oznacz jako gotowe"}</button>
+                    </div>
+                  </div>
+                `).join("") : `<div class="empty-state">Właściciel nie przypisał jeszcze żadnych zadań do Twojego najmu.</div>`}
+            </div>
+          </div>`;
+        return;
+      }
+
+      document.getElementById("tasks").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Dodaj zadanie operacyjne</h3></div>
+          <div class="form-grid">
+            <input id="task_title" placeholder="Np. protokół zdawczo-odbiorczy" />
+            <input id="task_category" placeholder="Kategoria: onboarding / offboarding / formalności" />
+            <select id="task_tenant"><option value="">Bez najemcy</option>${state.tenants.map((tenant) => `<option value="${tenant.id}">${tenant.name}</option>`).join("")}</select>
+            <select id="task_lease"><option value="">Bez umowy</option>${state.leases.map((lease) => `<option value="${lease.id}">${leaseLabel(lease.id)}</option>`).join("")}</select>
+            <select id="task_unit"><option value="">Bez lokalu</option>${state.units.map((unit) => `<option value="${unit.id}">${unitLabel(unit.id)}</option>`).join("")}</select>
+            <input id="task_due" type="date" value="${today()}" />
+            <select id="task_visibility"><option value="owner">Tylko owner</option><option value="tenant">Tylko najemca</option><option value="shared">Wspólne</option></select>
+            <select id="task_status"><option value="do zrobienia">do zrobienia</option><option value="w toku">w toku</option><option value="gotowe">gotowe</option></select>
+            <input id="task_description" placeholder="Krótki opis lub checklista" />
+          </div>
+          <div class="section"><button class="btn green" onclick="addTask()">Dodaj zadanie</button></div>
+        </div>
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Checklisty onboarding / offboarding</h3></div>
+            <div class="ops-list">
+              <div class="ops-item"><strong>Onboarding</strong><div class="muted">Umowa, protokół, kaucja, przekazanie kluczy, pierwsze rozliczenia.</div></div>
+              <div class="ops-item"><strong>Offboarding</strong><div class="muted">Wypowiedzenie, odczyty końcowe, rozliczenie okresowe, zwrot kluczy, dokument zamknięcia.</div></div>
+              <div class="ops-item"><strong>Stałe operacje</strong><div class="muted">Polisy, przeglądy, aneksy, zgody, odnowienia dokumentów.</div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>Otwarte zadania</h3></div>
+            <div class="entity-list">
+              ${state.tasks.length ? state.tasks
+                .slice()
+                .sort((a, b) => String(a.dueDate || "9999-99-99").localeCompare(String(b.dueDate || "9999-99-99")))
+                .map((task) => `
+                  <div class="entity-item">
+                    <div>
+                      <strong>${task.title}</strong>
+                      <div class="meta">${task.category || "zadanie"} · ${task.dueDate || "bez terminu"} · ${task.tenantId ? tenantName(task.tenantId) : "wewnętrzne"}</div>
+                    </div>
+                    <div class="inline-actions">
+                      <span class="badge ${taskStatusClass(task.status)}">${task.status}</span>
+                      <button class="btn secondary small" onclick="toggleTaskStatus('${task.id}')">${task.status === "gotowe" ? "Cofnij" : "Zmień status"}</button>
+                      <button class="btn secondary small" onclick="removeTask('${task.id}')">Usuń</button>
+                    </div>
+                  </div>
+                `).join("") : `<div class="empty-state">Brak zadań. Dodaj pierwszą checklistę dla procesu najmu.</div>`}
+            </div>
+          </div>
+        </div>`;
+    }
+
     function renderReports() {
       const perBuilding = buildingPerformance();
       const { due, paid, overdue, expenses, net } = totals();
@@ -2667,6 +2808,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       renderExpenses();
       renderMaintenance();
       renderDocuments();
+      renderTasks();
       renderCommunications();
       renderReports();
       renderSettings();
@@ -2992,6 +3134,45 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       await save();
       showPage("documents");
     }
+    async function addTask() {
+      const title = document.getElementById("task_title")?.value.trim();
+      if (!title) return alert("Podaj nazwę zadania.");
+      state.tasks.push({
+        id: uid("task"),
+        title,
+        category: document.getElementById("task_category")?.value.trim() || "operacyjne",
+        tenantId: document.getElementById("task_tenant")?.value || "",
+        leaseId: document.getElementById("task_lease")?.value || "",
+        unitId: document.getElementById("task_unit")?.value || "",
+        dueDate: document.getElementById("task_due")?.value || "",
+        visibility: document.getElementById("task_visibility")?.value || "owner",
+        status: document.getElementById("task_status")?.value || "do zrobienia",
+        description: document.getElementById("task_description")?.value.trim() || "",
+        completedAt: ""
+      });
+      await save();
+      showPage("tasks");
+    }
+    async function toggleTaskStatus(id) {
+      const task = state.tasks.find((entry) => entry.id === id);
+      if (!task) return;
+      if (task.status === "do zrobienia") task.status = "w toku";
+      else if (task.status === "w toku") {
+        task.status = "gotowe";
+        task.completedAt = nowIso();
+      } else {
+        task.status = "do zrobienia";
+        task.completedAt = "";
+      }
+      await save();
+      showPage("tasks");
+    }
+    async function removeTask(id) {
+      if (!confirm("Usunąć zadanie?")) return;
+      state.tasks = state.tasks.filter((entry) => entry.id !== id);
+      await save();
+      showPage("tasks");
+    }
     function selectTicket(id) {
       selectedTicketId = id;
       renderMaintenance();
@@ -3154,7 +3335,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         payments: csv(state.payments),
         expenses: csv(state.expenses),
         tickets: csv(state.tickets),
-        documents: csv(state.documents)
+        documents: csv(state.documents),
+        tasks: csv(state.tasks)
       };
       Object.entries(files).forEach(([name, content], i) => {
         setTimeout(() => downloadFile(`${name}.csv`, content, "text/csv;charset=utf-8;"), i * 250);
