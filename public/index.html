@@ -827,6 +827,12 @@
     let pendingConversationFiles = [];
     let teamUsers = [];
     let tenantAccessOverview = [];
+    let meterFormState = {
+      meterUnitId: "",
+      meterType: "prąd",
+      readingMeterId: "",
+      readingDate: ""
+    };
     let selectedGeneratedDocumentId = null;
     let selectedConversationId = null;
     let editingBuildingId = null;
@@ -929,6 +935,22 @@
         technician: "Techniczny",
         tenant: "Najemca"
       })[role] || role;
+    }
+
+    function syncMeterFormState() {
+      meterFormState.meterUnitId = document.getElementById("m_unit")?.value || meterFormState.meterUnitId || "";
+      meterFormState.meterType = document.getElementById("m_type")?.value || meterFormState.meterType || "prąd";
+      meterFormState.readingMeterId = document.getElementById("r_meter")?.value || meterFormState.readingMeterId || "";
+      meterFormState.readingDate = document.getElementById("r_date")?.value || meterFormState.readingDate || today();
+    }
+
+    function normalizeMeterFormState() {
+      const firstUnitId = state.units[0]?.id || "";
+      const firstMeterId = state.meters[0]?.id || "";
+      meterFormState.meterUnitId = state.units.some((unit) => unit.id === meterFormState.meterUnitId) ? meterFormState.meterUnitId : firstUnitId;
+      meterFormState.meterType = meterFormState.meterType || "prąd";
+      meterFormState.readingMeterId = state.meters.some((meter) => meter.id === meterFormState.readingMeterId) ? meterFormState.readingMeterId : firstMeterId;
+      meterFormState.readingDate = meterFormState.readingDate || today();
     }
 
     function permissionLabel(key) {
@@ -3481,23 +3503,24 @@
     }
 
     function renderMeters() {
+      normalizeMeterFormState();
       document.getElementById("meters").innerHTML = `
         <div class="card">
           <div class="panel-title"><h3>Dodaj licznik</h3></div>
           <div class="form-grid three">
-            <select id="m_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
-            <select id="m_type" onchange="onMeterTypeChange()"><option>prąd</option><option>zimna woda</option><option>ciepła woda</option><option>gaz</option><option>ciepło</option></select>
+            <select id="m_unit" onchange="syncMeterFormState()">${state.units.map((u) => `<option value="${u.id}" ${meterFormState.meterUnitId === u.id ? "selected" : ""}>${unitLabel(u.id)}</option>`).join("")}</select>
+            <select id="m_type" onchange="onMeterTypeChange()"><option ${meterFormState.meterType === "prąd" ? "selected" : ""}>prąd</option><option ${meterFormState.meterType === "zimna woda" ? "selected" : ""}>zimna woda</option><option ${meterFormState.meterType === "ciepła woda" ? "selected" : ""}>ciepła woda</option><option ${meterFormState.meterType === "gaz" ? "selected" : ""}>gaz</option><option ${meterFormState.meterType === "ciepło" ? "selected" : ""}>ciepło</option></select>
             <input id="m_serial" placeholder="Nr seryjny" />
             <input id="m_rate" type="number" step="0.01" placeholder="Stawka za jednostkę" />
-            <input id="m_unit_name" placeholder="Jednostka np. kWh / m³" value="kWh" />
+            <input id="m_unit_name" placeholder="Jednostka np. kWh / m³" value="${meterUnitDefault(meterFormState.meterType)}" />
             <div><button class="btn green" onclick="addMeter()">Dodaj licznik</button></div>
           </div>
         </div>
         <div class="card section">
           <div class="panel-title"><h3>Dodaj odczyt</h3></div>
           <div class="form-grid three">
-            <select id="r_meter" onchange="showMeterHint()">${state.meters.map((m) => `<option value="${m.id}">${unitLabel(m.unitId)} — ${m.type} (${m.serial})</option>`).join("")}</select>
-            <input id="r_date" type="date" value="${today()}" />
+            <select id="r_meter" onchange="syncMeterFormState(); showMeterHint()">${state.meters.map((m) => `<option value="${m.id}" ${meterFormState.readingMeterId === m.id ? "selected" : ""}>${unitLabel(m.unitId)} — ${m.type} (${m.serial})</option>`).join("")}</select>
+            <input id="r_date" type="date" value="${meterFormState.readingDate || today()}" onchange="syncMeterFormState()" />
             <input id="r_value" type="number" step="0.01" placeholder="Stan licznika" />
           </div>
           <div id="meterHint" class="notice section">Wybierz licznik.</div>
@@ -4327,6 +4350,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       const type = document.getElementById("m_type")?.value;
       const unitInput = document.getElementById("m_unit_name");
       if (!type || !unitInput) return;
+      meterFormState.meterType = type;
       unitInput.value = meterUnitDefault(type);
     }
     function showMeterHint() {
@@ -4606,13 +4630,20 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       await save();
     }
     async function addMeter() {
+      syncMeterFormState();
       const unitId = document.getElementById("m_unit").value;
       const type = document.getElementById("m_type").value;
       if (!unitId) return alert("Wybierz lokal.");
-      state.meters.push({ id: uid("m"), unitId, type, serial: document.getElementById("m_serial").value.trim(), rate: Number(document.getElementById("m_rate").value || 0), unit: document.getElementById("m_unit_name").value.trim() || meterUnitDefault(type) });
+      const meterId = uid("m");
+      state.meters.push({ id: meterId, unitId, type, serial: document.getElementById("m_serial").value.trim(), rate: Number(document.getElementById("m_rate").value || 0), unit: document.getElementById("m_unit_name").value.trim() || meterUnitDefault(type) });
+      meterFormState.meterUnitId = unitId;
+      meterFormState.meterType = type;
+      meterFormState.readingMeterId = meterId;
       await save();
+      showPage("meters");
     }
     async function addReading() {
+      syncMeterFormState();
       const meterId = document.getElementById("r_meter").value;
       const date = document.getElementById("r_date").value;
       const value = Number(document.getElementById("r_value").value || 0);
@@ -4620,7 +4651,10 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       const error = validateReadingAgainstNeighbors(null, meterId, date, value);
       if (error) return alert(error);
       state.meterReadings.push({ id: uid("r"), meterId, date, value });
+      meterFormState.readingMeterId = meterId;
+      meterFormState.readingDate = date;
       await save();
+      showPage("meters");
     }
     function validateReadingAgainstNeighbors(readingId, meterId, date, value) {
       const temp = { id: readingId || "temp", meterId, date, value: Number(value) };
