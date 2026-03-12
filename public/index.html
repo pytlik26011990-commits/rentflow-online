@@ -512,6 +512,19 @@
       object-fit: cover;
       border-radius: 6px;
     }
+    .inline-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: var(--red);
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+    }
     .positive { color: #8ef0b1; }
     .negative { color: #ff9c9c; }
     .workspace-grid {
@@ -2949,7 +2962,7 @@
       const nav = document.getElementById("nav");
       nav.innerHTML = activePages().map(([id, label, sub]) => `
         <button onclick="showPage('${id}')" id="nav_${id}">
-          <div>${label}</div>
+          <div>${label}${id === "communications" && unreadConversationsCount() ? ` <span class="inline-badge">${unreadConversationsCount()}</span>` : ""}</div>
           <span>${sub.split(",")[0]}</span>
         </button>
       `).join("");
@@ -4130,7 +4143,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             <div class="entity-item">
               <div>
                 <strong>${entry.authorName || (entry.authorRole === "owner" ? "Zarządca" : "Najemca")}</strong>
-                <div class="meta">${entry.authorRole === "owner" ? "Zarządca / właściciel" : "Najemca"} · ${formatDateTime(entry.createdAt)}</div>
+                <div class="meta">${entry.authorRole === currentUser?.role ? "Wysłano" : "Odebrano"} · ${entry.authorRole === "owner" ? "Zarządca / właściciel" : "Najemca"} · ${formatDateTime(entry.createdAt)}</div>
                 ${entry.attachments?.length ? `<div class="thread-attachments">${entry.attachments.map(conversationAttachmentMarkup).join("")}</div>` : ""}
               </div>
               <div class="notice">${entry.body || "—"}</div>
