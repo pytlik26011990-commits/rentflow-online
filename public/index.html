@@ -718,6 +718,7 @@
       tickets: [],
       documents: [],
       tasks: [],
+      generatedDocuments: [],
       settlements: [],
       periodSettlements: [],
       settings: {
@@ -744,6 +745,7 @@
 
     let currentUser = null;
     let pendingDocumentFiles = [];
+    let selectedGeneratedDocumentId = null;
 
     const ownerPages = [
       ["dashboard", "Dashboard", "Podgląd portfela najmu, płatności i mediów."],
@@ -955,6 +957,7 @@
       state.tickets = state.tickets.filter((ticket) => unitIds.has(ticket.unitId) && (!ticket.tenantId || tenantIds.has(ticket.tenantId)));
       state.documents = state.documents.filter((document) => (!document.tenantId || tenantIds.has(document.tenantId)) && (!document.leaseId || leaseIds.has(document.leaseId)) && (!document.unitId || unitIds.has(document.unitId)));
       state.tasks = state.tasks.filter((task) => (!task.tenantId || tenantIds.has(task.tenantId)) && (!task.leaseId || leaseIds.has(task.leaseId)) && (!task.unitId || unitIds.has(task.unitId)));
+      state.generatedDocuments = state.generatedDocuments.filter((document) => (!document.tenantId || tenantIds.has(document.tenantId)) && (!document.leaseId || leaseIds.has(document.leaseId)) && (!document.unitId || unitIds.has(document.unitId)));
       state.settlements = state.settlements.filter((settlement) => (!settlement.leaseId || leaseIds.has(settlement.leaseId)) && (!settlement.tenantId || tenantIds.has(settlement.tenantId)) && (!settlement.unitId || unitIds.has(settlement.unitId)));
       state.periodSettlements = state.periodSettlements.filter((settlement) => !settlement.tenantId || tenantIds.has(settlement.tenantId));
     }
@@ -973,6 +976,7 @@
       state.tickets ||= [];
       state.documents ||= [];
       state.tasks ||= [];
+      state.generatedDocuments ||= [];
       state.settlements ||= [];
       state.periodSettlements ||= [];
       state.settings ||= {};
@@ -1013,6 +1017,16 @@
         visibility: ["owner", "tenant", "shared"].includes(task?.visibility) ? task.visibility : "owner",
         dueDate: task?.dueDate || "",
         completedAt: task?.completedAt || ""
+      }));
+      state.generatedDocuments = state.generatedDocuments.map((document) => ({
+        ...document,
+        title: sanitizeText(document?.title || ""),
+        subject: sanitizeText(document?.subject || ""),
+        bodyHtml: String(document?.bodyHtml || ""),
+        status: sanitizeText(document?.status || "draft"),
+        kind: sanitizeText(document?.kind || "custom"),
+        updatedAt: document?.updatedAt || "",
+        createdAt: document?.createdAt || ""
       }));
       state.documents = state.documents.map((document) => ({
         ...document,
@@ -1474,6 +1488,34 @@
       return rows.join("<br>");
     }
 
+    function stripHtml(html) {
+      const div = document.createElement("div");
+      div.innerHTML = String(html || "");
+      return div.textContent || div.innerText || "";
+    }
+
+    function generatedDocumentLabel(kind) {
+      return ({
+        leaseAgreement: "Umowa najmu",
+        handoverProtocol: "Protokół odbioru",
+        paymentDemand: "Wezwanie do zapłaty",
+        leaseTermination: "Wypowiedzenie umowy",
+        depositReceipt: "Przyjęcie kaucji",
+        paymentReceipt: "Przyjęcie czynszu i opłat"
+      })[kind] || "Dokument";
+    }
+
+    function findGeneratedDocument(id) {
+      return state.generatedDocuments.find((document) => document.id === id);
+    }
+
+    function generatedDraftsForTenant(tenantId) {
+      return state.generatedDocuments
+        .filter((document) => document.tenantId === tenantId)
+        .slice()
+        .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+    }
+
     function formatFileSize(size = 0) {
       if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
       if (size >= 1024) return `${Math.round(size / 1024)} KB`;
@@ -1915,11 +1957,13 @@
       return `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8" /><title>Rozliczenie okresowe</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#111}h1{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ccc;padding:10px;text-align:left}th{background:#f2f2f2}.right{text-align:right}.box{margin-top:20px;padding:14px;border:1px solid #ddd}</style></head><body><h1>Rozliczenie okresowe mediów</h1><div>${state.settings.companyName}</div><div>${state.settings.ownerName || ""}</div><div class="box"><div><strong>Okres:</strong> ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}</div><div><strong>Najemca:</strong> ${settlement.tenantName}</div><div><strong>Lokal:</strong> ${settlement.unitLabel}</div>${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}</div><table><thead><tr><th>Pozycja</th><th class="right">Koszt rzeczywisty</th><th class="right">Zaliczki</th><th class="right">Różnica</th></tr></thead><tbody>${settlement.details.map(d => `<tr><td>${d.label}</td><td class="right">${fmt(d.actual)}</td><td class="right">${fmt(d.advances)}</td><td class="right">${fmt(d.difference)}</td></tr>`).join("")}<tr><td colspan="3" class="right"><strong>Wynik końcowy</strong></td><td class="right"><strong>${fmt(settlement.finalDifference)}</strong></td></tr></tbody></table></body></html>`;
     }
 
-    function leaseAgreementHtml(tenantId) {
+    function buildLeaseAgreementDraft(tenantId) {
       const { tenant, lease, unit, building } = leaseDocumentContext(tenantId);
-      if (!tenant || !lease || !unit) return "";
-      return htmlDocumentShell("Umowa najmu", `
-        <h1>Umowa najmu</h1>
+      if (!tenant || !lease || !unit) return null;
+      return {
+        title: "Umowa najmu",
+        subject: `Umowa najmu · ${tenant.name}`,
+        bodyHtml: `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Wynajmujący</strong><br>${landlordIdentityBlock()}</div>
         <div class="box"><strong>Najemca</strong><br>${tenantIdentityMarkup(tenant)}</div>
@@ -1932,14 +1976,27 @@
         <h2>Dodatkowe opłaty i media</h2>
         <p>Zaliczka zimna woda: ${fmt(lease.advanceColdWater)}<br>Zaliczka ciepła woda: ${fmt(lease.advanceHotWater)}<br>Zaliczka prąd: ${fmt(lease.advanceElectricity)}<br>Zaliczka gaz: ${fmt(lease.advanceGas)}<br>Zaliczka ciepło: ${fmt(lease.advanceHeat)}<br>Śmieci: ${fmt(lease.feeWaste || 0)}<br>Internet: ${fmt(lease.feeInternet || 0)}</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
-      `);
+      `
+      };
     }
 
     function handoverProtocolHtml(tenantId) {
+      const draft = buildHandoverProtocolDraft(tenantId);
+      return draft ? htmlDocumentShell(draft.title, `<h1>${draft.title}</h1>${draft.bodyHtml}`) : "";
+    }
+
+    function leaseAgreementHtml(tenantId) {
+      const draft = buildLeaseAgreementDraft(tenantId);
+      return draft ? htmlDocumentShell(draft.title, `<h1>${draft.title}</h1>${draft.bodyHtml}`) : "";
+    }
+
+    function buildHandoverProtocolDraft(tenantId) {
       const { tenant, lease, unit, building } = leaseDocumentContext(tenantId);
-      if (!tenant || !unit) return "";
-      return htmlDocumentShell("Protokół zdawczo-odbiorczy", `
-        <h1>Protokół zdawczo-odbiorczy</h1>
+      if (!tenant || !unit) return null;
+      return {
+        title: "Protokół zdawczo-odbiorczy",
+        subject: `Protokół odbioru · ${tenant.name}`,
+        bodyHtml: `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Lokal</strong><br>${unitLabel(unit.id)}<br>Adres: ${building?.address || "—"}</div>
         <div class="box"><strong>Strony</strong><br>Wynajmujący: ${state.settings.ownerName || state.settings.companyName || "—"}<br>Najemca: ${tenant.name || "—"}</div>
@@ -1950,16 +2007,19 @@
         <h2>Powiązana umowa</h2>
         <p>Umowa od ${lease?.startDate || "—"} do ${lease?.endDate || "—"}.</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
-      `);
+      `
+      };
     }
 
-    function demandForPaymentHtml(tenantId) {
+    function buildDemandForPaymentDraft(tenantId) {
       const { tenant, lease, unit } = leaseDocumentContext(tenantId);
-      if (!tenant || !lease) return "";
+      if (!tenant || !lease) return null;
       const overdueItems = overdueChargesForLease(lease.id);
       const total = overdueItems.reduce((sum, item) => sum + chargeOutstandingAmount(item), 0);
-      return htmlDocumentShell("Przedsądowe wezwanie do zapłaty", `
-        <h1>Przedsądowe wezwanie do zapłaty</h1>
+      return {
+        title: "Przedsądowe wezwanie do zapłaty",
+        subject: `Wezwanie do zapłaty · ${tenant.name}`,
+        bodyHtml: `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Adresat</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <div class="box"><strong>Nadawca</strong><br>${landlordIdentityBlock()}</div>
@@ -1967,49 +2027,79 @@
         <table><thead><tr><th>Pozycja</th><th>Termin</th><th>Kwota pozostała</th></tr></thead><tbody>${overdueItems.length ? overdueItems.map((item) => `<tr><td>${item.type}</td><td>${item.dueDate}</td><td>${fmt(chargeOutstandingAmount(item))}</td></tr>`).join("") : `<tr><td colspan="3">Brak zaległości na dzień wygenerowania.</td></tr>`}<tr><td colspan="2"><strong>Łącznie</strong></td><td><strong>${fmt(total)}</strong></td></tr></tbody></table>
         <p class="section">Prosimy o uregulowanie należności w terminie 7 dni od doręczenia niniejszego wezwania pod rygorem skierowania sprawy na drogę postępowania sądowego.</p>
         <div class="signature" style="margin-top:36px">Wynajmujący</div>
-      `);
+      `
+      };
     }
 
-    function leaseTerminationHtml(tenantId) {
+    function buildLeaseTerminationDraft(tenantId) {
       const { tenant, lease, unit } = leaseDocumentContext(tenantId);
-      if (!tenant || !lease) return "";
-      return htmlDocumentShell("Wypowiedzenie umowy najmu", `
-        <h1>Wypowiedzenie umowy najmu</h1>
+      if (!tenant || !lease) return null;
+      return {
+        title: "Wypowiedzenie umowy najmu",
+        subject: `Wypowiedzenie umowy · ${tenant.name}`,
+        bodyHtml: `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <div class="box"><strong>Umowa</strong><br>Lokal: ${unit ? unitLabel(unit.id) : "—"}<br>Data rozpoczęcia: ${lease.startDate || "—"}<br>Data zakończenia wskazana w umowie: ${lease.endDate || "—"}</div>
         <p>Wypowiadam umowę najmu z zachowaniem okresu wypowiedzenia wynikającego z umowy / przepisów prawa. Proszę o opuszczenie lokalu, rozliczenie wszystkich należności oraz uzgodnienie terminu zdania lokalu i podpisania protokołu końcowego.</p>
         <p>Przyczynę wypowiedzenia oraz datę ustania stosunku najmu należy uzupełnić zgodnie z konkretnym stanem faktycznym.</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Potwierdzenie odbioru</div></div>
-      `);
+      `
+      };
     }
 
-    function depositReceiptHtml(tenantId) {
+    function buildDepositReceiptDraft(tenantId) {
       const { tenant, lease, unit } = leaseDocumentContext(tenantId);
-      if (!tenant || !lease) return "";
-      return htmlDocumentShell("Potwierdzenie przyjęcia kaucji", `
-        <h1>Potwierdzenie przyjęcia kaucji</h1>
+      if (!tenant || !lease) return null;
+      return {
+        title: "Potwierdzenie przyjęcia kaucji",
+        subject: `Przyjęcie kaucji · ${tenant.name}`,
+        bodyHtml: `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <p>Potwierdzam przyjęcie kaucji zabezpieczającej z tytułu umowy najmu dotyczącej lokalu ${unit ? unitLabel(unit.id) : "—"}.</p>
         <p>Kwota kaucji: <strong>${fmt(lease.deposit)}</strong></p>
         <p>Kaucja została przyjęta na zabezpieczenie należności wynikających z umowy najmu.</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
-      `);
+      `
+      };
     }
 
-    function paymentReceiptHtml(tenantId) {
+    function buildPaymentReceiptDraft(tenantId) {
       const { tenant, lease, unit } = leaseDocumentContext(tenantId);
       const payment = lease ? latestPaymentForLease(lease.id) : null;
-      if (!tenant || !lease || !payment) return "";
-      return htmlDocumentShell("Potwierdzenie przyjęcia płatności", `
-        <h1>Potwierdzenie przyjęcia czynszu i opłat</h1>
+      if (!tenant || !lease || !payment) return null;
+      return {
+        title: "Potwierdzenie przyjęcia płatności",
+        subject: `Przyjęcie płatności · ${tenant.name}`,
+        bodyHtml: `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <div class="box"><strong>Płatność</strong><br>Data wpłaty: ${payment.date || "—"}<br>Kwota: ${fmt(payment.amount)}<br>Metoda: ${payment.method || "—"}<br>Lokal: ${unit ? unitLabel(unit.id) : "—"}</div>
         <p>Potwierdzam przyjęcie płatności z tytułu czynszu / pozostałych opłat wynikających z umowy najmu.</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
-      `);
+      `
+      };
+    }
+
+    function demandForPaymentHtml(tenantId) {
+      const draft = buildDemandForPaymentDraft(tenantId);
+      return draft ? htmlDocumentShell(draft.title, `<h1>${draft.title}</h1>${draft.bodyHtml}`) : "";
+    }
+
+    function leaseTerminationHtml(tenantId) {
+      const draft = buildLeaseTerminationDraft(tenantId);
+      return draft ? htmlDocumentShell(draft.title, `<h1>${draft.title}</h1>${draft.bodyHtml}`) : "";
+    }
+
+    function depositReceiptHtml(tenantId) {
+      const draft = buildDepositReceiptDraft(tenantId);
+      return draft ? htmlDocumentShell(draft.title, `<h1>${draft.title}</h1>${draft.bodyHtml}`) : "";
+    }
+
+    function paymentReceiptHtml(tenantId) {
+      const draft = buildPaymentReceiptDraft(tenantId);
+      return draft ? htmlDocumentShell(draft.title, `<h1>${draft.title}</h1>${draft.bodyHtml}`) : "";
     }
 
     function openPrintWindow(html) {
@@ -2025,6 +2115,100 @@
     }
     function mailtoText(email, subject, body) {
       window.location.href = `mailto:${encodeURIComponent(email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }
+
+    function generatedDocumentBuilders() {
+      return {
+        leaseAgreement: buildLeaseAgreementDraft,
+        handoverProtocol: buildHandoverProtocolDraft,
+        paymentDemand: buildDemandForPaymentDraft,
+        leaseTermination: buildLeaseTerminationDraft,
+        depositReceipt: buildDepositReceiptDraft,
+        paymentReceipt: buildPaymentReceiptDraft
+      };
+    }
+
+    function generatedDocumentPrintableHtml(record) {
+      return htmlDocumentShell(record.title || "Dokument", `<h1>${record.title || "Dokument"}</h1>${record.bodyHtml || ""}`);
+    }
+
+    function openGeneratedDocumentDraft(kind, tenantId) {
+      const builder = generatedDocumentBuilders()[kind];
+      if (!builder) return;
+      const draft = builder(tenantId);
+      if (!draft) {
+        alert("Brakuje danych do wygenerowania szkicu dokumentu. Uzupełnij najemcę, lokal, umowę lub płatności.");
+        return;
+      }
+      const context = leaseDocumentContext(tenantId);
+      const record = {
+        id: uid("gdoc"),
+        tenantId,
+        leaseId: context.lease?.id || "",
+        unitId: context.unit?.id || "",
+        kind,
+        title: draft.title,
+        subject: draft.subject,
+        bodyHtml: draft.bodyHtml,
+        status: "draft",
+        createdAt: nowIso(),
+        updatedAt: nowIso()
+      };
+      state.generatedDocuments.push(record);
+      selectedGeneratedDocumentId = record.id;
+      renderTenantCard();
+      showPage("tenantCard");
+    }
+
+    function selectGeneratedDocument(id) {
+      selectedGeneratedDocumentId = id;
+      renderTenantCard();
+      showPage("tenantCard");
+    }
+
+    async function saveGeneratedDocumentDraft() {
+      const record = findGeneratedDocument(selectedGeneratedDocumentId);
+      if (!record) return alert("Wybierz szkic dokumentu.");
+      record.title = document.getElementById("generated_doc_title")?.value.trim() || record.title;
+      record.subject = document.getElementById("generated_doc_subject")?.value.trim() || record.subject;
+      record.bodyHtml = document.getElementById("generated_doc_editor")?.innerHTML || record.bodyHtml;
+      record.updatedAt = nowIso();
+      await save();
+      showPage("tenantCard");
+    }
+
+    async function removeGeneratedDocument(id) {
+      if (!confirm("Usunąć szkic dokumentu?")) return;
+      state.generatedDocuments = state.generatedDocuments.filter((document) => document.id !== id);
+      if (selectedGeneratedDocumentId === id) selectedGeneratedDocumentId = null;
+      await save();
+      showPage("tenantCard");
+    }
+
+    function printSelectedGeneratedDocument() {
+      const record = findGeneratedDocument(selectedGeneratedDocumentId);
+      if (!record) return alert("Wybierz szkic dokumentu.");
+      record.title = document.getElementById("generated_doc_title")?.value.trim() || record.title;
+      record.subject = document.getElementById("generated_doc_subject")?.value.trim() || record.subject;
+      record.bodyHtml = document.getElementById("generated_doc_editor")?.innerHTML || record.bodyHtml;
+      openPrintWindow(generatedDocumentPrintableHtml(record));
+    }
+
+    function copySelectedGeneratedDocument() {
+      const record = findGeneratedDocument(selectedGeneratedDocumentId);
+      if (!record) return alert("Wybierz szkic dokumentu.");
+      const html = document.getElementById("generated_doc_editor")?.innerHTML || record.bodyHtml;
+      copyToClipboard(stripHtml(html));
+    }
+
+    function sendSelectedGeneratedDocument() {
+      const record = findGeneratedDocument(selectedGeneratedDocumentId);
+      if (!record) return alert("Wybierz szkic dokumentu.");
+      const tenant = tenantById(record.tenantId);
+      if (!tenant?.email) return alert("Najemca nie ma wpisanego adresu e-mail.");
+      const html = document.getElementById("generated_doc_editor")?.innerHTML || record.bodyHtml;
+      const subject = document.getElementById("generated_doc_subject")?.value.trim() || record.subject || record.title;
+      mailtoText(tenant.email, subject, stripHtml(html));
     }
 
     function paymentReminderMessage(charge, tenant, lease) {
@@ -2462,13 +2646,16 @@
       const ledger = tenantLedger(tenant.id);
       const tenantSettlements = state.settlements.filter(s => s.tenantId === tenant.id).slice().sort((a,b)=>b.month.localeCompare(a.month));
       const tenantPeriodSettlements = state.periodSettlements.filter(s => s.tenantId === tenant.id).slice().sort((a,b)=>(b.toMonth+b.createdAt).localeCompare(a.toMonth+a.createdAt));
+      const generatedDrafts = generatedDraftsForTenant(tenant.id);
+      const selectedDraft = findGeneratedDocument(selectedGeneratedDocumentId) || generatedDrafts[0] || null;
+      if (selectedDraft) selectedGeneratedDocumentId = selectedDraft.id;
       const ownerDocumentButtons = lease ? `
-        <button class="btn secondary small" onclick="printGeneratedDocument('leaseAgreement','${tenant.id}')">Umowa najmu</button>
-        <button class="btn secondary small" onclick="printGeneratedDocument('handoverProtocol','${tenant.id}')">Protokół odbioru</button>
-        <button class="btn secondary small" onclick="printGeneratedDocument('paymentDemand','${tenant.id}')">Wezwanie do zapłaty</button>
-        <button class="btn secondary small" onclick="printGeneratedDocument('leaseTermination','${tenant.id}')">Wypowiedzenie</button>
-        <button class="btn secondary small" onclick="printGeneratedDocument('depositReceipt','${tenant.id}')">Przyjęcie kaucji</button>
-        <button class="btn secondary small" onclick="printGeneratedDocument('paymentReceipt','${tenant.id}')">Przyjęcie czynszu i opłat</button>
+        <button class="btn secondary small" onclick="openGeneratedDocumentDraft('leaseAgreement','${tenant.id}')">Nowy szkic umowy</button>
+        <button class="btn secondary small" onclick="openGeneratedDocumentDraft('handoverProtocol','${tenant.id}')">Nowy protokół</button>
+        <button class="btn secondary small" onclick="openGeneratedDocumentDraft('paymentDemand','${tenant.id}')">Nowe wezwanie</button>
+        <button class="btn secondary small" onclick="openGeneratedDocumentDraft('leaseTermination','${tenant.id}')">Nowe wypowiedzenie</button>
+        <button class="btn secondary small" onclick="openGeneratedDocumentDraft('depositReceipt','${tenant.id}')">Nowa kaucja</button>
+        <button class="btn secondary small" onclick="openGeneratedDocumentDraft('paymentReceipt','${tenant.id}')">Nowe potwierdzenie wpłaty</button>
       ` : `<div class="empty-state">Aby wygenerować dokumenty, najemca musi mieć przypisaną umowę i lokal.</div>`;
 
       document.getElementById("tenantCard").innerHTML = `
@@ -2509,6 +2696,41 @@
               <div class="panel-title"><h3>Generatory dokumentów</h3></div>
               <div class="inline-actions">${ownerDocumentButtons}</div>
               <div class="section notice">Dokumenty generują się z danych najemcy, lokalu, umowy i ustawień wynajmującego. Uzupełnij dane formalne najemcy oraz dane właściciela w ustawieniach, żeby wzory były kompletne.</div>
+            </div>
+          </div>
+          <div class="grid two section">
+            <div class="card">
+              <div class="panel-title"><h3>Zapisane szkice dokumentów</h3></div>
+              <div class="entity-list">
+                ${generatedDrafts.length ? generatedDrafts.map((draft) => `
+                  <div class="entity-item">
+                    <div>
+                      <strong>${draft.title}</strong>
+                      <div class="meta">${generatedDocumentLabel(draft.kind)} · aktualizacja ${formatDateTime(draft.updatedAt || draft.createdAt)}</div>
+                    </div>
+                    <div class="inline-actions">
+                      <button class="btn secondary small" onclick="selectGeneratedDocument('${draft.id}')">Edytuj</button>
+                      <button class="btn secondary small" onclick="removeGeneratedDocument('${draft.id}')">Usuń</button>
+                    </div>
+                  </div>
+                `).join("") : `<div class="empty-state">Nie ma jeszcze zapisanych wersji roboczych dokumentów dla tego najemcy.</div>`}
+              </div>
+            </div>
+            <div class="card">
+              <div class="panel-title"><h3>${selectedDraft ? "Edytor dokumentu" : "Wybierz szkic"}</h3></div>
+              ${selectedDraft ? `
+                <div class="form-grid two">
+                  <input id="generated_doc_title" value="${selectedDraft.title || ""}" placeholder="Tytuł dokumentu" />
+                  <input id="generated_doc_subject" value="${selectedDraft.subject || ""}" placeholder="Temat wiadomości / nazwa dokumentu" />
+                </div>
+                <div id="generated_doc_editor" class="details-box section" contenteditable="true">${selectedDraft.bodyHtml || ""}</div>
+                <div class="section inline-actions">
+                  <button class="btn green" onclick="saveGeneratedDocumentDraft()">Zapisz szkic</button>
+                  <button class="btn secondary" onclick="printSelectedGeneratedDocument()">Drukuj</button>
+                  <button class="btn secondary" onclick="sendSelectedGeneratedDocument()">Wyślij e-mail</button>
+                  <button class="btn secondary" onclick="copySelectedGeneratedDocument()">Kopiuj treść</button>
+                </div>
+              ` : `<div class="empty-state">Utwórz nowy szkic dokumentu albo wybierz zapisany dokument z listy po lewej.</div>`}
             </div>
           </div>
         ` : ""}
@@ -3688,25 +3910,6 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       alert("Zapisano ustawienia.");
     }
 
-    function printGeneratedDocument(kind, tenantId) {
-      const builders = {
-        leaseAgreement: leaseAgreementHtml,
-        handoverProtocol: handoverProtocolHtml,
-        paymentDemand: demandForPaymentHtml,
-        leaseTermination: leaseTerminationHtml,
-        depositReceipt: depositReceiptHtml,
-        paymentReceipt: paymentReceiptHtml
-      };
-      const builder = builders[kind];
-      if (!builder) return;
-      const html = builder(tenantId);
-      if (!html) {
-        alert("Brakuje danych do wygenerowania tego dokumentu. Uzupełnij najemcę, lokal, umowę i płatności.");
-        return;
-      }
-      openPrintWindow(html);
-    }
-
     function downloadFile(filename, content, mime) {
       const blob = new Blob([content], { type: mime });
       const url = URL.createObjectURL(blob);
@@ -3738,7 +3941,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         expenses: csv(state.expenses),
         tickets: csv(state.tickets),
         documents: csv(state.documents),
-        tasks: csv(state.tasks)
+        tasks: csv(state.tasks),
+        generatedDocuments: csv(state.generatedDocuments)
       };
       Object.entries(files).forEach(([name, content], i) => {
         setTimeout(() => downloadFile(`${name}.csv`, content, "text/csv;charset=utf-8;"), i * 250);
