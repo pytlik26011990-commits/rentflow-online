@@ -615,6 +615,7 @@
       <section id="payments" class="page hidden"></section>
       <section id="expenses" class="page hidden"></section>
       <section id="maintenance" class="page hidden"></section>
+      <section id="documents" class="page hidden"></section>
       <section id="reports" class="page hidden"></section>
       <section id="settings" class="page hidden"></section>
     </main>
@@ -634,6 +635,7 @@
       payments: [],
       expenses: [],
       tickets: [],
+      documents: [],
       settlements: [],
       periodSettlements: [],
       settings: {
@@ -666,6 +668,7 @@
       ["payments", "Opłaty i płatności", "Należności, wpłaty i zaległości."],
       ["expenses", "Koszty", "Koszty budynków i lokali."],
       ["maintenance", "Usterki", "Zgłoszenia, priorytety i statusy."],
+      ["documents", "Dokumenty", "Rejestr umów, polis, protokołów i terminów ważności."],
       ["reports", "Raporty", "Obłożenie, wynik i zestawienia."],
       ["settings", "Ustawienia", "Dane firmy i eksporty."]
     ];
@@ -674,6 +677,7 @@
       ["dashboard", "Moje centrum", "Twoje saldo, status płatności i najbliższe sprawy."],
       ["tenantCard", "Mój lokal", "Umowa, saldo, rozliczenia i dane najmu."],
       ["payments", "Płatności", "Bieżące należności, historia wpłat i status rozliczeń."],
+      ["documents", "Dokumenty", "Udostępnione umowy, protokoły i ważne terminy."],
       ["maintenance", "Zgłoszenia", "Dodaj sprawę serwisową i śledź postęp obsługi."],
       ["settings", "Profil", "Dane kontaktowe i informacje rozliczeniowe."]
     ];
@@ -797,6 +801,7 @@
       state.payments = state.payments.filter((payment) => chargeIds.has(payment.chargeId) && leaseIds.has(payment.leaseId));
       state.expenses = state.expenses.filter((expense) => (!expense.buildingId || buildingIds.has(expense.buildingId)) && (!expense.unitId || unitIds.has(expense.unitId)));
       state.tickets = state.tickets.filter((ticket) => unitIds.has(ticket.unitId) && (!ticket.tenantId || tenantIds.has(ticket.tenantId)));
+      state.documents = state.documents.filter((document) => (!document.tenantId || tenantIds.has(document.tenantId)) && (!document.leaseId || leaseIds.has(document.leaseId)) && (!document.unitId || unitIds.has(document.unitId)));
       state.settlements = state.settlements.filter((settlement) => (!settlement.leaseId || leaseIds.has(settlement.leaseId)) && (!settlement.tenantId || tenantIds.has(settlement.tenantId)) && (!settlement.unitId || unitIds.has(settlement.unitId)));
       state.periodSettlements = state.periodSettlements.filter((settlement) => !settlement.tenantId || tenantIds.has(settlement.tenantId));
     }
@@ -813,6 +818,7 @@
       state.payments ||= [];
       state.expenses ||= [];
       state.tickets ||= [];
+      state.documents ||= [];
       state.settlements ||= [];
       state.periodSettlements ||= [];
       state.settings ||= {};
@@ -969,7 +975,16 @@
           severity: ticket.priority === "wysoki" ? "high" : "medium"
         }));
 
-      return [...overdueCharges, ...leaseSignals, ...maintenanceSignals]
+      const documentSignals = expiringDocuments(45).slice(0, 4).map((document) => ({
+        kind: "document",
+        label: document.title,
+        title: "Wygasający dokument",
+        amount: 0,
+        date: document.expiresAt,
+        severity: (daysUntil(document.expiresAt) ?? 999) <= 14 ? "high" : "medium"
+      }));
+
+      return [...overdueCharges, ...leaseSignals, ...maintenanceSignals, ...documentSignals]
         .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
         .slice(0, 6);
     }
@@ -996,6 +1011,13 @@
           title: `${ticket.title} · ${unitLabel(ticket.unitId)}`,
           meta: `${ticket.status} · ${ticket.createdAt}`,
           date: ticket.createdAt || ""
+        })),
+        ...state.documents.map((document) => ({
+          id: document.id,
+          type: "Dokument",
+          title: `${document.title} · ${document.category || "plik"}`,
+          meta: `${document.expiresAt ? `ważny do ${document.expiresAt}` : "bez terminu"} · ${document.visibility || "owner"}`,
+          date: document.createdAt || document.issuedAt || ""
         })),
         ...state.settlements.map((settlement) => ({
           id: settlement.id,
@@ -1083,6 +1105,33 @@
       ];
 
       return results.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(term)).slice(0, 8);
+    }
+
+    function daysUntil(dateValue) {
+      if (!dateValue) return null;
+      const todayDate = new Date(today());
+      const targetDate = new Date(dateValue);
+      const diff = targetDate.getTime() - todayDate.getTime();
+      return Math.ceil(diff / (1000 * 60 * 60 * 24));
+    }
+
+    function documentStatus(document) {
+      const days = daysUntil(document.expiresAt);
+      if (document.status === "archiwalne") return { label: "archiwalne", cls: "status-closed" };
+      if (days === null) return { label: "bez terminu", cls: "status-open" };
+      if (days < 0) return { label: "po terminie", cls: "status-overdue" };
+      if (days <= 30) return { label: "wygasa wkrótce", cls: "status-pending" };
+      return { label: "aktywne", cls: "status-active" };
+    }
+
+    function expiringDocuments(days = 45) {
+      return state.documents
+        .filter((document) => document.expiresAt)
+        .filter((document) => {
+          const remaining = daysUntil(document.expiresAt);
+          return remaining !== null && remaining <= days;
+        })
+        .sort((a, b) => String(a.expiresAt || "").localeCompare(String(b.expiresAt || "")));
     }
 
     function meterUnitDefault(type) {
@@ -1881,6 +1930,75 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         <div class="card section"><div class="panel-title"><h3>Zgłoszenia</h3></div><table><thead><tr><th>Data</th><th>Lokal</th><th>Zgłoszenie</th><th>Priorytet</th><th>Status</th><th>Opiekun</th><th></th></tr></thead><tbody>${state.tickets.map((t) => { const stCls = t.status === "zamknięte" ? "status-closed" : t.status === "w trakcie" ? "status-pending" : "status-open"; const prCls = t.priority === "wysoki" ? "status-overdue" : t.priority === "średni" ? "status-pending" : "status-active"; return `<tr><td>${t.createdAt}</td><td>${unitLabel(t.unitId)}</td><td><strong>${t.title}</strong><br><span class="muted small">${tenantName(t.tenantId)} ${t.notes ? "• " + t.notes : ""}</span></td><td><span class="badge ${prCls}">${t.priority}</span></td><td><span class="badge ${stCls}">${t.status}</span></td><td>${t.assignee || "—"}</td><td><button class="btn secondary small" onclick="removeTicket('${t.id}')">Usuń</button></td></tr>`; }).join("")}</tbody></table></div>`;
     }
 
+    function renderDocuments() {
+      if (currentUser?.role === "tenant") {
+        document.getElementById("documents").innerHTML = `
+          <div class="grid two">
+            <div class="card">
+              <div class="panel-title"><h3>Udostępnione dokumenty</h3></div>
+              <div class="entity-list">
+                ${state.documents.length ? state.documents.map((document) => { const status = documentStatus(document); return `
+                  <div class="entity-item">
+                    <div>
+                      <strong>${document.title}</strong>
+                      <div class="meta">${document.category || "dokument"} · ${document.url ? `<a href="${document.url}" target="_blank" rel="noopener noreferrer">otwórz link</a>` : "bez linku"}</div>
+                    </div>
+                    <div><span class="badge ${status.cls}">${status.label}</span></div>
+                  </div>
+                `; }).join("") : `<div class="empty-state">Właściciel nie udostępnił jeszcze żadnych dokumentów.</div>`}
+              </div>
+            </div>
+            <div class="card">
+              <div class="panel-title"><h3>Najbliższe terminy</h3></div>
+              <div class="ops-list">
+                ${expiringDocuments(60).length ? expiringDocuments(60).map((document) => `
+                  <div class="ops-item">
+                    <strong>${document.title}</strong>
+                    <div class="muted">Ważne do ${document.expiresAt}</div>
+                  </div>
+                `).join("") : `<div class="empty-state">Brak dokumentów z terminem ważności w najbliższych 60 dniach.</div>`}
+              </div>
+            </div>
+          </div>`;
+        return;
+      }
+
+      document.getElementById("documents").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Dodaj dokument</h3></div>
+          <div class="form-grid">
+            <input id="doc_title" placeholder="Nazwa dokumentu" />
+            <input id="doc_category" placeholder="Kategoria, np. umowa / polisa / protokół" />
+            <select id="doc_tenant"><option value="">Bez najemcy</option>${state.tenants.map((tenant) => `<option value="${tenant.id}">${tenant.name}</option>`).join("")}</select>
+            <select id="doc_lease"><option value="">Bez umowy</option>${state.leases.map((lease) => `<option value="${lease.id}">${leaseLabel(lease.id)}</option>`).join("")}</select>
+            <select id="doc_unit"><option value="">Bez lokalu</option>${state.units.map((unit) => `<option value="${unit.id}">${unitLabel(unit.id)}</option>`).join("")}</select>
+            <input id="doc_url" placeholder="Link do pliku / dysku / PDF" />
+            <input id="doc_issued" type="date" value="${today()}" />
+            <input id="doc_expires" type="date" />
+            <select id="doc_visibility"><option value="owner">Tylko właściciel</option><option value="tenant">Widoczny dla najemcy</option><option value="shared">Wspólny</option></select>
+            <select id="doc_status"><option value="aktywne">Aktywne</option><option value="robocze">Robocze</option><option value="archiwalne">Archiwalne</option></select>
+          </div>
+          <div class="section"><button class="btn green" onclick="addDocument()">Zapisz dokument</button></div>
+        </div>
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Wygasające dokumenty</h3></div>
+            <div class="ops-list">
+              ${expiringDocuments(60).length ? expiringDocuments(60).map((document) => `
+                <div class="ops-item">
+                  <strong>${document.title}</strong>
+                  <div class="muted">${document.category || "dokument"} · ważne do ${document.expiresAt}</div>
+                </div>
+              `).join("") : `<div class="empty-state">Brak dokumentów wymagających odnowienia w najbliższych 60 dniach.</div>`}
+            </div>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>Rejestr dokumentów</h3></div>
+            <table><thead><tr><th>Dokument</th><th>Powiązanie</th><th>Ważność</th><th>Widoczność</th><th>Status</th><th></th></tr></thead><tbody>${state.documents.slice().sort((a, b) => String(a.expiresAt || "9999-99-99").localeCompare(String(b.expiresAt || "9999-99-99"))).map((document) => { const status = documentStatus(document); const scope = document.leaseId ? leaseLabel(document.leaseId) : document.tenantId ? tenantName(document.tenantId) : document.unitId ? unitLabel(document.unitId) : "ogólne"; return `<tr><td><strong>${document.title}</strong><br><span class="muted small">${document.category || "dokument"}${document.url ? ` · <a href="${document.url}" target="_blank" rel="noopener noreferrer">link</a>` : ""}</span></td><td>${scope}</td><td>${document.expiresAt || "bez terminu"}</td><td>${document.visibility || "owner"}</td><td><span class="badge ${status.cls}">${status.label}</span></td><td><button class="btn secondary small" onclick="removeDocument('${document.id}')">Usuń</button></td></tr>`; }).join("") || `<tr><td colspan="6">Brak dokumentów</td></tr>`}</tbody></table>
+          </div>
+        </div>`;
+    }
+
     function renderReports() {
       const perBuilding = buildingPerformance();
       const { due, paid, overdue, expenses, net } = totals();
@@ -1938,6 +2056,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       renderPayments();
       renderExpenses();
       renderMaintenance();
+      renderDocuments();
       renderReports();
       renderSettings();
       updateWorkspaceChrome();
@@ -2220,6 +2339,37 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.expenses = state.expenses.filter((x) => x.id !== id);
       await save();
     }
+    async function addDocument() {
+      const title = document.getElementById("doc_title").value.trim();
+      const category = document.getElementById("doc_category").value.trim();
+      const url = document.getElementById("doc_url").value.trim();
+      const issuedAt = document.getElementById("doc_issued").value;
+      const expiresAt = document.getElementById("doc_expires").value;
+      if (!title) return alert("Podaj nazwę dokumentu.");
+      if (expiresAt && issuedAt && expiresAt < issuedAt) return alert("Data ważności nie może być wcześniejsza niż data wystawienia.");
+      state.documents.push({
+        id: uid("doc"),
+        title,
+        category,
+        tenantId: document.getElementById("doc_tenant").value,
+        leaseId: document.getElementById("doc_lease").value,
+        unitId: document.getElementById("doc_unit").value,
+        url,
+        issuedAt,
+        expiresAt,
+        visibility: document.getElementById("doc_visibility").value,
+        status: document.getElementById("doc_status").value,
+        createdAt: new Date().toISOString()
+      });
+      await save();
+      showPage("documents");
+    }
+    async function removeDocument(id) {
+      if (!confirm("Usunąć dokument z rejestru?")) return;
+      state.documents = state.documents.filter((entry) => entry.id !== id);
+      await save();
+      showPage("documents");
+    }
     async function addTicket() {
       const unitId = document.getElementById("tk_unit").value;
       const title = document.getElementById("tk_title").value.trim();
@@ -2316,7 +2466,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         charges: csv(state.charges),
         payments: csv(state.payments),
         expenses: csv(state.expenses),
-        tickets: csv(state.tickets)
+        tickets: csv(state.tickets),
+        documents: csv(state.documents)
       };
       Object.entries(files).forEach(([name, content], i) => {
         setTimeout(() => downloadFile(`${name}.csv`, content, "text/csv;charset=utf-8;"), i * 250);
