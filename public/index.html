@@ -827,6 +827,7 @@
     let selectedTenantCardId = null;
     let selectedTicketId = null;
     let settlementPreviewLeaseId = "";
+    let selectedSettlementMonth = new Date().toISOString().slice(0, 7);
 
     let currentUser = null;
     let pendingDocumentFiles = [];
@@ -1619,6 +1620,56 @@
         revenueRows,
         adjustments
       };
+    }
+
+    function taxRoundPLN(amount) {
+      return Math.round(Number(amount || 0));
+    }
+
+    function privateRentalPit28Summary(year = selectedTaxYearValue()) {
+      const summary = privateRentalTaxSummary(year);
+      return {
+        ...summary,
+        taxableRevenueRounded: taxRoundPLN(summary.taxableRevenue),
+        taxDueRounded: taxRoundPLN(summary.taxDue),
+        taxPaidRounded: taxRoundPLN(summary.taxPaid),
+        taxRemainingRounded: Math.max(0, taxRoundPLN(summary.taxDue) - taxRoundPLN(summary.taxPaid))
+      };
+    }
+
+    function pit28PrintableHtml(year = selectedTaxYearValue()) {
+      const summary = privateRentalPit28Summary(year);
+      const rows = summary.periods.map((period) => `
+        <tr>
+          <td>${period.label}</td>
+          <td>${fmt(period.revenue)}</td>
+          <td>${period.adjustments ? fmt(period.adjustments) : "—"}</td>
+          <td>${fmt(period.taxableRevenue)}</td>
+          <td>${fmt(period.taxDue)}</td>
+          <td>${fmt(period.paid)}</td>
+        </tr>
+      `).join("");
+      return htmlDocumentShell(`PIT-28 podsumowanie ${year}`, `
+        <h1>Roczne zestawienie do PIT-28</h1>
+        <p class="muted">Rok podatkowy: ${year}</p>
+        <div class="box">
+          <strong>Dane pomocnicze do rozliczenia najmu prywatnego</strong><br>
+          Przychód opodatkowany: ${fmt(summary.taxableRevenue)}<br>
+          Przychód opodatkowany po zaokrągleniu do deklaracji: ${summary.taxableRevenueRounded} zł<br>
+          Ryczałt należny: ${fmt(summary.taxDue)}<br>
+          Ryczałt należny po zaokrągleniu do deklaracji: ${summary.taxDueRounded} zł<br>
+          Wpłaty podatku zapisane w systemie: ${fmt(summary.taxPaid)}<br>
+          Wpłaty po zaokrągleniu: ${summary.taxPaidRounded} zł
+        </div>
+        <table>
+          <thead><tr><th>Okres</th><th>Wpływy</th><th>Korekty</th><th>Podstawa</th><th>Podatek</th><th>Wpłaty</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="6">Brak danych za wybrany rok.</td></tr>`}</tbody>
+        </table>
+        <div class="box">
+          <strong>Uwaga</strong><br>
+          To jest robocze zestawienie do przygotowania deklaracji PIT-28, a nie oficjalny formularz e-Deklaracji. Przed wysyłką sprawdź poprawność wyjątków podatkowych i zaokrągleń rocznych.
+        </div>
+      `);
     }
 
     function activeLeases() {
@@ -3769,7 +3820,7 @@
     }
 
     function renderSettlements() {
-      const monthDefault = currentMonth();
+      const monthDefault = selectedSettlementMonth || currentMonth();
       const previewLease = settlementPreviewLeaseId ? leaseById(settlementPreviewLeaseId) : (state.leases.find(l => l.status === "aktywna") || null);
       const preview = previewLease ? buildMonthlySettlementDraft(previewLease, monthDefault) : null;
       const selected = selectedSettlementId ? findSettlement(selectedSettlementId) : null;
@@ -3805,6 +3856,7 @@
     }
 
     function refreshSettlementPreview() {
+      selectedSettlementMonth = document.getElementById("settlement_month")?.value || selectedSettlementMonth || currentMonth();
       settlementPreviewLeaseId = document.getElementById("settlement_lease")?.value || settlementPreviewLeaseId;
       renderSettlements();
     }
@@ -3813,6 +3865,7 @@
       const month = document.getElementById("settlement_month")?.value;
       const leaseId = document.getElementById("settlement_lease")?.value;
       if (!month || !leaseId) return alert("Wybierz miesiąc i umowę.");
+      selectedSettlementMonth = month;
       if (state.settlements.some(s => s.month === month && s.leaseId === leaseId)) {
         return alert("To rozliczenie już istnieje. Usuń je, jeśli chcesz wygenerować ponownie.");
       }
@@ -4581,6 +4634,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
       const year = selectedTaxYearValue();
       const summary = privateRentalTaxSummary(year);
+      const pit28 = privateRentalPit28Summary(year);
       const periods = summary.periods;
       const periodOptions = periods.length
         ? periods.map((period) => `<option value="${period.periodKey}">${period.label} · termin ${period.dueDate}</option>`).join("")
@@ -4603,6 +4657,20 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           </div>
           <div class="section notice">
             Terminy wpłat są liczone do <strong>20. dnia miesiąca następującego po miesiącu lub kwartale</strong>. Ostateczne roczne zamknięcie i PIT-28 nadal warto zweryfikować przed wysyłką, zwłaszcza przy nietypowych sytuacjach jak częściowe zwroty, potrącenia z kaucji albo wspólność majątkowa.
+          </div>
+        </div>
+        <div class="card section">
+          <div class="panel-title"><h3>Roczne zestawienie do PIT-28</h3></div>
+          <div class="grid cards">
+            <div class="card"><div class="muted">Przychód do deklaracji</div><div class="metric">${pit28.taxableRevenueRounded} zł</div><div class="small muted">po zaokrągleniu rocznym</div></div>
+            <div class="card"><div class="muted">Ryczałt do deklaracji</div><div class="metric">${pit28.taxDueRounded} zł</div><div class="small muted">należny za cały rok</div></div>
+            <div class="card"><div class="muted">Wpłaty zapisane</div><div class="metric">${pit28.taxPaidRounded} zł</div><div class="small muted">do porównania z deklaracją</div></div>
+            <div class="card"><div class="muted">Pozostało</div><div class="metric">${pit28.taxRemainingRounded} zł</div><div class="small muted">wg danych w systemie</div></div>
+          </div>
+          <div class="section notice">To pomocnicze zestawienie do przygotowania rocznego PIT-28 dla najmu prywatnego. System podaje wartości roczne i zaokrąglenia do pełnych złotych, ale nie zastępuje końcowej weryfikacji deklaracji.</div>
+          <div class="section inline-actions">
+            <button class="btn green" onclick="printPit28Summary()">Drukuj zestawienie PIT-28</button>
+            <button class="btn secondary" onclick="copyPit28Summary()">Kopiuj podsumowanie</button>
           </div>
         </div>
         <div class="grid two section">
@@ -5392,6 +5460,27 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.taxPayments = state.taxPayments.filter((entry) => entry.id !== id);
       await save();
       showPage("taxes");
+    }
+
+    function pit28SummaryText(year = selectedTaxYearValue()) {
+      const summary = privateRentalPit28Summary(year);
+      return `Roczne zestawienie do PIT-28 za ${year}
+
+Przychód opodatkowany: ${fmt(summary.taxableRevenue)}
+Przychód do deklaracji po zaokrągleniu: ${summary.taxableRevenueRounded} zł
+Ryczałt należny: ${fmt(summary.taxDue)}
+Ryczałt do deklaracji po zaokrągleniu: ${summary.taxDueRounded} zł
+Wpłaty podatku zapisane w systemie: ${fmt(summary.taxPaid)}
+Wpłaty po zaokrągleniu: ${summary.taxPaidRounded} zł
+Pozostało według danych w systemie: ${summary.taxRemainingRounded} zł`;
+    }
+
+    function printPit28Summary() {
+      openPrintWindow(pit28PrintableHtml(selectedTaxYearValue()));
+    }
+
+    function copyPit28Summary() {
+      copyToClipboard(pit28SummaryText(selectedTaxYearValue()));
     }
 
     async function saveSettings() {
