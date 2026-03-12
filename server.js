@@ -88,6 +88,24 @@ async function getOrganizationState(orgId, companyName) {
   return normalizeState(result.rows[0].state, companyName);
 }
 
+async function saveOrganizationState(orgId, companyName, state) {
+  const nextState = normalizeState(state, companyName);
+  await pool.query(
+    "UPDATE app_states SET state = $1::jsonb, updated_at = NOW() WHERE org_id = $2",
+    [JSON.stringify(nextState), orgId]
+  );
+  return nextState;
+}
+
+function canAccessTicket(user, ticket, state) {
+  if (!user || !ticket) return false;
+  if (user.role === "owner") return true;
+  if (user.role !== "tenant" || !user.tenantId) return false;
+  if (ticket.tenantId === user.tenantId) return true;
+  const tenantState = buildTenantState(state, user.tenantId);
+  return tenantState.tickets.some((entry) => entry.id === ticket.id);
+}
+
 function requireOwner(req, res, next) {
   if (!req.session.user || req.session.user.role !== "owner") {
     return res.status(403).json({ error: "Ta operacja jest dostępna tylko dla właściciela." });
@@ -384,6 +402,29 @@ app.post("/api/tenant-access", requireAuth, requireOwner, async (req, res) => {
   }
 });
 
+app.post("/api/tenant-access/delete", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const tenantId = sanitizeText(req.body.tenantId || "");
+    if (!tenantId) {
+      return res.status(400).json({ error: "Brakuje identyfikatora najemcy." });
+    }
+
+    const result = await pool.query(
+      "DELETE FROM users WHERE org_id = $1 AND role = $2 AND tenant_id = $3 RETURNING id",
+      [req.session.user.orgId, "tenant", tenantId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Nie znaleziono konta dostępowego dla tego najemcy." });
+    }
+
+    return res.json({ ok: true, tenantId });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się usunąć konta najemcy." });
+  }
+});
+
 app.get("/api/state", requireAuth, async (req, res) => {
   try {
     const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
@@ -408,12 +449,7 @@ app.post("/api/state", requireAuth, async (req, res) => {
       return res.status(403).json({ error: "Najemca nie może modyfikować pełnego stanu aplikacji." });
     }
 
-    const state = normalizeState(req.body, req.session.user.companyName);
-
-    await pool.query(
-      "UPDATE app_states SET state = $1::jsonb, updated_at = NOW() WHERE org_id = $2",
-      [JSON.stringify(state), req.session.user.orgId]
-    );
+    await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, req.body);
 
     return res.json({ ok: true, savedAt: new Date().toISOString() });
   } catch (error) {
@@ -450,19 +486,105 @@ app.post("/api/tenant/tickets", requireAuth, requireTenant, async (req, res) => 
       priority,
       status: "otwarte",
       assignee: "",
-      notes
+      notes,
+      comments: notes ? [{
+        id: uid("cmt"),
+        authorRole: "tenant",
+        authorName: req.session.user.name,
+        message: notes,
+        createdAt: new Date().toISOString()
+      }] : []
     });
 
-    const nextState = normalizeState(state, req.session.user.companyName);
-    await pool.query(
-      "UPDATE app_states SET state = $1::jsonb, updated_at = NOW() WHERE org_id = $2",
-      [JSON.stringify(nextState), req.session.user.orgId]
-    );
+    await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
 
     return res.json({ ok: true });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Nie udało się dodać zgłoszenia." });
+  }
+});
+
+app.post("/api/tickets/comment", requireAuth, async (req, res) => {
+  try {
+    const ticketId = sanitizeText(req.body.ticketId || "");
+    const messageResult = ensureRequiredText(req.body.message, "Treść wiadomości");
+
+    if (!ticketId || messageResult.error) {
+      return res.status(400).json({ error: "Dodaj wiadomość do zgłoszenia." });
+    }
+
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state) {
+      return res.status(404).json({ error: "Brak danych organizacji." });
+    }
+
+    const ticket = state.tickets.find((entry) => entry.id === ticketId);
+    if (!ticket || !canAccessTicket(req.session.user, ticket, state)) {
+      return res.status(404).json({ error: "Nie znaleziono zgłoszenia." });
+    }
+
+    ticket.comments = Array.isArray(ticket.comments) ? ticket.comments : [];
+    ticket.comments.push({
+      id: uid("cmt"),
+      authorRole: req.session.user.role,
+      authorName: req.session.user.name,
+      message: messageResult.value,
+      createdAt: new Date().toISOString()
+    });
+
+    await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się dodać komentarza." });
+  }
+});
+
+app.post("/api/tickets/status", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const ticketId = sanitizeText(req.body.ticketId || "");
+    const status = ["otwarte", "w trakcie", "zamknięte"].includes(req.body.status) ? req.body.status : "";
+    const assignee = sanitizeText(req.body.assignee || "");
+
+    if (!ticketId || !status) {
+      return res.status(400).json({ error: "Brakuje zgłoszenia lub statusu." });
+    }
+
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state) {
+      return res.status(404).json({ error: "Brak danych organizacji." });
+    }
+
+    const ticket = state.tickets.find((entry) => entry.id === ticketId);
+    if (!ticket) {
+      return res.status(404).json({ error: "Nie znaleziono zgłoszenia." });
+    }
+
+    const previousStatus = ticket.status || "otwarte";
+    const previousAssignee = ticket.assignee || "";
+    ticket.status = status;
+    ticket.assignee = assignee;
+    ticket.comments = Array.isArray(ticket.comments) ? ticket.comments : [];
+
+    if (previousStatus !== status || previousAssignee !== assignee) {
+      const changes = [];
+      if (previousStatus !== status) changes.push(`status: ${previousStatus} -> ${status}`);
+      if (previousAssignee !== assignee) changes.push(`opiekun: ${previousAssignee || "brak"} -> ${assignee || "brak"}`);
+      ticket.comments.push({
+        id: uid("cmt"),
+        authorRole: "owner",
+        authorName: req.session.user.name,
+        message: `Aktualizacja zgłoszenia (${changes.join(", ")})`,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się zaktualizować zgłoszenia." });
   }
 });
 

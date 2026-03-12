@@ -652,6 +652,7 @@
     let selectedSettlementId = null;
     let selectedPeriodSettlementId = null;
     let selectedTenantCardId = null;
+    let selectedTicketId = null;
     let settlementPreviewLeaseId = "";
 
     let currentUser = null;
@@ -845,6 +846,18 @@
         deposit: Number(lease.deposit || 0)
       }));
 
+      state.tickets = state.tickets.map((ticket) => ({
+        ...ticket,
+        comments: Array.isArray(ticket.comments)
+          ? ticket.comments.map((comment) => ({
+              ...comment,
+              message: sanitizeText(comment?.message || ""),
+              authorName: sanitizeText(comment?.authorName || ""),
+              authorRole: sanitizeText(comment?.authorRole || "")
+            }))
+          : []
+      }));
+
       cleanupRelationships();
     }
 
@@ -879,6 +892,7 @@
     function tenantName(id) { return state.tenants.find((t) => t.id === id)?.name || "—"; }
     function tenantById(id) { return state.tenants.find((t) => t.id === id); }
     function leaseById(id) { return state.leases.find(l => l.id === id); }
+    function findTicket(id) { return state.tickets.find((ticket) => ticket.id === id); }
     function leaseLabel(id) {
       const l = state.leases.find((x) => x.id === id);
       return l ? `${tenantName(l.tenantId)} — ${unitLabel(l.unitId)}` : "—";
@@ -1132,6 +1146,14 @@
           return remaining !== null && remaining <= days;
         })
         .sort((a, b) => String(a.expiresAt || "").localeCompare(String(b.expiresAt || "")));
+    }
+
+    function ticketPriorityClass(priority) {
+      return priority === "wysoki" ? "status-overdue" : priority === "średni" ? "status-pending" : "status-active";
+    }
+
+    function ticketStatusClass(status) {
+      return status === "zamknięte" ? "status-closed" : status === "w trakcie" ? "status-pending" : "status-open";
     }
 
     function meterUnitDefault(type) {
@@ -1681,7 +1703,7 @@
           <div class="card"><div class="panel-title"><h3>Rozliczenia miesięczne</h3></div><table><thead><tr><th>Miesiąc</th><th>Razem</th></tr></thead><tbody>${tenantSettlements.map(s => `<tr><td>${fmtMonth(s.month)}</td><td>${fmt(s.total)}</td></tr>`).join("") || `<tr><td colspan="2">Brak</td></tr>`}</tbody></table></div>
           <div class="card"><div class="panel-title"><h3>Rozliczenia okresowe</h3></div><table><thead><tr><th>Okres</th><th>Wynik</th></tr></thead><tbody>${tenantPeriodSettlements.map(s => `<tr><td>${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}</td><td class="${s.finalDifference > 0 ? "negative" : s.finalDifference < 0 ? "positive" : ""}">${fmt(s.finalDifference)}</td></tr>`).join("") || `<tr><td colspan="2">Brak</td></tr>`}</tbody></table></div>
         </div>
-        ${currentUser?.role === "owner" ? `<div class="card section"><div class="panel-title"><h3>Dostęp dla najemcy</h3></div><div class="form-grid three"><input id="portal_email_${tenant.id}" type="email" value="${tenant.email || ""}" placeholder="Login e-mail" /><input id="portal_password_${tenant.id}" type="password" placeholder="Hasło do portalu" /><button class="btn green" onclick="createTenantAccess('${tenant.id}')">Utwórz / zaktualizuj dostęp</button></div><div class="section notice">To konto otworzy uproszczony portal najemcy: saldo, płatności, rozliczenia i zgłoszenia serwisowe.</div></div>` : ""}
+        ${currentUser?.role === "owner" ? `<div class="card section"><div class="panel-title"><h3>Dostęp dla najemcy</h3></div><div class="form-grid three"><input id="portal_email_${tenant.id}" type="email" value="${tenant.email || ""}" placeholder="Login e-mail" /><input id="portal_password_${tenant.id}" type="password" placeholder="Hasło do portalu" /><button class="btn green" onclick="createTenantAccess('${tenant.id}')">Utwórz / zaktualizuj dostęp</button></div><div class="section inline-actions"><button class="btn secondary" onclick="deleteTenantAccess('${tenant.id}')">Usuń konto dostępu</button></div><div class="section notice">To konto otworzy uproszczony portal najemcy: saldo, płatności, rozliczenia i zgłoszenia serwisowe.</div></div>` : ""}
       `;
     }
 
@@ -1907,6 +1929,44 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     }
 
     function renderMaintenance() {
+      const sortedTickets = state.tickets
+        .slice()
+        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+      const fallbackTicketId = sortedTickets[0]?.id || null;
+      const activeTicket = findTicket(selectedTicketId) || findTicket(fallbackTicketId);
+      selectedTicketId = activeTicket?.id || null;
+
+      const ticketListMarkup = sortedTickets.length
+        ? sortedTickets.map((ticket) => `
+          <div class="entity-item ${selectedTicketId === ticket.id ? "active" : ""}">
+            <div>
+              <strong>${ticket.title}</strong>
+              <div class="meta">${unitLabel(ticket.unitId)} · ${tenantName(ticket.tenantId)} · ${ticket.createdAt || "—"}</div>
+            </div>
+            <div class="inline-actions">
+              <span class="badge ${ticketPriorityClass(ticket.priority)}">${ticket.priority}</span>
+              <span class="badge ${ticketStatusClass(ticket.status)}">${ticket.status}</span>
+              <button class="btn secondary small" onclick="selectTicket('${ticket.id}')">Otwórz</button>
+            </div>
+          </div>
+        `).join("")
+        : `<div class="empty-state">Brak zgłoszeń do wyświetlenia.</div>`;
+
+      const commentThreadMarkup = activeTicket?.comments?.length
+        ? activeTicket.comments
+          .slice()
+          .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")))
+          .map((comment) => `
+            <div class="entity-item">
+              <div>
+                <strong>${comment.authorName || (comment.authorRole === "owner" ? "Właściciel" : "Najemca")}</strong>
+                <div class="meta">${comment.authorRole === "owner" ? "Właściciel / zespół" : "Najemca"} · ${String(comment.createdAt || "").slice(0, 16).replace("T", " ")}</div>
+              </div>
+              <div class="notice">${comment.message || "—"}</div>
+            </div>
+          `).join("")
+        : `<div class="empty-state">Jeszcze nie ma żadnej komunikacji w tym zgłoszeniu.</div>`;
+
       if (currentUser?.role === "tenant") {
         document.getElementById("maintenance").innerHTML = `
           <div class="card">
@@ -1918,16 +1978,86 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             </div>
             <div class="section"><button class="btn green" onclick="addTenantPortalTicket()">Wyślij zgłoszenie</button></div>
           </div>
-          <div class="card section">
-            <div class="panel-title"><h3>Moje zgłoszenia</h3></div>
-            <table><thead><tr><th>Data</th><th>Tytuł</th><th>Priorytet</th><th>Status</th><th>Notatki</th></tr></thead><tbody>${state.tickets.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).map((ticket) => { const stCls = ticket.status === "zamknięte" ? "status-closed" : ticket.status === "w trakcie" ? "status-pending" : "status-open"; const prCls = ticket.priority === "wysoki" ? "status-overdue" : ticket.priority === "średni" ? "status-pending" : "status-active"; return `<tr><td>${ticket.createdAt}</td><td>${ticket.title}</td><td><span class="badge ${prCls}">${ticket.priority}</span></td><td><span class="badge ${stCls}">${ticket.status}</span></td><td>${ticket.notes || "—"}</td></tr>`; }).join("") || `<tr><td colspan="5">Nie masz jeszcze zgłoszeń.</td></tr>`}</tbody></table>
+          <div class="grid two section">
+            <div class="card">
+              <div class="panel-title"><h3>Moje zgłoszenia</h3></div>
+              <div class="entity-list">${ticketListMarkup}</div>
+            </div>
+            <div class="card">
+              <div class="panel-title"><h3>${activeTicket ? "Szczegóły zgłoszenia" : "Wybierz zgłoszenie"}</h3></div>
+              ${activeTicket ? `
+                <div class="grid cards">
+                  <div class="card"><div class="muted small">Status</div><div><span class="badge ${ticketStatusClass(activeTicket.status)}">${activeTicket.status}</span></div></div>
+                  <div class="card"><div class="muted small">Priorytet</div><div><span class="badge ${ticketPriorityClass(activeTicket.priority)}">${activeTicket.priority}</span></div></div>
+                  <div class="card"><div class="muted small">Opiekun</div><div>${activeTicket.assignee || "W przygotowaniu"}</div></div>
+                </div>
+                <div class="section notice">${activeTicket.notes || "Brak dodatkowego opisu od najemcy."}</div>
+                <div class="section">
+                  <div class="panel-title"><h3>Rozmowa w sprawie</h3></div>
+                  <div class="entity-list">${commentThreadMarkup}</div>
+                </div>
+                <div class="section">
+                  <textarea id="ticket_comment_input" rows="4" placeholder="Dopisz odpowiedź albo dodatkowe informacje"></textarea>
+                  <div class="section inline-actions"><button class="btn green" onclick="addTicketComment()">Dodaj wiadomość</button></div>
+                </div>
+              ` : `<div class="empty-state">Po lewej wybierz zgłoszenie, aby zobaczyć status i historię rozmowy.</div>`}
+            </div>
           </div>`;
         return;
       }
 
       document.getElementById("maintenance").innerHTML = `
-        <div class="card"><div class="panel-title"><h3>Dodaj zgłoszenie</h3></div><div class="form-grid"><select id="tk_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select><select id="tk_tenant"><option value="">Bez najemcy</option>${state.tenants.map((t) => `<option value="${t.id}">${t.name}</option>`).join("")}</select><input id="tk_title" placeholder="Tytuł zgłoszenia" /><select id="tk_priority"><option>niski</option><option>średni</option><option>wysoki</option></select><select id="tk_status"><option>otwarte</option><option>w trakcie</option><option>zamknięte</option></select><input id="tk_assignee" placeholder="Wykonawca / opiekun" /><input id="tk_notes" placeholder="Notatki" /></div><div class="section"><button class="btn green" onclick="addTicket()">Dodaj zgłoszenie</button></div></div>
-        <div class="card section"><div class="panel-title"><h3>Zgłoszenia</h3></div><table><thead><tr><th>Data</th><th>Lokal</th><th>Zgłoszenie</th><th>Priorytet</th><th>Status</th><th>Opiekun</th><th></th></tr></thead><tbody>${state.tickets.map((t) => { const stCls = t.status === "zamknięte" ? "status-closed" : t.status === "w trakcie" ? "status-pending" : "status-open"; const prCls = t.priority === "wysoki" ? "status-overdue" : t.priority === "średni" ? "status-pending" : "status-active"; return `<tr><td>${t.createdAt}</td><td>${unitLabel(t.unitId)}</td><td><strong>${t.title}</strong><br><span class="muted small">${tenantName(t.tenantId)} ${t.notes ? "• " + t.notes : ""}</span></td><td><span class="badge ${prCls}">${t.priority}</span></td><td><span class="badge ${stCls}">${t.status}</span></td><td>${t.assignee || "—"}</td><td><button class="btn secondary small" onclick="removeTicket('${t.id}')">Usuń</button></td></tr>`; }).join("")}</tbody></table></div>`;
+        <div class="card">
+          <div class="panel-title"><h3>Dodaj zgłoszenie</h3></div>
+          <div class="form-grid">
+            <select id="tk_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
+            <select id="tk_tenant"><option value="">Bez najemcy</option>${state.tenants.map((t) => `<option value="${t.id}">${t.name}</option>`).join("")}</select>
+            <input id="tk_title" placeholder="Tytuł zgłoszenia" />
+            <select id="tk_priority"><option>niski</option><option selected>średni</option><option>wysoki</option></select>
+            <select id="tk_status"><option selected>otwarte</option><option>w trakcie</option><option>zamknięte</option></select>
+            <input id="tk_assignee" placeholder="Wykonawca / opiekun" />
+            <input id="tk_notes" placeholder="Notatki startowe" />
+          </div>
+          <div class="section"><button class="btn green" onclick="addTicket()">Dodaj zgłoszenie</button></div>
+        </div>
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Kolejka zgłoszeń</h3></div>
+            <div class="entity-list">${ticketListMarkup}</div>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>${activeTicket ? "Obsługa zgłoszenia" : "Wybierz zgłoszenie"}</h3></div>
+            ${activeTicket ? `
+              <div class="notice">
+                <strong>${activeTicket.title}</strong><br>
+                Lokal: ${unitLabel(activeTicket.unitId)}<br>
+                Najemca: ${tenantName(activeTicket.tenantId)}<br>
+                Data utworzenia: ${activeTicket.createdAt || "—"}
+              </div>
+              <div class="form-grid three section">
+                <select id="ticket_status_input">
+                  <option value="otwarte" ${activeTicket.status === "otwarte" ? "selected" : ""}>otwarte</option>
+                  <option value="w trakcie" ${activeTicket.status === "w trakcie" ? "selected" : ""}>w trakcie</option>
+                  <option value="zamknięte" ${activeTicket.status === "zamknięte" ? "selected" : ""}>zamknięte</option>
+                </select>
+                <input id="ticket_assignee_input" value="${activeTicket.assignee || ""}" placeholder="Osoba odpowiedzialna" />
+                <button class="btn" onclick="updateTicketWorkflow()">Zapisz workflow</button>
+              </div>
+              <div class="section notice">${activeTicket.notes || "Brak notatek startowych do zgłoszenia."}</div>
+              <div class="section">
+                <div class="panel-title"><h3>Komunikacja</h3></div>
+                <div class="entity-list">${commentThreadMarkup}</div>
+              </div>
+              <div class="section">
+                <textarea id="ticket_comment_input" rows="4" placeholder="Napisz odpowiedź do najemcy albo notatkę zespołu"></textarea>
+                <div class="section inline-actions">
+                  <button class="btn green" onclick="addTicketComment()">Dodaj komentarz</button>
+                  <button class="btn secondary" onclick="removeTicket('${activeTicket.id}')">Usuń zgłoszenie</button>
+                </div>
+              </div>
+            ` : `<div class="empty-state">Po lewej wybierz zgłoszenie, aby zarządzać statusem, opiekunem i komunikacją.</div>`}
+          </div>
+        </div>`;
     }
 
     function renderDocuments() {
@@ -2133,6 +2263,17 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         alert(`Dostęp dla ${tenant.name} został zapisany.`);
       } catch (error) {
         alert(error.message || "Nie udało się utworzyć dostępu.");
+      }
+    }
+    async function deleteTenantAccess(tenantId) {
+      const tenant = tenantById(tenantId);
+      if (!tenant) return alert("Nie znaleziono najemcy.");
+      if (!confirm(`Usunąć konto portalu dla ${tenant.name}?`)) return;
+      try {
+        await apiPost("/api/tenant-access/delete", { tenantId });
+        alert(`Konto dostępu dla ${tenant.name} zostało usunięte.`);
+      } catch (error) {
+        alert(error.message || "Nie udało się usunąć konta dostępu.");
       }
     }
     async function removeTenant(id) {
@@ -2370,13 +2511,38 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       await save();
       showPage("documents");
     }
+    function selectTicket(id) {
+      selectedTicketId = id;
+      renderMaintenance();
+    }
     async function addTicket() {
       const unitId = document.getElementById("tk_unit").value;
       const title = document.getElementById("tk_title").value.trim();
       if (!unitId) return alert("Wybierz lokal.");
       if (!title) return alert("Podaj tytuł zgłoszenia.");
-      state.tickets.push({ id: uid("tk"), createdAt: today(), unitId, tenantId: document.getElementById("tk_tenant").value, title, priority: document.getElementById("tk_priority").value, status: document.getElementById("tk_status").value, assignee: document.getElementById("tk_assignee").value.trim(), notes: document.getElementById("tk_notes").value.trim() });
+      const notes = document.getElementById("tk_notes").value.trim();
+      const ticketId = uid("tk");
+      state.tickets.push({
+        id: ticketId,
+        createdAt: today(),
+        unitId,
+        tenantId: document.getElementById("tk_tenant").value,
+        title,
+        priority: document.getElementById("tk_priority").value,
+        status: document.getElementById("tk_status").value,
+        assignee: document.getElementById("tk_assignee").value.trim(),
+        notes,
+        comments: notes ? [{
+          id: uid("cmt"),
+          authorRole: "owner",
+          authorName: currentUser?.name || "Właściciel",
+          message: notes,
+          createdAt: new Date().toISOString()
+        }] : []
+      });
+      selectedTicketId = ticketId;
       await save();
+      showPage("maintenance");
     }
     async function addTenantPortalTicket() {
       const title = document.getElementById("tenant_ticket_title").value.trim();
@@ -2386,6 +2552,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       try {
         await apiPost("/api/tenant/tickets", { title, notes, priority });
         await load();
+        selectedTicketId = state.tickets.slice().sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))[0]?.id || null;
         renderAll();
         showPage("maintenance");
         alert("Zgłoszenie zostało wysłane.");
@@ -2393,9 +2560,37 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         alert(error.message || "Nie udało się wysłać zgłoszenia.");
       }
     }
+    async function addTicketComment() {
+      if (!selectedTicketId) return alert("Wybierz zgłoszenie.");
+      const input = document.getElementById("ticket_comment_input");
+      const message = input?.value.trim() || "";
+      if (!message) return alert("Wpisz wiadomość.");
+      try {
+        await apiPost("/api/tickets/comment", { ticketId: selectedTicketId, message });
+        await load();
+        renderAll();
+        showPage("maintenance");
+      } catch (error) {
+        alert(error.message || "Nie udało się dodać komentarza.");
+      }
+    }
+    async function updateTicketWorkflow() {
+      if (!selectedTicketId) return alert("Wybierz zgłoszenie.");
+      const status = document.getElementById("ticket_status_input")?.value;
+      const assignee = document.getElementById("ticket_assignee_input")?.value.trim() || "";
+      try {
+        await apiPost("/api/tickets/status", { ticketId: selectedTicketId, status, assignee });
+        await load();
+        renderAll();
+        showPage("maintenance");
+      } catch (error) {
+        alert(error.message || "Nie udało się zapisać workflow.");
+      }
+    }
     async function removeTicket(id) {
       if (!confirm("Usunąć zgłoszenie?")) return;
       state.tickets = state.tickets.filter((x) => x.id !== id);
+      if (selectedTicketId === id) selectedTicketId = state.tickets[0]?.id || null;
       await save();
     }
 
