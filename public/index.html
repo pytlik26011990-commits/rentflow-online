@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RentFlow V5</title>
+  <title>RentFlow V6</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -35,20 +35,9 @@
       border-right: 1px solid var(--border);
       padding: 20px;
     }
-    .brand {
-      font-size: 24px;
-      font-weight: 800;
-      margin-bottom: 6px;
-    }
-    .sub {
-      color: var(--muted);
-      font-size: 13px;
-      margin-bottom: 20px;
-    }
-    .nav {
-      display: grid;
-      gap: 8px;
-    }
+    .brand { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+    .nav { display: grid; gap: 8px; }
     .nav button {
       border: 1px solid var(--border);
       background: var(--panel);
@@ -58,13 +47,8 @@
       text-align: left;
       cursor: pointer;
     }
-    .nav button.active,
-    .nav button:hover {
-      background: var(--panel2);
-    }
-    main {
-      padding: 24px;
-    }
+    .nav button.active, .nav button:hover { background: var(--panel2); }
+    main { padding: 24px; }
     .topbar {
       display: flex;
       justify-content: space-between;
@@ -73,19 +57,9 @@
       margin-bottom: 20px;
       flex-wrap: wrap;
     }
-    .title h1 {
-      margin: 0;
-      font-size: 30px;
-    }
-    .title p {
-      margin: 6px 0 0;
-      color: var(--muted);
-    }
-    .actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+    .title h1 { margin: 0; font-size: 30px; }
+    .title p { margin: 6px 0 0; color: var(--muted); }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
     .btn {
       border: none;
       padding: 10px 14px;
@@ -95,50 +69,24 @@
       color: white;
       background: linear-gradient(135deg, var(--accent), #7e8cff);
     }
-    .btn.secondary {
-      background: var(--panel);
-      border: 1px solid var(--border);
-    }
-    .btn.green {
-      background: linear-gradient(135deg, var(--green), #2db97c);
-    }
-    .btn.red {
-      background: linear-gradient(135deg, var(--red), #f54646);
-    }
-    .btn.yellow {
-      background: linear-gradient(135deg, #ffbe55, #ff8a47);
-    }
-    .btn.small {
-      padding: 6px 10px;
-      font-size: 12px;
-    }
-    .grid {
-      display: grid;
-      gap: 16px;
-    }
-    .cards {
-      grid-template-columns: repeat(4, minmax(180px, 1fr));
-    }
-    .two {
-      grid-template-columns: 1.15fr 0.85fr;
-    }
+    .btn.secondary { background: var(--panel); border: 1px solid var(--border); }
+    .btn.green { background: linear-gradient(135deg, var(--green), #2db97c); }
+    .btn.red { background: linear-gradient(135deg, var(--red), #f54646); }
+    .btn.yellow { background: linear-gradient(135deg, #ffbe55, #ff8a47); }
+    .btn.small { padding: 6px 10px; font-size: 12px; }
+    .grid { display: grid; gap: 16px; }
+    .cards { grid-template-columns: repeat(4, minmax(180px, 1fr)); }
+    .two { grid-template-columns: 1.15fr 0.85fr; }
+    .three-col { grid-template-columns: 1fr 1fr 1fr; }
     .card {
       background: rgba(19,26,46,.95);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 18px;
     }
-    .metric {
-      font-size: 30px;
-      font-weight: 800;
-      margin-top: 8px;
-    }
-    .muted {
-      color: var(--muted);
-    }
-    .small {
-      font-size: 12px;
-    }
+    .metric { font-size: 30px; font-weight: 800; margin-top: 8px; }
+    .muted { color: var(--muted); }
+    .small { font-size: 12px; }
     .panel-title {
       display: flex;
       justify-content: space-between;
@@ -146,9 +94,7 @@
       align-items: center;
       margin-bottom: 14px;
     }
-    .panel-title h3 {
-      margin: 0;
-    }
+    .panel-title h3 { margin: 0; }
     input, select, textarea {
       width: 100%;
       padding: 11px 12px;
@@ -157,35 +103,18 @@
       background: #0d1428;
       color: var(--text);
     }
-    textarea {
-      min-height: 120px;
-      resize: vertical;
-    }
-    .form-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-    }
-    .form-grid.three {
-      grid-template-columns: repeat(3, 1fr);
-    }
-    .form-grid.two {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
+    textarea { min-height: 120px; resize: vertical; }
+    .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .form-grid.three { grid-template-columns: repeat(3, 1fr); }
+    .form-grid.two { grid-template-columns: repeat(2, 1fr); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td {
       padding: 10px 8px;
       border-bottom: 1px solid var(--border);
       text-align: left;
       vertical-align: top;
     }
-    th {
-      color: var(--muted);
-    }
+    th { color: var(--muted); }
     .badge {
       display: inline-block;
       padding: 4px 8px;
@@ -206,14 +135,8 @@
       background: rgba(102,227,196,.1);
       border: 1px solid rgba(102,227,196,.2);
     }
-    .danger-box {
-      background: rgba(255,114,114,.1);
-      border-color: rgba(255,114,114,.2);
-    }
-    .warning-box {
-      background: rgba(255,209,102,.1);
-      border-color: rgba(255,209,102,.2);
-    }
+    .danger-box { background: rgba(255,114,114,.1); border-color: rgba(255,114,114,.2); }
+    .warning-box { background: rgba(255,209,102,.1); border-color: rgba(255,209,102,.2); }
     canvas {
       width: 100%;
       height: 230px;
@@ -228,24 +151,17 @@
       border: 1px solid var(--border);
       min-height: 200px;
     }
-    .right {
-      text-align: right;
-    }
-    .inline-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
+    .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .positive { color: #8ef0b1; }
+    .negative { color: #ff9c9c; }
     @media (max-width: 1200px) {
-      .cards, .two, .form-grid, .form-grid.three, .form-grid.two {
+      .cards, .two, .three-col, .form-grid, .form-grid.three, .form-grid.two {
         grid-template-columns: 1fr 1fr;
       }
     }
     @media (max-width: 840px) {
-      .app {
-        grid-template-columns: 1fr;
-      }
-      .cards, .two, .form-grid, .form-grid.three, .form-grid.two {
+      .app { grid-template-columns: 1fr; }
+      .cards, .two, .three-col, .form-grid, .form-grid.three, .form-grid.two {
         grid-template-columns: 1fr;
       }
     }
@@ -254,8 +170,8 @@
 <body>
   <div class="app">
     <aside>
-      <div class="brand">RentFlow V5</div>
-      <div class="sub">Rozliczenia Pro + korekty</div>
+      <div class="brand">RentFlow V6</div>
+      <div class="sub">Saldo, zaliczki, rozliczenia okresowe</div>
       <div class="nav" id="nav"></div>
     </aside>
 
@@ -276,9 +192,11 @@
       <section id="dashboard" class="page"></section>
       <section id="properties" class="page hidden"></section>
       <section id="tenants" class="page hidden"></section>
+      <section id="tenantCard" class="page hidden"></section>
       <section id="leases" class="page hidden"></section>
       <section id="meters" class="page hidden"></section>
       <section id="settlements" class="page hidden"></section>
+      <section id="periodSettlements" class="page hidden"></section>
       <section id="payments" class="page hidden"></section>
       <section id="expenses" class="page hidden"></section>
       <section id="maintenance" class="page hidden"></section>
@@ -302,8 +220,9 @@
       expenses: [],
       tickets: [],
       settlements: [],
+      periodSettlements: [],
       settings: {
-        companyName: "RentFlow V5",
+        companyName: "RentFlow V6",
         ownerName: "Zarządca",
         baseCurrency: "PLN",
         utilityVAT: 23,
@@ -314,14 +233,18 @@
     };
 
     let selectedSettlementId = null;
+    let selectedPeriodSettlementId = null;
+    let selectedTenantCardId = null;
 
     const pages = [
       ["dashboard", "Dashboard", "Podgląd portfela najmu, płatności i mediów."],
       ["properties", "Budynki i lokale", "Zarządzanie budynkami i mieszkaniami."],
       ["tenants", "Najemcy", "Baza najemców i kontaktów."],
-      ["leases", "Umowy", "Umowy najmu, czynsz i kaucje."],
+      ["tenantCard", "Karta najemcy", "Saldo, historia, rozliczenia i wpłaty."],
+      ["leases", "Umowy", "Umowy najmu, czynsz, kaucje i zaliczki."],
       ["meters", "Media", "Liczniki, odczyty, korekty i rozliczenia zużycia."],
-      ["settlements", "Rozliczenia", "Zamknięcie miesiąca, historia, cofanie i wiadomości dla najemców."],
+      ["settlements", "Rozliczenia miesięczne", "Zamknięcie miesiąca i snapshoty miesięczne."],
+      ["periodSettlements", "Rozliczenia okresowe", "Porównanie zaliczek z zużyciem rzeczywistym."],
       ["payments", "Opłaty i płatności", "Należności, wpłaty i zaległości."],
       ["expenses", "Koszty", "Koszty budynków i lokali."],
       ["maintenance", "Usterki", "Zgłoszenia, priorytety i statusy."],
@@ -350,6 +273,18 @@
     function monthEnd(month) {
       const [y, m] = month.split("-").map(Number);
       return new Date(y, m, 0).toISOString().slice(0, 10);
+    }
+
+    function monthRange(from, to) {
+      const arr = [];
+      let [y, m] = from.split("-").map(Number);
+      const [ty, tm] = to.split("-").map(Number);
+      while (y < ty || (y === ty && m <= tm)) {
+        arr.push(`${y}-${String(m).padStart(2, "0")}`);
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+      return arr;
     }
 
     function dueDateForMonth(month) {
@@ -398,14 +333,23 @@
       state.expenses ||= [];
       state.tickets ||= [];
       state.settlements ||= [];
+      state.periodSettlements ||= [];
       state.settings ||= {};
-      state.settings.companyName ||= "RentFlow V5";
+      state.settings.companyName ||= "RentFlow V6";
       state.settings.ownerName ||= "";
       state.settings.baseCurrency ||= "PLN";
       state.settings.utilityVAT ||= 23;
       state.settings.lateFee ||= 50;
       state.settings.bankAccount ||= "";
       state.settings.paymentDueDay ||= 10;
+
+      state.leases.forEach(l => {
+        l.advanceColdWater ||= 0;
+        l.advanceHotWater ||= 0;
+        l.advanceElectricity ||= 0;
+        l.advanceGas ||= 0;
+        l.advanceHeat ||= 0;
+      });
     }
 
     async function save() {
@@ -428,6 +372,10 @@
       return state.buildings.find((b) => b.id === id)?.name || "—";
     }
 
+    function unitById(id) {
+      return state.units.find(u => u.id === id);
+    }
+
     function unitLabel(id) {
       const u = state.units.find((x) => x.id === id);
       return u ? `${buildingName(u.buildingId)} / lokal ${u.code}` : "—";
@@ -441,6 +389,10 @@
       return state.tenants.find((t) => t.id === id);
     }
 
+    function leaseById(id) {
+      return state.leases.find(l => l.id === id);
+    }
+
     function leaseLabel(id) {
       const l = state.leases.find((x) => x.id === id);
       return l ? `${tenantName(l.tenantId)} — ${unitLabel(l.unitId)}` : "—";
@@ -448,6 +400,10 @@
 
     function activeLeaseByUnit(unitId) {
       return state.leases.find((l) => l.unitId === unitId && l.status === "aktywna");
+    }
+
+    function activeLeaseByTenant(tenantId) {
+      return state.leases.find((l) => l.tenantId === tenantId && l.status === "aktywna");
     }
 
     function chargePaidAmount(chargeId) {
@@ -552,16 +508,89 @@
       return meters.map((m) => meterConsumptionForMonth(m.id, month));
     }
 
+    function advanceKeyForType(type) {
+      switch (type) {
+        case "zimna woda": return "advanceColdWater";
+        case "ciepła woda": return "advanceHotWater";
+        case "prąd": return "advanceElectricity";
+        case "gaz": return "advanceGas";
+        case "ciepło": return "advanceHeat";
+        default: return null;
+      }
+    }
+
+    function advanceLabel(key) {
+      switch (key) {
+        case "advanceColdWater": return "Zaliczka zimna woda";
+        case "advanceHotWater": return "Zaliczka ciepła woda";
+        case "advanceElectricity": return "Zaliczka prąd";
+        case "advanceGas": return "Zaliczka gaz";
+        case "advanceHeat": return "Zaliczka ciepło";
+        default: return key;
+      }
+    }
+
+    function leaseAdvanceTotal(lease) {
+      return Number(lease.advanceColdWater || 0)
+        + Number(lease.advanceHotWater || 0)
+        + Number(lease.advanceElectricity || 0)
+        + Number(lease.advanceGas || 0)
+        + Number(lease.advanceHeat || 0);
+    }
+
+    function tenantLedger(tenantId) {
+      const lease = activeLeaseByTenant(tenantId) || state.leases.find(l => l.tenantId === tenantId);
+      if (!lease) return { items: [], charges: 0, payments: 0, balance: 0 };
+
+      const chargeItems = state.charges
+        .filter(c => c.leaseId === lease.id)
+        .map(c => ({
+          date: c.dueDate,
+          type: "Obciążenie",
+          label: c.type,
+          amount: Number(c.amount || 0)
+        }));
+
+      const paymentItems = state.payments
+        .filter(p => p.leaseId === lease.id)
+        .map(p => ({
+          date: p.date,
+          type: "Wpłata",
+          label: p.method,
+          amount: -Number(p.amount || 0)
+        }));
+
+      const settlementItems = state.periodSettlements
+        .filter(s => s.tenantId === tenantId)
+        .map(s => ({
+          date: s.createdAt?.slice(0,10) || today(),
+          type: "Rozliczenie okresowe",
+          label: `${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}`,
+          amount: Number(s.finalDifference || 0)
+        }));
+
+      const items = [...chargeItems, ...paymentItems, ...settlementItems]
+        .sort((a,b) => (a.date + a.type).localeCompare(b.date + b.type));
+
+      const charges = chargeItems.reduce((a,b)=>a+b.amount,0) + settlementItems.reduce((a,b)=>a+b.amount,0);
+      const payments = paymentItems.reduce((a,b)=>a+Math.abs(b.amount),0);
+      const balance = charges - payments;
+
+      return { items, charges, payments, balance };
+    }
+
     function findSettlement(id) {
       return state.settlements.find((s) => s.id === id);
+    }
+
+    function findPeriodSettlement(id) {
+      return state.periodSettlements.find((s) => s.id === id);
     }
 
     function settlementMessage(settlement) {
       const tenant = tenantById(settlement.tenantId);
       const name = tenant?.name || "Najemca";
-      const lines = settlement.lines
-        .map((l) => `- ${l.label}: ${fmt(l.amount)}`)
-        .join("\n");
+      const lines = settlement.lines.map((l) => `- ${l.label}: ${fmt(l.amount)}`).join("\n");
 
       return `Dzień dobry ${name},
 
@@ -573,6 +602,29 @@ ${lines}
 
 Razem do zapłaty: ${fmt(settlement.total)}
 Termin płatności: ${settlement.dueDate}
+${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
+
+Pozdrawiam
+${state.settings.ownerName || state.settings.companyName}`;
+    }
+
+    function periodSettlementMessage(settlement) {
+      const tenant = tenantById(settlement.tenantId);
+      const name = tenant?.name || "Najemca";
+      const lines = settlement.details.map((d) => {
+        const diff = Number(d.difference || 0);
+        return `- ${d.label}: zużycie ${fmt(d.actual)}, zaliczki ${fmt(d.advances)}, różnica ${fmt(diff)}`;
+      }).join("\n");
+
+      return `Dzień dobry ${name},
+
+przesyłam rozliczenie okresowe mediów za okres ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}.
+
+Szczegóły:
+${lines}
+
+Łączna różnica: ${fmt(settlement.finalDifference)}
+${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 0 ? "Do zwrotu / nadpłata" : "Rozliczenie wyszło na zero"}
 ${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
 
 Pozdrawiam
@@ -600,7 +652,6 @@ th{background:#f2f2f2}
 <h1>Rozliczenie najmu</h1>
 <div>${state.settings.companyName}</div>
 <div>${state.settings.ownerName || ""}</div>
-
 <div class="box">
 <div><strong>Miesiąc:</strong> ${fmtMonth(settlement.month)}</div>
 <div><strong>Najemca:</strong> ${settlement.tenantName}</div>
@@ -608,11 +659,8 @@ th{background:#f2f2f2}
 <div><strong>Termin płatności:</strong> ${settlement.dueDate}</div>
 ${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}
 </div>
-
 <table>
-<thead>
-<tr><th>Pozycja</th><th>Ilość</th><th>Jednostka</th><th>Stawka</th><th class="right">Kwota</th></tr>
-</thead>
+<thead><tr><th>Pozycja</th><th>Ilość</th><th>Jednostka</th><th>Stawka</th><th class="right">Kwota</th></tr></thead>
 <tbody>
 ${settlement.lines.map(line => `
 <tr>
@@ -623,10 +671,52 @@ ${settlement.lines.map(line => `
 <td class="right">${fmt(line.amount)}</td>
 </tr>
 `).join("")}
+<tr><td colspan="4" class="right"><strong>Razem</strong></td><td class="right"><strong>${fmt(settlement.total)}</strong></td></tr>
+</tbody>
+</table>
+</body>
+</html>`;
+    }
+
+    function periodSettlementPrintableHtml(settlement) {
+      return `
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<title>Rozliczenie okresowe</title>
+<style>
+body{font-family:Arial,sans-serif;padding:32px;color:#111}
+h1{margin-bottom:4px}
+table{width:100%;border-collapse:collapse;margin-top:20px}
+th,td{border:1px solid #ccc;padding:10px;text-align:left}
+th{background:#f2f2f2}
+.right{text-align:right}
+.box{margin-top:20px;padding:14px;border:1px solid #ddd}
+</style>
+</head>
+<body>
+<h1>Rozliczenie okresowe mediów</h1>
+<div>${state.settings.companyName}</div>
+<div>${state.settings.ownerName || ""}</div>
+<div class="box">
+<div><strong>Okres:</strong> ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}</div>
+<div><strong>Najemca:</strong> ${settlement.tenantName}</div>
+<div><strong>Lokal:</strong> ${settlement.unitLabel}</div>
+${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}
+</div>
+<table>
+<thead><tr><th>Pozycja</th><th class="right">Zużycie</th><th class="right">Zaliczki</th><th class="right">Różnica</th></tr></thead>
+<tbody>
+${settlement.details.map(d => `
 <tr>
-<td colspan="4" class="right"><strong>Razem</strong></td>
-<td class="right"><strong>${fmt(settlement.total)}</strong></td>
+<td>${d.label}</td>
+<td class="right">${fmt(d.actual)}</td>
+<td class="right">${fmt(d.advances)}</td>
+<td class="right">${fmt(d.difference)}</td>
 </tr>
+`).join("")}
+<tr><td colspan="3" class="right"><strong>Wynik końcowy</strong></td><td class="right"><strong>${fmt(settlement.finalDifference)}</strong></td></tr>
 </tbody>
 </table>
 </body>
@@ -644,23 +734,17 @@ ${settlement.lines.map(line => `
 
     function copyToClipboard(text) {
       navigator.clipboard.writeText(text)
-        .then(() => alert("Skopiowano wiadomość."))
+        .then(() => alert("Skopiowano."))
         .catch(() => alert("Nie udało się skopiować."));
     }
 
-    function mailtoForSettlement(settlement) {
-      const tenant = tenantById(settlement.tenantId);
-      const subject = encodeURIComponent(`Rozliczenie najmu za ${fmtMonth(settlement.month)}`);
-      const body = encodeURIComponent(settlementMessage(settlement));
-      const email = encodeURIComponent(tenant?.email || "");
-      window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+    function mailtoText(email, subject, body) {
+      window.location.href = `mailto:${encodeURIComponent(email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
 
     function renderNav() {
       const nav = document.getElementById("nav");
-      nav.innerHTML = pages
-        .map(([id, label]) => `<button onclick="showPage('${id}')" id="nav_${id}">${label}</button>`)
-        .join("");
+      nav.innerHTML = pages.map(([id, label]) => `<button onclick="showPage('${id}')" id="nav_${id}">${label}</button>`).join("");
     }
 
     function showPage(id) {
@@ -677,13 +761,7 @@ ${settlement.lines.map(line => `
     function renderDashboard() {
       const { due, paid, overdue, expenses, net } = totals();
       const openTickets = state.tickets.filter((t) => t.status !== "zamknięte").length;
-      const utilityNow = state.meters.reduce((a, m) => {
-        const latest = readingsForMeter(m.id);
-        if (latest.length < 2) return a;
-        const prev = latest[latest.length - 2];
-        const curr = latest[latest.length - 1];
-        return a + Math.max(0, Number(curr.value) - Number(prev.value)) * Number(m.rate || 0);
-      }, 0);
+      const periodCount = state.periodSettlements.length;
 
       document.getElementById("dashboard").innerHTML = `
         <div class="grid cards">
@@ -693,16 +771,16 @@ ${settlement.lines.map(line => `
           <div class="card"><div class="muted">Wpłaty</div><div class="metric">${fmt(paid)}</div></div>
         </div>
 
+        <div class="grid three-col section">
+          <div class="card"><div class="muted small">Zaległości</div><div class="metric" style="font-size:22px">${fmt(overdue)}</div></div>
+          <div class="card"><div class="muted small">Wynik netto</div><div class="metric" style="font-size:22px">${fmt(net - expenses)}</div></div>
+          <div class="card"><div class="muted small">Rozliczenia okresowe</div><div class="metric" style="font-size:22px">${periodCount}</div></div>
+        </div>
+
         <div class="grid two section">
           <div class="card">
             <div class="panel-title"><h3>Szybki podgląd</h3></div>
-            <div class="grid cards" style="grid-template-columns:repeat(2,1fr)">
-              <div class="card"><div class="muted small">Zaległości</div><div class="metric" style="font-size:22px">${fmt(overdue)}</div></div>
-              <div class="card"><div class="muted small">Koszty</div><div class="metric" style="font-size:22px">${fmt(expenses)}</div></div>
-              <div class="card"><div class="muted small">Wynik netto</div><div class="metric" style="font-size:22px">${fmt(net)}</div></div>
-              <div class="card"><div class="muted small">Media bieżące</div><div class="metric" style="font-size:22px">${fmt(utilityNow)}</div></div>
-            </div>
-            <div class="section"><canvas id="cashflowChart"></canvas></div>
+            <canvas id="cashflowChart"></canvas>
           </div>
           <div class="card">
             <div class="panel-title"><h3>Zadania i alarmy</h3></div>
@@ -712,12 +790,11 @@ ${settlement.lines.map(line => `
             <div class="section">
               <div class="card">Wolne lokale: <strong>${state.units.filter((u) => u.status === "wolne").length}</strong></div>
               <div class="card section">Otwarte usterki: <strong>${openTickets}</strong></div>
-              <div class="card section">Rozliczenia zapisane: <strong>${state.settlements.length}</strong></div>
+              <div class="card section">Snapshoty miesięczne: <strong>${state.settlements.length}</strong></div>
             </div>
           </div>
         </div>
       `;
-
       drawCashflowChart();
     }
 
@@ -813,19 +890,142 @@ ${settlement.lines.map(line => `
         <div class="card section">
           <div class="panel-title"><h3>Najemcy</h3></div>
           <table>
-            <thead><tr><th>Najemca</th><th>Kontakt</th><th>Lokal</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Najemca</th><th>Kontakt</th><th>Lokal</th><th>Saldo</th><th></th></tr></thead>
             <tbody>
-              ${state.tenants.map((t) => `
-                <tr>
-                  <td><strong>${t.name}</strong></td>
-                  <td>${t.phone || "—"}<br><span class="muted small">${t.email || "—"}</span></td>
-                  <td>${t.unitId ? unitLabel(t.unitId) : "—"}</td>
-                  <td><span class="badge ${t.status === "aktywny" ? "status-active" : "status-closed"}">${t.status}</span></td>
-                  <td><button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button></td>
-                </tr>
-              `).join("")}
+              ${state.tenants.map((t) => {
+                const ledger = tenantLedger(t.id);
+                return `
+                  <tr>
+                    <td><strong>${t.name}</strong></td>
+                    <td>${t.phone || "—"}<br><span class="muted small">${t.email || "—"}</span></td>
+                    <td>${t.unitId ? unitLabel(t.unitId) : "—"}</td>
+                    <td class="${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}">${fmt(ledger.balance)}</td>
+                    <td class="inline-actions">
+                      <button class="btn secondary small" onclick="openTenantCard('${t.id}')">Karta</button>
+                      <button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button>
+                    </td>
+                  </tr>
+                `;
+              }).join("")}
             </tbody>
           </table>
+        </div>
+      `;
+    }
+
+    function renderTenantCard() {
+      const tenant = selectedTenantCardId ? tenantById(selectedTenantCardId) : null;
+      if (!tenant) {
+        document.getElementById("tenantCard").innerHTML = `
+          <div class="card">
+            <div class="panel-title"><h3>Wybierz najemcę</h3></div>
+            <select id="tenant_card_select" onchange="openTenantCard(this.value)">
+              <option value="">— wybierz —</option>
+              ${state.tenants.map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
+            </select>
+          </div>
+        `;
+        return;
+      }
+
+      const lease = activeLeaseByTenant(tenant.id) || state.leases.find(l => l.tenantId === tenant.id);
+      const ledger = tenantLedger(tenant.id);
+      const tenantSettlements = state.settlements.filter(s => s.tenantId === tenant.id).slice().sort((a,b)=>b.month.localeCompare(a.month));
+      const tenantPeriodSettlements = state.periodSettlements.filter(s => s.tenantId === tenant.id).slice().sort((a,b)=>(b.toMonth+b.createdAt).localeCompare(a.toMonth+a.createdAt));
+
+      document.getElementById("tenantCard").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Karta najemcy</h3></div>
+          <div class="form-grid two">
+            <select id="tenant_card_select" onchange="openTenantCard(this.value)">
+              ${state.tenants.map(t => `<option value="${t.id}" ${t.id === tenant.id ? "selected" : ""}>${t.name}</option>`).join("")}
+            </select>
+            <div class="notice">
+              Najemca: <strong>${tenant.name}</strong><br>
+              Lokal: <strong>${tenant.unitId ? unitLabel(tenant.unitId) : "—"}</strong><br>
+              E-mail: <strong>${tenant.email || "—"}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid three-col section">
+          <div class="card">
+            <div class="muted small">Saldo należności</div>
+            <div class="metric ${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}" style="font-size:24px">${fmt(ledger.balance)}</div>
+          </div>
+          <div class="card">
+            <div class="muted small">Naliczenia razem</div>
+            <div class="metric" style="font-size:24px">${fmt(ledger.charges)}</div>
+          </div>
+          <div class="card">
+            <div class="muted small">Wpłaty razem</div>
+            <div class="metric" style="font-size:24px">${fmt(ledger.payments)}</div>
+          </div>
+        </div>
+
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Umowa i zaliczki</h3></div>
+            ${lease ? `
+              <div class="details-box">Umowa: ${lease.startDate} - ${lease.endDate || "bezterminowo"}
+Czynsz: ${fmt(lease.rent)}
+Zaliczka zimna woda: ${fmt(lease.advanceColdWater)}
+Zaliczka ciepła woda: ${fmt(lease.advanceHotWater)}
+Zaliczka prąd: ${fmt(lease.advanceElectricity)}
+Zaliczka gaz: ${fmt(lease.advanceGas)}
+Zaliczka ciepło: ${fmt(lease.advanceHeat)}
+Suma zaliczek: ${fmt(leaseAdvanceTotal(lease))}</div>
+            ` : `<div class="notice warning-box">Brak przypisanej umowy.</div>`}
+          </div>
+
+          <div class="card">
+            <div class="panel-title"><h3>Historia salda</h3></div>
+            <table>
+              <thead><tr><th>Data</th><th>Typ</th><th>Opis</th><th>Kwota</th></tr></thead>
+              <tbody>
+                ${ledger.items.map(i => `
+                  <tr>
+                    <td>${i.date}</td>
+                    <td>${i.type}</td>
+                    <td>${i.label}</td>
+                    <td class="${i.amount > 0 ? "negative" : "positive"}">${fmt(i.amount)}</td>
+                  </tr>
+                `).join("") || `<tr><td colspan="4">Brak historii</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Rozliczenia miesięczne</h3></div>
+            <table>
+              <thead><tr><th>Miesiąc</th><th>Razem</th></tr></thead>
+              <tbody>
+                ${tenantSettlements.map(s => `
+                  <tr>
+                    <td>${fmtMonth(s.month)}</td>
+                    <td>${fmt(s.total)}</td>
+                  </tr>
+                `).join("") || `<tr><td colspan="2">Brak</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="panel-title"><h3>Rozliczenia okresowe</h3></div>
+            <table>
+              <thead><tr><th>Okres</th><th>Wynik</th></tr></thead>
+              <tbody>
+                ${tenantPeriodSettlements.map(s => `
+                  <tr>
+                    <td>${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}</td>
+                    <td class="${s.finalDifference > 0 ? "negative" : s.finalDifference < 0 ? "positive" : ""}">${fmt(s.finalDifference)}</td>
+                  </tr>
+                `).join("") || `<tr><td colspan="2">Brak</td></tr>`}
+              </tbody>
+            </table>
+          </div>
         </div>
       `;
     }
@@ -848,6 +1048,15 @@ ${settlement.lines.map(line => `
               <option>zakończona</option>
             </select>
           </div>
+          <div class="form-grid section">
+            <input id="l_adv_cold" type="number" step="0.01" placeholder="Zaliczka zimna woda" />
+            <input id="l_adv_hot" type="number" step="0.01" placeholder="Zaliczka ciepła woda" />
+            <input id="l_adv_el" type="number" step="0.01" placeholder="Zaliczka prąd" />
+            <input id="l_adv_gas" type="number" step="0.01" placeholder="Zaliczka gaz" />
+          </div>
+          <div class="form-grid section">
+            <input id="l_adv_heat" type="number" step="0.01" placeholder="Zaliczka ciepło" />
+          </div>
           <div class="section"><button class="btn green" onclick="addLease()">Dodaj umowę</button></div>
         </div>
 
@@ -857,7 +1066,7 @@ ${settlement.lines.map(line => `
             <button class="btn secondary" onclick="generateMonthlyCharges()">Generuj miesięczne czynsze</button>
           </div>
           <table>
-            <thead><tr><th>Najemca</th><th>Lokal</th><th>Okres</th><th>Czynsz</th><th>Kaucja</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Najemca</th><th>Lokal</th><th>Okres</th><th>Czynsz</th><th>Zaliczki</th><th>Status</th><th></th></tr></thead>
             <tbody>
               ${state.leases.map((l) => `
                 <tr>
@@ -865,7 +1074,7 @@ ${settlement.lines.map(line => `
                   <td>${unitLabel(l.unitId)}</td>
                   <td>${l.startDate}<br><span class="muted small">do ${l.endDate || "bezterminowo"}</span></td>
                   <td>${fmt(l.rent)}</td>
-                  <td>${fmt(l.deposit)}</td>
+                  <td>${fmt(leaseAdvanceTotal(l))}</td>
                   <td><span class="badge ${l.status === "aktywna" ? "status-active" : "status-closed"}">${l.status}</span></td>
                   <td><button class="btn secondary small" onclick="removeLease('${l.id}')">Usuń</button></td>
                 </tr>
@@ -897,10 +1106,7 @@ ${settlement.lines.map(line => `
         </div>
 
         <div class="card section">
-          <div class="panel-title">
-            <h3>Dodaj odczyt</h3>
-            <button class="btn secondary" onclick="generateUtilityCharges()">Wygeneruj opłaty za media</button>
-          </div>
+          <div class="panel-title"><h3>Dodaj odczyt</h3></div>
           <div class="form-grid three">
             <select id="r_meter" onchange="showMeterHint()">${state.meters.map((m) => `<option value="${m.id}">${unitLabel(m.unitId)} — ${m.type} (${m.serial})</option>`).join("")}</select>
             <input id="r_date" type="date" value="${today()}" />
@@ -908,33 +1114,6 @@ ${settlement.lines.map(line => `
           </div>
           <div id="meterHint" class="notice section">Wybierz licznik.</div>
           <div class="section"><button class="btn green" onclick="addReading()">Dodaj odczyt</button></div>
-        </div>
-
-        <div class="card section">
-          <div class="panel-title"><h3>Liczniki i ostatnie zużycie</h3></div>
-          <table>
-            <thead><tr><th>Lokal</th><th>Typ</th><th>Nr</th><th>Stawka</th><th>Poprzedni</th><th>Aktualny</th><th>Zużycie</th><th></th></tr></thead>
-            <tbody>
-              ${state.meters.map((m) => {
-                const arr = readingsForMeter(m.id);
-                const prev = arr.length >= 2 ? arr[arr.length - 2] : null;
-                const curr = arr.length >= 1 ? arr[arr.length - 1] : null;
-                const usage = prev && curr ? Math.max(0, Number(curr.value) - Number(prev.value)) : 0;
-                return `
-                  <tr>
-                    <td>${unitLabel(m.unitId)}</td>
-                    <td>${m.type}</td>
-                    <td>${m.serial}</td>
-                    <td>${Number(m.rate).toFixed(2)} / ${m.unit}</td>
-                    <td>${prev ? prev.value : "—"}</td>
-                    <td>${curr ? curr.value : "—"}</td>
-                    <td>${usage} ${m.unit}</td>
-                    <td><button class="btn secondary small" onclick="prefillReading('${m.id}')">Dodaj odczyt</button></td>
-                  </tr>
-                `;
-              }).join("")}
-            </tbody>
-          </table>
         </div>
 
         <div class="card section">
@@ -977,7 +1156,7 @@ ${settlement.lines.map(line => `
           <div class="form-grid two">
             <input id="settlement_month" type="month" value="${monthDefault}" />
             <div class="notice warning-box">
-              Przed zamknięciem miesiąca upewnij się, że odczyty liczników są poprawne. V5 pozwala potem usunąć rozliczenie i wygenerować je ponownie.
+              To jest snapshot miesięczny. Potem możesz go usunąć i wygenerować ponownie.
             </div>
           </div>
           <div class="section inline-actions">
@@ -988,17 +1167,9 @@ ${settlement.lines.map(line => `
 
         <div class="grid two section">
           <div class="card">
-            <div class="panel-title"><h3>Historia rozliczeń</h3></div>
+            <div class="panel-title"><h3>Historia rozliczeń miesięcznych</h3></div>
             <table>
-              <thead>
-                <tr>
-                  <th>Miesiąc</th>
-                  <th>Najemca</th>
-                  <th>Lokal</th>
-                  <th>Razem</th>
-                  <th></th>
-                </tr>
-              </thead>
+              <thead><tr><th>Miesiąc</th><th>Najemca</th><th>Lokal</th><th>Razem</th><th></th></tr></thead>
               <tbody>
                 ${state.settlements
                   .slice()
@@ -1024,42 +1195,32 @@ ${settlement.lines.map(line => `
               <h3>Podgląd rozliczenia</h3>
               ${selected ? `
                 <div class="inline-actions">
-                  <button class="btn secondary small" onclick="copySettlementMessage()">Kopiuj wiadomość</button>
+                  <button class="btn secondary small" onclick="copySettlementMessage()">Kopiuj</button>
                   <button class="btn secondary small" onclick="sendSettlementMail()">Mail</button>
                   <button class="btn secondary small" onclick="printSettlement()">Drukuj</button>
                 </div>
               ` : ""}
             </div>
-            ${
-              selected
-                ? `<div class="details-box">${buildSettlementDetails(selected)}</div>`
-                : `<div class="notice warning-box">Wybierz rozliczenie z listy po lewej.</div>`
-            }
+            ${selected ? `<div class="details-box">${buildSettlementDetails(selected)}</div>` : `<div class="notice warning-box">Wybierz rozliczenie.</div>`}
           </div>
         </div>
 
-        ${
-          selected
-            ? `
-              <div class="card section">
-                <div class="panel-title"><h3>Wiadomość dla najemcy</h3></div>
-                <textarea id="settlement_message">${settlementMessage(selected)}</textarea>
-              </div>
-            `
-            : ""
-        }
+        ${selected ? `
+          <div class="card section">
+            <div class="panel-title"><h3>Wiadomość dla najemcy</h3></div>
+            <textarea>${settlementMessage(selected)}</textarea>
+          </div>
+        ` : ""}
       `;
     }
 
     function buildSettlementDetails(settlement) {
-      const lines = settlement.lines
-        .map((line) => {
-          const qty = line.qty !== undefined && line.qty !== null ? ` | ilość: ${line.qty}` : "";
-          const unit = line.unit ? ` ${line.unit}` : "";
-          const rate = line.rate ? ` | stawka: ${fmt(line.rate)}` : "";
-          return `${line.label}${qty}${unit}${rate} | kwota: ${fmt(line.amount)}`;
-        })
-        .join("\n");
+      const lines = settlement.lines.map((line) => {
+        const qty = line.qty !== undefined && line.qty !== null ? ` | ilość: ${line.qty}` : "";
+        const unit = line.unit ? ` ${line.unit}` : "";
+        const rate = line.rate ? ` | stawka: ${fmt(line.rate)}` : "";
+        return `${line.label}${qty}${unit}${rate} | kwota: ${fmt(line.amount)}`;
+      }).join("\n");
 
       return `Miesiąc: ${fmtMonth(settlement.month)}
 Najemca: ${settlement.tenantName}
@@ -1071,6 +1232,87 @@ Pozycje:
 ${lines}
 
 Razem: ${fmt(settlement.total)}`;
+    }
+
+    function renderPeriodSettlements() {
+      const selected = selectedPeriodSettlementId ? findPeriodSettlement(selectedPeriodSettlementId) : null;
+
+      document.getElementById("periodSettlements").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Nowe rozliczenie okresowe</h3></div>
+          <div class="form-grid three">
+            <select id="ps_lease">${state.leases.filter(l => l.status === "aktywna").map(l => `<option value="${l.id}">${leaseLabel(l.id)}</option>`).join("")}</select>
+            <input id="ps_from" type="month" value="${currentMonth()}" />
+            <input id="ps_to" type="month" value="${currentMonth()}" />
+          </div>
+          <div class="section inline-actions">
+            <button class="btn green" onclick="generatePeriodSettlement()">Wygeneruj rozliczenie okresowe</button>
+          </div>
+        </div>
+
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Historia rozliczeń okresowych</h3></div>
+            <table>
+              <thead><tr><th>Najemca</th><th>Okres</th><th>Wynik</th><th></th></tr></thead>
+              <tbody>
+                ${state.periodSettlements
+                  .slice()
+                  .sort((a,b)=>(b.toMonth + b.createdAt).localeCompare(a.toMonth + a.createdAt))
+                  .map(s => `
+                    <tr>
+                      <td>${s.tenantName}</td>
+                      <td>${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}</td>
+                      <td class="${s.finalDifference > 0 ? "negative" : s.finalDifference < 0 ? "positive" : ""}">${fmt(s.finalDifference)}</td>
+                      <td class="inline-actions">
+                        <button class="btn secondary small" onclick="selectPeriodSettlement('${s.id}')">Podgląd</button>
+                        <button class="btn red small" onclick="deletePeriodSettlement('${s.id}')">Usuń</button>
+                      </td>
+                    </tr>
+                  `).join("") || `<tr><td colspan="4">Brak rozliczeń okresowych</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="panel-title">
+              <h3>Podgląd rozliczenia okresowego</h3>
+              ${selected ? `
+                <div class="inline-actions">
+                  <button class="btn secondary small" onclick="copyPeriodSettlementMessage()">Kopiuj</button>
+                  <button class="btn secondary small" onclick="sendPeriodSettlementMail()">Mail</button>
+                  <button class="btn secondary small" onclick="printPeriodSettlement()">Drukuj</button>
+                </div>
+              ` : ""}
+            </div>
+            ${selected ? `<div class="details-box">${buildPeriodSettlementDetails(selected)}</div>` : `<div class="notice warning-box">Wybierz rozliczenie okresowe.</div>`}
+          </div>
+        </div>
+
+        ${selected ? `
+          <div class="card section">
+            <div class="panel-title"><h3>Wiadomość dla najemcy</h3></div>
+            <textarea>${periodSettlementMessage(selected)}</textarea>
+          </div>
+        ` : ""}
+      `;
+    }
+
+    function buildPeriodSettlementDetails(settlement) {
+      const lines = settlement.details.map(d => {
+        return `${d.label} | zużycie: ${fmt(d.actual)} | zaliczki: ${fmt(d.advances)} | różnica: ${fmt(d.difference)}`;
+      }).join("\n");
+
+      return `Najemca: ${settlement.tenantName}
+Lokal: ${settlement.unitLabel}
+Okres: ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}
+${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
+
+Pozycje:
+${lines}
+
+Wynik końcowy: ${fmt(settlement.finalDifference)}
+${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 0 ? "Nadpłata / do zwrotu" : "Rozliczenie zerowe"}`;
     }
 
     function renderPayments() {
@@ -1286,9 +1528,11 @@ Razem: ${fmt(settlement.total)}`;
       renderDashboard();
       renderProperties();
       renderTenants();
+      renderTenantCard();
       renderLeases();
       renderMeters();
       renderSettlements();
+      renderPeriodSettlements();
       renderPayments();
       renderExpenses();
       renderMaintenance();
@@ -1311,12 +1555,9 @@ Razem: ${fmt(settlement.total)}`;
         hint.textContent = "Wybierz licznik.";
         return;
       }
-
       const arr = readingsForMeter(meterId);
       const last = arr.length ? arr[arr.length - 1] : null;
-      hint.textContent = last
-        ? `Ostatni zapisany stan: ${last.value} z dnia ${last.date}`
-        : "To będzie pierwszy odczyt tego licznika.";
+      hint.textContent = last ? `Ostatni zapisany stan: ${last.value} z dnia ${last.date}` : "To będzie pierwszy odczyt tego licznika.";
     }
 
     async function addBuilding() {
@@ -1390,10 +1631,17 @@ Razem: ${fmt(settlement.total)}`;
       await save();
     }
 
+    function openTenantCard(id) {
+      selectedTenantCardId = id;
+      renderTenantCard();
+      showPage("tenantCard");
+    }
+
     async function addLease() {
       const tenantId = document.getElementById("l_tenant").value;
       const unitId = document.getElementById("l_unit").value;
       if (!tenantId || !unitId) return alert("Wybierz najemcę i lokal.");
+
       state.leases.push({
         id: uid("l"),
         tenantId,
@@ -1404,8 +1652,14 @@ Razem: ${fmt(settlement.total)}`;
         deposit: Number(document.getElementById("l_deposit").value || 0),
         billingDay: Number(document.getElementById("l_billing").value || 5),
         status: document.getElementById("l_status").value,
+        advanceColdWater: Number(document.getElementById("l_adv_cold").value || 0),
+        advanceHotWater: Number(document.getElementById("l_adv_hot").value || 0),
+        advanceElectricity: Number(document.getElementById("l_adv_el").value || 0),
+        advanceGas: Number(document.getElementById("l_adv_gas").value || 0),
+        advanceHeat: Number(document.getElementById("l_adv_heat").value || 0),
         notes: ""
       });
+
       const unit = state.units.find((u) => u.id === unitId);
       if (unit) unit.status = "wynajęte";
       const tenant = state.tenants.find((t) => t.id === tenantId);
@@ -1441,7 +1695,6 @@ Razem: ${fmt(settlement.total)}`;
     }
 
     function validateReadingAgainstNeighbors(readingId, meterId, date, value) {
-      const current = readingId ? state.meterReadings.find((r) => r.id === readingId) : null;
       const temp = { id: readingId || "temp", meterId, date, value: Number(value) };
       const meterReadings = state.meterReadings
         .filter((r) => r.meterId === meterId && r.id !== readingId)
@@ -1455,11 +1708,9 @@ Razem: ${fmt(settlement.total)}`;
       if (prev && Number(value) < Number(prev.value)) {
         return `Stan nie może być mniejszy od poprzedniego odczytu (${prev.value} z ${prev.date}).`;
       }
-
       if (next && Number(value) > Number(next.value)) {
         return `Stan nie może być większy od następnego odczytu (${next.value} z ${next.date}).`;
       }
-
       return null;
     }
 
@@ -1473,13 +1724,7 @@ Razem: ${fmt(settlement.total)}`;
       const error = validateReadingAgainstNeighbors(null, meterId, date, value);
       if (error) return alert(error);
 
-      state.meterReadings.push({
-        id: uid("r"),
-        meterId,
-        date,
-        value
-      });
-
+      state.meterReadings.push({ id: uid("r"), meterId, date, value });
       await save();
     }
 
@@ -1510,7 +1755,6 @@ Razem: ${fmt(settlement.total)}`;
 
       const next = nextReadingOf(reading);
       const prev = previousReadingOf(reading);
-
       if (next && prev && Number(next.value) < Number(prev.value)) {
         return alert("Nie można usunąć tego odczytu, bo rozwali to kolejność stanów licznika.");
       }
@@ -1536,27 +1780,15 @@ Razem: ${fmt(settlement.total)}`;
       for (const lease of activeLeases) {
         if (settlementExists(month, lease.id)) continue;
 
-        const unit = state.units.find((u) => u.id === lease.unitId);
-        const tenant = state.tenants.find((t) => t.id === lease.tenantId);
+        const unit = unitById(lease.unitId);
+        const tenant = tenantById(lease.tenantId);
         if (!unit || !tenant) continue;
 
         const lines = [];
-        lines.push({
-          label: "Czynsz",
-          qty: 1,
-          unit: "mies.",
-          rate: Number(lease.rent || 0),
-          amount: Number(lease.rent || 0)
-        });
+        lines.push({ label: "Czynsz", qty: 1, unit: "mies.", rate: Number(lease.rent || 0), amount: Number(lease.rent || 0) });
 
         if (Number(unit.serviceCharge || 0) > 0) {
-          lines.push({
-            label: "Opłata administracyjna",
-            qty: 1,
-            unit: "mies.",
-            rate: Number(unit.serviceCharge || 0),
-            amount: Number(unit.serviceCharge || 0)
-          });
+          lines.push({ label: "Opłata administracyjna", qty: 1, unit: "mies.", rate: Number(unit.serviceCharge || 0), amount: Number(unit.serviceCharge || 0) });
         }
 
         const utilityLines = utilityBreakdownForUnit(unit.id, month);
@@ -1623,6 +1855,85 @@ Razem: ${fmt(settlement.total)}`;
       alert(`Usunięto ${count} rozliczeń za ${fmtMonth(month)}.`);
     }
 
+    function selectPeriodSettlement(id) {
+      selectedPeriodSettlementId = id;
+      renderPeriodSettlements();
+    }
+
+    async function generatePeriodSettlement() {
+      const leaseId = document.getElementById("ps_lease").value;
+      const fromMonth = document.getElementById("ps_from").value;
+      const toMonth = document.getElementById("ps_to").value;
+
+      if (!leaseId || !fromMonth || !toMonth) return alert("Uzupełnij wszystkie pola.");
+      if (fromMonth > toMonth) return alert("Miesiąc początkowy nie może być późniejszy od końcowego.");
+
+      const lease = leaseById(leaseId);
+      if (!lease) return alert("Nie znaleziono umowy.");
+
+      const tenant = tenantById(lease.tenantId);
+      const unit = unitById(lease.unitId);
+      if (!tenant || !unit) return alert("Brak najemcy lub lokalu.");
+
+      const months = monthRange(fromMonth, toMonth);
+      const meterTypes = ["zimna woda", "ciepła woda", "prąd", "gaz", "ciepło"];
+      const details = [];
+
+      for (const type of meterTypes) {
+        const key = advanceKeyForType(type);
+        const monthlyAdvance = Number(lease[key] || 0);
+        const advances = monthlyAdvance * months.length;
+
+        const actual = months.reduce((sum, month) => {
+          const unitLines = utilityBreakdownForUnit(unit.id, month);
+          const matching = unitLines.filter(x => x?.meter?.type === type);
+          return sum + matching.reduce((a,b)=>a+Number(b.amount || 0),0);
+        }, 0);
+
+        if (advances !== 0 || actual !== 0) {
+          details.push({
+            type,
+            label: type,
+            actual: Number(actual.toFixed(2)),
+            advances: Number(advances.toFixed(2)),
+            difference: Number((actual - advances).toFixed(2))
+          });
+        }
+      }
+
+      const finalDifference = Number(details.reduce((a,b)=>a+Number(b.difference || 0),0).toFixed(2));
+
+      const record = {
+        id: uid("ps"),
+        leaseId,
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        unitId: unit.id,
+        unitLabel: unitLabel(unit.id),
+        fromMonth,
+        toMonth,
+        details,
+        finalDifference,
+        bankAccount: state.settings.bankAccount || "",
+        createdAt: new Date().toISOString()
+      };
+
+      state.periodSettlements.push(record);
+      selectedPeriodSettlementId = record.id;
+      await save();
+      showPage("periodSettlements");
+      alert("Wygenerowano rozliczenie okresowe.");
+    }
+
+    async function deletePeriodSettlement(id) {
+      const s = findPeriodSettlement(id);
+      if (!s) return;
+      if (!confirm(`Usunąć rozliczenie okresowe ${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}?`)) return;
+      state.periodSettlements = state.periodSettlements.filter(x => x.id !== id);
+      if (selectedPeriodSettlementId === id) selectedPeriodSettlementId = null;
+      await save();
+    }
+
     function copySettlementMessage() {
       const settlement = findSettlement(selectedSettlementId);
       if (!settlement) return;
@@ -1632,13 +1943,33 @@ Razem: ${fmt(settlement.total)}`;
     function sendSettlementMail() {
       const settlement = findSettlement(selectedSettlementId);
       if (!settlement) return;
-      mailtoForSettlement(settlement);
+      const tenant = tenantById(settlement.tenantId);
+      mailtoText(tenant?.email || "", `Rozliczenie najmu za ${fmtMonth(settlement.month)}`, settlementMessage(settlement));
     }
 
     function printSettlement() {
       const settlement = findSettlement(selectedSettlementId);
       if (!settlement) return;
       openPrintWindow(settlementPrintableHtml(settlement));
+    }
+
+    function copyPeriodSettlementMessage() {
+      const settlement = findPeriodSettlement(selectedPeriodSettlementId);
+      if (!settlement) return;
+      copyToClipboard(periodSettlementMessage(settlement));
+    }
+
+    function sendPeriodSettlementMail() {
+      const settlement = findPeriodSettlement(selectedPeriodSettlementId);
+      if (!settlement) return;
+      const tenant = tenantById(settlement.tenantId);
+      mailtoText(tenant?.email || "", `Rozliczenie okresowe mediów ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}`, periodSettlementMessage(settlement));
+    }
+
+    function printPeriodSettlement() {
+      const settlement = findPeriodSettlement(selectedPeriodSettlementId);
+      if (!settlement) return;
+      openPrintWindow(periodSettlementPrintableHtml(settlement));
     }
 
     async function addCharge() {
@@ -1724,63 +2055,28 @@ Razem: ${fmt(settlement.total)}`;
       const month = currentMonth();
       let created = 0;
 
-      state.leases
-        .filter((l) => l.status === "aktywna")
-        .forEach((l) => {
-          const exists = state.charges.some((c) => c.leaseId === l.id && c.type === `Czynsz ${month}`);
-          if (!exists) {
-            const unit = state.units.find((u) => u.id === l.unitId);
-            const amount = Number(l.rent || 0) + Number(unit?.serviceCharge || 0);
-            const due = new Date();
-            due.setDate(Number(l.billingDay || 5));
-            state.charges.push({
-              id: uid("c"),
-              leaseId: l.id,
-              type: `Czynsz ${month}`,
-              amount,
-              dueDate: due.toISOString().slice(0, 10),
-              status: "oczekujące",
-              notes: "Automatycznie wygenerowano"
-            });
-            created++;
-          }
-        });
-
-      await save();
-      alert(`Wygenerowano ${created} opłat.`);
-    }
-
-    async function generateUtilityCharges() {
-      let created = 0;
-
-      state.meters.forEach((m) => {
-        const arr = readingsForMeter(m.id);
-        if (arr.length < 2) return;
-
-        const prev = arr[arr.length - 2];
-        const curr = arr[arr.length - 1];
-        const usage = Math.max(0, Number(curr.value) - Number(prev.value));
-        const amount = usage * Number(m.rate || 0);
-
-        if (amount <= 0) return;
-
-        const lease = activeLeaseByUnit(m.unitId);
-        if (!lease) return;
-
-        state.charges.push({
-          id: uid("c"),
-          leaseId: lease.id,
-          type: `Media: ${m.type}`,
-          amount: Number(amount.toFixed(2)),
-          dueDate: today(),
-          status: "oczekujące",
-          notes: `Zużycie ${usage} ${m.unit} × ${m.rate}`
-        });
-        created++;
+      state.leases.filter((l) => l.status === "aktywna").forEach((l) => {
+        const exists = state.charges.some((c) => c.leaseId === l.id && c.type === `Czynsz ${month}`);
+        if (!exists) {
+          const unit = unitById(l.unitId);
+          const amount = Number(l.rent || 0) + Number(unit?.serviceCharge || 0);
+          const due = new Date();
+          due.setDate(Number(l.billingDay || 5));
+          state.charges.push({
+            id: uid("c"),
+            leaseId: l.id,
+            type: `Czynsz ${month}`,
+            amount,
+            dueDate: due.toISOString().slice(0, 10),
+            status: "oczekujące",
+            notes: "Automatycznie wygenerowano"
+          });
+          created++;
+        }
       });
 
       await save();
-      alert(`Wygenerowano ${created} opłat za media.`);
+      alert(`Wygenerowano ${created} opłat.`);
     }
 
     async function saveSettings() {
@@ -1798,7 +2094,7 @@ Razem: ${fmt(settlement.total)}`;
     function downloadFile(filename, content, mime) {
       const blob = new Blob([content], { type: mime });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       a.click();
@@ -1812,8 +2108,8 @@ Razem: ${fmt(settlement.total)}`;
     function csv(rows) {
       if (!rows.length) return "";
       const headers = Object.keys(rows[0]);
-      const esc = (v) => `"${String(v ?? "").replaceAll('"', '""')}"`;
-      return [headers.join(";"), ...rows.map((r) => headers.map((h) => esc(r[h])).join(";"))].join("\n");
+      const esc = (v) => `"${String(v ?? "").replaceAll('"','""')}"`;
+      return [headers.join(";"), ...rows.map(r => headers.map(h => esc(r[h])).join(";"))].join("\n");
     }
 
     function exportCSVBundle() {
@@ -1825,12 +2121,12 @@ Razem: ${fmt(settlement.total)}`;
         meters: csv(state.meters),
         readings: csv(state.meterReadings),
         settlements: csv(state.settlements),
+        periodSettlements: csv(state.periodSettlements),
         charges: csv(state.charges),
         payments: csv(state.payments),
         expenses: csv(state.expenses),
         tickets: csv(state.tickets)
       };
-
       Object.entries(files).forEach(([name, content], i) => {
         setTimeout(() => downloadFile(`${name}.csv`, content, "text/csv;charset=utf-8;"), i * 250);
       });
@@ -1854,11 +2150,9 @@ Razem: ${fmt(settlement.total)}`;
     function drawCashflowChart() {
       const canvas = document.getElementById("cashflowChart");
       if (!canvas) return;
-
       const ctx = canvas.getContext("2d");
       const w = canvas.width = canvas.clientWidth;
       const h = canvas.height = canvas.clientHeight;
-
       ctx.clearRect(0, 0, w, h);
 
       const months = [];
@@ -1919,7 +2213,6 @@ Razem: ${fmt(settlement.total)}`;
           location.href = "/login";
           return;
         }
-
         renderNav();
         await load();
         renderAll();
