@@ -719,6 +719,7 @@
       documents: [],
       tasks: [],
       generatedDocuments: [],
+      messages: [],
       settlements: [],
       periodSettlements: [],
       settings: {
@@ -746,6 +747,7 @@
     let currentUser = null;
     let pendingDocumentFiles = [];
     let selectedGeneratedDocumentId = null;
+    let selectedConversationId = null;
 
     const ownerPages = [
       ["dashboard", "Dashboard", "Podgląd portfela najmu, płatności i mediów."],
@@ -772,6 +774,7 @@
       ["payments", "Płatności", "Bieżące należności, historia wpłat i status rozliczeń."],
       ["documents", "Dokumenty", "Udostępnione umowy, protokoły i ważne terminy."],
       ["tasks", "Moje zadania", "Checklista spraw do załatwienia i terminów."],
+      ["communications", "Wiadomości", "Rozmowa z właścicielem lub zarządcą."],
       ["maintenance", "Zgłoszenia", "Dodaj sprawę serwisową i śledź postęp obsługi."],
       ["settings", "Profil", "Dane kontaktowe i informacje rozliczeniowe."]
     ];
@@ -958,6 +961,7 @@
       state.documents = state.documents.filter((document) => (!document.tenantId || tenantIds.has(document.tenantId)) && (!document.leaseId || leaseIds.has(document.leaseId)) && (!document.unitId || unitIds.has(document.unitId)));
       state.tasks = state.tasks.filter((task) => (!task.tenantId || tenantIds.has(task.tenantId)) && (!task.leaseId || leaseIds.has(task.leaseId)) && (!task.unitId || unitIds.has(task.unitId)));
       state.generatedDocuments = state.generatedDocuments.filter((document) => (!document.tenantId || tenantIds.has(document.tenantId)) && (!document.leaseId || leaseIds.has(document.leaseId)) && (!document.unitId || unitIds.has(document.unitId)));
+      state.messages = state.messages.filter((message) => (!message.tenantId || tenantIds.has(message.tenantId)) && (!message.leaseId || leaseIds.has(message.leaseId)) && (!message.unitId || unitIds.has(message.unitId)));
       state.settlements = state.settlements.filter((settlement) => (!settlement.leaseId || leaseIds.has(settlement.leaseId)) && (!settlement.tenantId || tenantIds.has(settlement.tenantId)) && (!settlement.unitId || unitIds.has(settlement.unitId)));
       state.periodSettlements = state.periodSettlements.filter((settlement) => !settlement.tenantId || tenantIds.has(settlement.tenantId));
     }
@@ -977,6 +981,7 @@
       state.documents ||= [];
       state.tasks ||= [];
       state.generatedDocuments ||= [];
+      state.messages ||= [];
       state.settlements ||= [];
       state.periodSettlements ||= [];
       state.settings ||= {};
@@ -1027,6 +1032,21 @@
         kind: sanitizeText(document?.kind || "custom"),
         updatedAt: document?.updatedAt || "",
         createdAt: document?.createdAt || ""
+      }));
+      state.messages = state.messages.map((message) => ({
+        ...message,
+        subject: sanitizeText(message?.subject || ""),
+        createdAt: message?.createdAt || "",
+        updatedAt: message?.updatedAt || "",
+        thread: Array.isArray(message?.thread)
+          ? message.thread.map((entry) => ({
+              ...entry,
+              authorName: sanitizeText(entry?.authorName || ""),
+              authorRole: sanitizeText(entry?.authorRole || ""),
+              body: sanitizeText(entry?.body || ""),
+              createdAt: entry?.createdAt || ""
+            }))
+          : []
       }));
       state.documents = state.documents.map((document) => ({
         ...document,
@@ -1514,6 +1534,31 @@
         .filter((document) => document.tenantId === tenantId)
         .slice()
         .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+    }
+
+    function conversationsForCurrentUser() {
+      if (currentUser?.role === "tenant") {
+        return state.messages
+          .filter((message) => message.tenantId === (currentUser.tenantId || state.tenants[0]?.id))
+          .slice()
+          .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+      }
+      return state.messages
+        .slice()
+        .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+    }
+
+    function findConversation(id) {
+      return state.messages.find((message) => message.id === id);
+    }
+
+    function activeConversation() {
+      const conversations = conversationsForCurrentUser();
+      const selected = findConversation(selectedConversationId);
+      const fallback = conversations[0] || null;
+      const next = selected && conversations.some((message) => message.id === selected.id) ? selected : fallback;
+      selectedConversationId = next?.id || null;
+      return next;
     }
 
     function formatFileSize(size = 0) {
@@ -2246,6 +2291,69 @@
       if (!item.targetEmail) return alert("Brak adresu e-mail dla tego adresata.");
       const subject = `${state.settings.companyName || "RentFlow"} · ${item.title}`;
       mailtoText(item.targetEmail, subject, item.message || "");
+    }
+
+    function selectConversation(id) {
+      selectedConversationId = id;
+      renderCommunications();
+      showPage("communications");
+    }
+
+    async function createConversation() {
+      const tenantId = currentUser?.role === "tenant"
+        ? (currentUser.tenantId || state.tenants[0]?.id || "")
+        : document.getElementById("conversation_tenant")?.value || "";
+      const subject = currentUser?.role === "tenant"
+        ? (document.getElementById("new_message_subject")?.value.trim() || "")
+        : (document.getElementById("conversation_subject")?.value.trim() || "");
+      const body = currentUser?.role === "tenant"
+        ? (document.getElementById("new_message_body")?.value.trim() || "")
+        : (document.getElementById("conversation_body")?.value.trim() || "");
+      if (!tenantId) return alert("Wybierz najemcę.");
+      if (!subject || !body) return alert("Uzupełnij temat i treść wiadomości.");
+      const context = leaseDocumentContext(tenantId);
+      const now = nowIso();
+      const conversation = {
+        id: uid("msg"),
+        tenantId,
+        leaseId: context.lease?.id || "",
+        unitId: context.unit?.id || "",
+        subject,
+        createdAt: now,
+        updatedAt: now,
+        thread: [{
+          id: uid("msgline"),
+          authorRole: currentUser?.role || "owner",
+          authorName: currentUser?.name || (currentUser?.role === "tenant" ? "Najemca" : "Zarządca"),
+          body,
+          createdAt: now
+        }]
+      };
+      state.messages.push(conversation);
+      selectedConversationId = conversation.id;
+      await save();
+      showPage("communications");
+    }
+
+    async function sendConversationMessage() {
+      const conversation = activeConversation();
+      if (!conversation) return createConversation();
+      const body = currentUser?.role === "tenant"
+        ? (document.getElementById("new_message_body")?.value.trim() || "")
+        : (document.getElementById("conversation_reply")?.value.trim() || "");
+      if (!body) return alert("Wpisz treść wiadomości.");
+      const now = nowIso();
+      conversation.thread ||= [];
+      conversation.thread.push({
+        id: uid("msgline"),
+        authorRole: currentUser?.role || "owner",
+        authorName: currentUser?.name || (currentUser?.role === "tenant" ? "Najemca" : "Zarządca"),
+        body,
+        createdAt: now
+      });
+      conversation.updatedAt = now;
+      await save();
+      showPage("communications");
     }
 
     function renderSearchResults() {
@@ -3311,6 +3419,54 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       const leaseCount = queue.filter((item) => item.kind === "lease").length;
       const documentCount = queue.filter((item) => item.kind === "document").length;
       const ticketCount = queue.filter((item) => item.kind === "ticket").length;
+      const conversations = conversationsForCurrentUser();
+      const active = activeConversation();
+      const threadMarkup = active?.thread?.length
+        ? active.thread
+          .slice()
+          .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")))
+          .map((entry) => `
+            <div class="entity-item">
+              <div>
+                <strong>${entry.authorName || (entry.authorRole === "owner" ? "Zarządca" : "Najemca")}</strong>
+                <div class="meta">${entry.authorRole === "owner" ? "Zarządca / właściciel" : "Najemca"} · ${formatDateTime(entry.createdAt)}</div>
+              </div>
+              <div class="notice">${entry.body || "—"}</div>
+            </div>
+          `).join("")
+        : `<div class="empty-state">Jeszcze nie ma wiadomości w tym wątku.</div>`;
+
+      if (currentUser?.role === "tenant") {
+        document.getElementById("communications").innerHTML = `
+          <div class="grid two">
+            <div class="card">
+              <div class="panel-title"><h3>Moje rozmowy</h3></div>
+              <div class="entity-list">
+                ${conversations.length ? conversations.map((conversation) => `
+                  <div class="entity-item">
+                    <div>
+                      <strong>${conversation.subject || "Wiadomość do zarządcy"}</strong>
+                      <div class="meta">${formatDateTime(conversation.updatedAt || conversation.createdAt)} · ${conversation.thread?.length || 0} wiadomości</div>
+                    </div>
+                    <div class="inline-actions">
+                      <button class="btn secondary small" onclick="selectConversation('${conversation.id}')">Otwórz</button>
+                    </div>
+                  </div>
+                `).join("") : `<div class="empty-state">Nie masz jeszcze żadnych rozmów z zarządcą.</div>`}
+              </div>
+            </div>
+            <div class="card">
+              <div class="panel-title"><h3>${active ? active.subject : "Nowa wiadomość"}</h3></div>
+              ${active ? `<div class="entity-list">${threadMarkup}</div>` : `<div class="empty-state">Utwórz pierwszą wiadomość do zarządcy.</div>`}
+              <div class="section">
+                <input id="new_message_subject" placeholder="Temat wiadomości" value="${active?.subject || ""}" ${active ? "disabled" : ""} />
+                <textarea id="new_message_body" rows="5" placeholder="Napisz wiadomość do zarządcy lub właściciela"></textarea>
+                <div class="section inline-actions"><button class="btn green" onclick="sendConversationMessage()">${active ? "Odpowiedz" : "Wyślij wiadomość"}</button></div>
+              </div>
+            </div>
+          </div>`;
+        return;
+      }
 
       document.getElementById("communications").innerHTML = `
         <div class="grid cards">
@@ -3333,8 +3489,45 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             <div class="ops-list">
               <div class="ops-item"><strong>Kolejka priorytetów</strong><div class="muted">Najpierw pokazujemy zaległości, przekroczone SLA i formalności z bliskim terminem.</div></div>
               <div class="ops-item"><strong>Gotowe wiadomości</strong><div class="muted">Każdy rekord ma predefiniowaną treść e-maila, którą możesz wysłać jednym kliknięciem.</div></div>
-              <div class="ops-item"><strong>Przejście do sprawy</strong><div class="muted">Z każdego przypomnienia przejdziesz od razu do karty najemcy, dokumentów albo zgłoszenia.</div></div>
+              <div class="ops-item"><strong>Skrzynka rozmów</strong><div class="muted">Najemca i zarządca mogą pisać do siebie bezpośrednio w aplikacji, niezależnie od zgłoszeń serwisowych.</div></div>
             </div>
+          </div>
+        </div>
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Rozmowy z najemcami</h3></div>
+            <div class="entity-list">
+              ${conversations.length ? conversations.map((conversation) => `
+                <div class="entity-item">
+                  <div>
+                    <strong>${conversation.subject || "Rozmowa"}</strong>
+                    <div class="meta">${tenantName(conversation.tenantId)} · ${formatDateTime(conversation.updatedAt || conversation.createdAt)}</div>
+                  </div>
+                  <div class="inline-actions">
+                    <button class="btn secondary small" onclick="selectConversation('${conversation.id}')">Otwórz</button>
+                  </div>
+                </div>
+              `).join("") : `<div class="empty-state">Nie ma jeszcze żadnych wiadomości od najemców.</div>`}
+            </div>
+            <div class="section">
+              <div class="panel-title"><h3>Nowa wiadomość do najemcy</h3></div>
+              <div class="form-grid two">
+                <select id="conversation_tenant"><option value="">Wybierz najemcę</option>${state.tenants.map((tenant) => `<option value="${tenant.id}">${tenant.name}</option>`).join("")}</select>
+                <input id="conversation_subject" placeholder="Temat wiadomości" />
+              </div>
+              <textarea id="conversation_body" rows="4" placeholder="Napisz wiadomość do najemcy"></textarea>
+              <div class="section inline-actions"><button class="btn green" onclick="createConversation()">Wyślij nową wiadomość</button></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>${active ? active.subject : "Wybierz rozmowę"}</h3></div>
+            ${active ? `<div class="entity-list">${threadMarkup}</div>` : `<div class="empty-state">Po lewej wybierz rozmowę, aby odpisać najemcy.</div>`}
+            ${active ? `
+              <div class="section">
+                <textarea id="conversation_reply" rows="4" placeholder="Odpowiedz najemcy"></textarea>
+                <div class="section inline-actions"><button class="btn green" onclick="sendConversationMessage()">Wyślij odpowiedź</button></div>
+              </div>
+            ` : ""}
           </div>
         </div>
         <div class="card section">
@@ -3942,7 +4135,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         tickets: csv(state.tickets),
         documents: csv(state.documents),
         tasks: csv(state.tasks),
-        generatedDocuments: csv(state.generatedDocuments)
+        generatedDocuments: csv(state.generatedDocuments),
+        messages: csv(state.messages)
       };
       Object.entries(files).forEach(([name, content], i) => {
         setTimeout(() => downloadFile(`${name}.csv`, content, "text/csv;charset=utf-8;"), i * 250);
