@@ -6,60 +6,267 @@
   <title>RentFlow V9</title>
   <style>
     :root {
-      --bg: #0b1020;
-      --panel: #131a2e;
-      --panel2: #1a2340;
-      --text: #eef4ff;
-      --muted: #9fb0d0;
-      --border: rgba(255,255,255,0.08);
-      --accent: #5ea1ff;
-      --green: #62d394;
-      --red: #ff7272;
-      --yellow: #ffd166;
-      --radius: 18px;
+      --bg: #f3efe7;
+      --bg-soft: rgba(255, 250, 243, 0.78);
+      --ink: #1d2433;
+      --muted: #667085;
+      --muted-2: #8c96a8;
+      --line: rgba(33, 42, 62, 0.12);
+      --panel: rgba(255, 252, 246, 0.78);
+      --panel-strong: rgba(255, 255, 255, 0.94);
+      --panel-dark: #23324a;
+      --accent: #0f7b6c;
+      --accent-strong: #085e53;
+      --accent-soft: rgba(15, 123, 108, 0.12);
+      --blue: #2d5bce;
+      --green: #1e9f68;
+      --red: #d15b4c;
+      --yellow: #dd8b2f;
+      --radius: 24px;
+      --shadow: 0 24px 60px rgba(34, 43, 61, 0.12);
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
-      font-family: Inter, Arial, sans-serif;
-      background: linear-gradient(180deg, #0a0f1d 0%, #0f1730 100%);
-      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 123, 108, 0.12), transparent 26%),
+        radial-gradient(circle at top right, rgba(45, 91, 206, 0.10), transparent 24%),
+        linear-gradient(180deg, #fbf7f1 0%, #f0ebe1 100%);
+      min-height: 100vh;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.14) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.14) 1px, transparent 1px);
+      background-size: 28px 28px;
+      opacity: 0.35;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.6), transparent 70%);
     }
     .app {
       display: grid;
-      grid-template-columns: 270px 1fr;
+      grid-template-columns: 300px minmax(0, 1fr);
       min-height: 100vh;
     }
     aside {
-      background: rgba(10,15,29,.95);
-      border-right: 1px solid var(--border);
-      padding: 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 28px 22px;
+      border-right: 1px solid rgba(25, 40, 66, 0.08);
+      background: linear-gradient(180deg, rgba(23, 34, 52, 0.98), rgba(34, 50, 74, 0.98));
+      color: #f8fafc;
+      overflow-y: auto;
     }
-    .brand { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
-    .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
-    .nav { display: grid; gap: 8px; }
+    .brand-wrap {
+      padding: 18px 18px 20px;
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+      margin-bottom: 18px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.82);
+      background: rgba(255,255,255,0.08);
+      margin-bottom: 12px;
+    }
+    .brand {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 31px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 4px;
+    }
+    .sub {
+      color: rgba(229, 234, 244, 0.75);
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 0;
+    }
+    .portfolio-chip {
+      margin-top: 16px;
+      display: grid;
+      gap: 6px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(8, 15, 28, 0.38);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .portfolio-chip strong { font-size: 15px; }
+    .portfolio-chip span { color: rgba(229, 234, 244, 0.75); font-size: 12px; }
+    .nav {
+      display: grid;
+      gap: 8px;
+      margin-top: 18px;
+    }
     .nav button {
-      border: 1px solid var(--border);
-      background: var(--panel);
-      color: var(--text);
-      padding: 12px 14px;
-      border-radius: 14px;
-      text-align: left;
-      cursor: pointer;
-    }
-    .nav button.active, .nav button:hover { background: var(--panel2); }
-    main { padding: 24px; }
-    .topbar {
       display: flex;
       justify-content: space-between;
-      gap: 16px;
       align-items: center;
-      margin-bottom: 20px;
+      gap: 10px;
+      width: 100%;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.02);
+      color: #f7fbff;
+      padding: 13px 14px;
+      border-radius: 16px;
+      text-align: left;
+      cursor: pointer;
+      transition: transform .18s ease, background .18s ease, border-color .18s ease;
+    }
+    .nav button span {
+      color: rgba(229, 234, 244, 0.6);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .nav button.active, .nav button:hover {
+      background: linear-gradient(135deg, rgba(15, 123, 108, 0.22), rgba(45, 91, 206, 0.18));
+      border-color: rgba(125, 198, 186, 0.36);
+      transform: translateX(2px);
+    }
+    .aside-footer {
+      margin-top: 18px;
+      padding: 16px;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+      color: rgba(233, 238, 246, 0.75);
+      line-height: 1.55;
+    }
+    .aside-footer strong {
+      display: block;
+      color: #fff;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    main {
+      padding: 28px;
+      min-width: 0;
+    }
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 24px;
+    }
+    .title-shell {
+      display: grid;
+      gap: 14px;
+    }
+    .workspace-badges {
+      display: flex;
+      gap: 10px;
       flex-wrap: wrap;
     }
-    .title h1 { margin: 0; font-size: 30px; }
-    .title p { margin: 6px 0 0; color: var(--muted); }
-    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .workspace-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.7);
+      border: 1px solid rgba(25, 40, 66, 0.08);
+      color: var(--muted);
+      font-size: 12px;
+      box-shadow: 0 10px 20px rgba(35, 50, 74, 0.06);
+    }
+    .title-panel {
+      padding: 22px 24px;
+      border-radius: 28px;
+      background: linear-gradient(145deg, rgba(255,255,255,0.92), rgba(255,249,241,0.76));
+      border: 1px solid rgba(33, 42, 62, 0.08);
+      box-shadow: var(--shadow);
+    }
+    .title h1 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(32px, 4vw, 48px);
+      line-height: 0.98;
+      letter-spacing: -0.04em;
+    }
+    .title p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      max-width: 760px;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .toolbar {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      min-width: min(100%, 360px);
+    }
+    .search-card,
+    .actions-card {
+      background: rgba(255,255,255,0.78);
+      border: 1px solid rgba(33, 42, 62, 0.08);
+      border-radius: 24px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .search-card label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted-2);
+      margin-bottom: 10px;
+    }
+    .search-card input {
+      background: rgba(247, 249, 252, 0.88);
+      border-color: rgba(33, 42, 62, 0.08);
+      color: var(--ink);
+    }
+    .search-results {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+      max-height: 220px;
+      overflow: auto;
+    }
+    .search-result {
+      border: 1px solid rgba(33, 42, 62, 0.08);
+      background: #fff;
+      border-radius: 16px;
+      padding: 12px 13px;
+      cursor: pointer;
+      text-align: left;
+      color: var(--ink);
+    }
+    .search-result strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+    .search-result small {
+      color: var(--muted);
+      display: block;
+      line-height: 1.45;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
     .btn {
       border: none;
       padding: 10px 14px;
@@ -67,26 +274,102 @@
       cursor: pointer;
       font-weight: 700;
       color: white;
-      background: linear-gradient(135deg, var(--accent), #7e8cff);
+      box-shadow: 0 14px 24px rgba(15, 123, 108, 0.16);
+      background: linear-gradient(135deg, var(--accent), #3b8d7a);
     }
-    .btn.secondary { background: var(--panel); border: 1px solid var(--border); }
+    .btn.secondary {
+      background: rgba(255,255,255,0.74);
+      border: 1px solid rgba(33, 42, 62, 0.08);
+      color: var(--ink);
+      box-shadow: none;
+    }
     .btn.green { background: linear-gradient(135deg, var(--green), #2db97c); }
-    .btn.red { background: linear-gradient(135deg, var(--red), #f54646); }
-    .btn.yellow { background: linear-gradient(135deg, #ffbe55, #ff8a47); }
+    .btn.red { background: linear-gradient(135deg, var(--red), #f0795d); }
+    .btn.yellow { background: linear-gradient(135deg, #d99a3f, #cc6b2c); }
     .btn.small { padding: 6px 10px; font-size: 12px; }
     .grid { display: grid; gap: 16px; }
     .cards { grid-template-columns: repeat(4, minmax(180px, 1fr)); }
     .two { grid-template-columns: 1.15fr 0.85fr; }
     .three-col { grid-template-columns: 1fr 1fr 1fr; }
     .card {
-      background: rgba(19,26,46,.95);
-      border: 1px solid var(--border);
+      background: linear-gradient(145deg, rgba(255,255,255,0.86), rgba(255,249,241,0.72));
+      border: 1px solid rgba(33, 42, 62, 0.08);
       border-radius: var(--radius);
-      padding: 18px;
+      padding: 20px;
+      box-shadow: var(--shadow);
     }
-    .metric { font-size: 30px; font-weight: 800; margin-top: 8px; }
+    .hero-card {
+      position: relative;
+      overflow: hidden;
+      padding: 28px;
+      background:
+        radial-gradient(circle at top right, rgba(255,255,255,0.24), transparent 28%),
+        linear-gradient(135deg, #17334a 0%, #285f57 46%, #d69a47 100%);
+      color: white;
+    }
+    .hero-card::after {
+      content: "";
+      position: absolute;
+      inset: auto -80px -80px auto;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+    }
+    .hero-card .metric {
+      color: white;
+    }
+    .metric { font-size: 34px; font-weight: 800; margin-top: 10px; letter-spacing: -0.03em; }
     .muted { color: var(--muted); }
     .small { font-size: 12px; }
+    .hero-top,
+    .kpi-meta,
+    .mini-stats,
+    .metric-row,
+    .signal-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .mini-stats { margin-top: 18px; }
+    .mini-stat {
+      min-width: 140px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.11);
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(8px);
+    }
+    .mini-stat strong { display: block; font-size: 18px; margin-top: 4px; }
+    .metric-card-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+    }
+    .metric-card-top small {
+      display: block;
+      color: var(--muted-2);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .delta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(15, 123, 108, 0.10);
+      color: var(--accent-strong);
+    }
+    .delta.down {
+      background: rgba(209, 91, 76, 0.10);
+      color: var(--red);
+    }
     .panel-title {
       display: flex;
       justify-content: space-between;
@@ -95,14 +378,14 @@
       margin-bottom: 14px;
       flex-wrap: wrap;
     }
-    .panel-title h3 { margin: 0; }
+    .panel-title h3 { margin: 0; font-size: 18px; }
     input, select, textarea {
       width: 100%;
       padding: 11px 12px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: #0d1428;
-      color: var(--text);
+      border-radius: 14px;
+      border: 1px solid rgba(33, 42, 62, 0.10);
+      background: rgba(255,255,255,0.9);
+      color: var(--ink);
     }
     textarea { min-height: 120px; resize: vertical; }
     .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -111,14 +394,20 @@
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td {
       padding: 10px 8px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid rgba(33, 42, 62, 0.08);
       text-align: left;
       vertical-align: top;
     }
-    th { color: var(--muted); }
+    th {
+      color: var(--muted-2);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 700;
+    }
     .badge {
       display: inline-block;
-      padding: 4px 8px;
+      padding: 6px 10px;
       border-radius: 999px;
       font-size: 12px;
       font-weight: 700;
@@ -131,37 +420,135 @@
     .hidden { display: none !important; }
     .section { margin-top: 16px; }
     .notice {
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: rgba(102,227,196,.1);
-      border: 1px solid rgba(102,227,196,.2);
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(15, 123, 108, 0.08);
+      border: 1px solid rgba(15, 123, 108, 0.12);
     }
-    .danger-box { background: rgba(255,114,114,.1); border-color: rgba(255,114,114,.2); }
-    .warning-box { background: rgba(255,209,102,.1); border-color: rgba(255,209,102,.2); }
+    .danger-box { background: rgba(209,91,76,.08); border-color: rgba(209,91,76,.16); }
+    .warning-box { background: rgba(221,139,47,.10); border-color: rgba(221,139,47,.18); }
     canvas {
       width: 100%;
       height: 230px;
-      background: #0d1428;
-      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(248,250,252,0.94), rgba(242,246,250,0.84));
+      border-radius: 18px;
     }
     .details-box {
       white-space: pre-wrap;
-      background: #0d1428;
+      background: rgba(247, 249, 252, 0.92);
       padding: 14px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
+      border-radius: 16px;
+      border: 1px solid rgba(33, 42, 62, 0.08);
       min-height: 200px;
     }
     .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .positive { color: #8ef0b1; }
     .negative { color: #ff9c9c; }
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .signal-list,
+    .activity-list,
+    .ops-list,
+    .entity-list {
+      display: grid;
+      gap: 10px;
+    }
+    .signal-item,
+    .activity-item,
+    .ops-item,
+    .entity-item {
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(33, 42, 62, 0.08);
+      background: rgba(255,255,255,0.72);
+    }
+    .signal-item strong,
+    .activity-item strong,
+    .ops-item strong,
+    .entity-item strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+    .entity-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+    .entity-item .meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .stack {
+      display: grid;
+      gap: 16px;
+    }
+    .data-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+    }
+    .scorebar {
+      margin-top: 12px;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(33, 42, 62, 0.08);
+      overflow: hidden;
+    }
+    .scorebar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #d15b4c, #dd8b2f 45%, #1e9f68);
+    }
+    .legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .legend i {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .empty-state {
+      padding: 26px 20px;
+      border-radius: 20px;
+      border: 1px dashed rgba(33, 42, 62, 0.18);
+      color: var(--muted);
+      text-align: center;
+      background: rgba(255,255,255,0.48);
+    }
     @media (max-width: 1200px) {
+      .topbar,
+      .workspace-grid,
+      .data-grid,
       .cards, .two, .three-col, .form-grid, .form-grid.three, .form-grid.two {
         grid-template-columns: 1fr 1fr;
       }
     }
     @media (max-width: 840px) {
       .app { grid-template-columns: 1fr; }
+      aside {
+        position: relative;
+        height: auto;
+      }
+      main {
+        padding: 18px;
+      }
+      .topbar,
+      .workspace-grid,
+      .data-grid,
       .cards, .two, .three-col, .form-grid, .form-grid.three, .form-grid.two {
         grid-template-columns: 1fr;
       }
@@ -171,22 +558,49 @@
 <body>
   <div class="app">
     <aside>
-      <div class="brand">RentFlow V9</div>
-      <div class="sub">Indywidualne rozliczenia umów + kontrola mediów</div>
+      <div class="brand-wrap">
+        <div class="eyebrow">Rent Operations Suite</div>
+        <div class="brand">RentFlow</div>
+        <div class="sub">Panel operacyjny do zarządzania portfelem najmu, płatnościami, mediami i obsługą najemców.</div>
+        <div class="portfolio-chip">
+          <strong id="sidebarCompany">Portfolio</strong>
+          <span id="sidebarSummary">Gotowe do pracy operacyjnej.</span>
+        </div>
+      </div>
       <div class="nav" id="nav"></div>
+      <div class="aside-footer">
+        <strong>Co dalej</strong>
+        Traktuję ten ekran jako mocniejszą wersję v1. Kolejny profesjonalny krok to osobne moduły, workflow zgłoszeń, dokumenty najmu i automatyczne komunikaty.
+      </div>
     </aside>
 
     <main>
       <div class="topbar">
-        <div class="title">
-          <h1 id="pageTitle">Dashboard</h1>
-          <p id="pageSubtitle">Podgląd portfela najmu, płatności i mediów.</p>
+        <div class="title-shell">
+          <div class="workspace-badges">
+            <div class="workspace-badge" id="workspaceStatus">Tryb operacyjny</div>
+            <div class="workspace-badge" id="workspacePortfolio">0 lokali</div>
+            <div class="workspace-badge" id="workspaceCashflow">0 PLN netto</div>
+          </div>
+          <div class="title-panel title">
+            <h1 id="pageTitle">Command Center</h1>
+            <p id="pageSubtitle">Podgląd portfela najmu, płatności i mediów.</p>
+          </div>
         </div>
-        <div class="actions">
-          <button class="btn secondary" onclick="exportJSON()">Eksport JSON</button>
-          <button class="btn secondary" onclick="exportCSVBundle()">Eksport CSV</button>
-          <button class="btn yellow" onclick="importFile.click()">Import JSON</button>
-          <button class="btn red" onclick="logout()">Wyloguj</button>
+        <div class="toolbar">
+          <div class="search-card">
+            <label for="globalSearch">Szybkie wyszukiwanie</label>
+            <input id="globalSearch" type="search" placeholder="Szukaj po najemcy, lokalu, budynku, umowie..." />
+            <div id="searchResults" class="search-results hidden"></div>
+          </div>
+          <div class="actions-card">
+            <div class="actions">
+              <button class="btn secondary" onclick="exportJSON()">Eksport JSON</button>
+              <button class="btn secondary" onclick="exportCSVBundle()">Eksport CSV</button>
+              <button class="btn yellow" onclick="importFile.click()">Import JSON</button>
+              <button class="btn red" onclick="logout()">Wyloguj</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -255,6 +669,8 @@
     ];
 
     const importFile = document.getElementById("importFile");
+    const globalSearch = document.getElementById("globalSearch");
+    const searchResults = document.getElementById("searchResults");
 
     function uid(prefix = "id") {
       if (window.crypto?.randomUUID) {
@@ -471,6 +887,190 @@
       return { due, paid, overdue, expenses, net: paid - expenses };
     }
 
+    function activeLeases() {
+      return state.leases.filter((lease) => lease.status === "aktywna");
+    }
+
+    function collectionRate() {
+      const { due, paid } = totals();
+      if (!due) return 100;
+      return Math.min(100, Math.round((paid / due) * 100));
+    }
+
+    function occupancyOverview() {
+      const totalUnits = state.units.length;
+      const rentedUnits = state.units.filter((unit) => unit.status === "wynajęte").length;
+      return {
+        totalUnits,
+        rentedUnits,
+        vacantUnits: Math.max(0, totalUnits - rentedUnits),
+        occupancy: occupancyRate()
+      };
+    }
+
+    function expiringLeases(days = 45) {
+      const now = new Date();
+      const limit = new Date();
+      limit.setDate(limit.getDate() + days);
+      return activeLeases()
+        .filter((lease) => lease.endDate)
+        .filter((lease) => {
+          const end = new Date(lease.endDate);
+          return end >= now && end <= limit;
+        })
+        .sort((a, b) => (a.endDate || "").localeCompare(b.endDate || ""));
+    }
+
+    function operationalSignals() {
+      const overdueCharges = state.charges
+        .filter((charge) => calcChargeStatus(charge) === "zaległe")
+        .map((charge) => ({
+          kind: "payment",
+          label: leaseLabel(charge.leaseId),
+          title: charge.type,
+          amount: Math.max(0, Number(charge.amount || 0) - chargePaidAmount(charge.id)),
+          date: charge.dueDate,
+          severity: "high"
+        }))
+        .slice(0, 4);
+
+      const leaseSignals = expiringLeases(45).slice(0, 4).map((lease) => ({
+        kind: "lease",
+        label: leaseLabel(lease.id),
+        title: "Wygasająca umowa",
+        amount: 0,
+        date: lease.endDate,
+        severity: "medium"
+      }));
+
+      const maintenanceSignals = state.tickets
+        .filter((ticket) => ticket.status !== "zamknięte")
+        .slice(0, 4)
+        .map((ticket) => ({
+          kind: "ticket",
+          label: unitLabel(ticket.unitId),
+          title: ticket.title,
+          amount: 0,
+          date: ticket.createdAt,
+          severity: ticket.priority === "wysoki" ? "high" : "medium"
+        }));
+
+      return [...overdueCharges, ...leaseSignals, ...maintenanceSignals]
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+        .slice(0, 6);
+    }
+
+    function recentActivity() {
+      const items = [
+        ...state.payments.map((payment) => ({
+          id: payment.id,
+          type: "Wpłata",
+          title: `${fmt(payment.amount)} · ${leaseLabel(payment.leaseId)}`,
+          meta: `${payment.method || "płatność"} · ${payment.date}`,
+          date: payment.date || ""
+        })),
+        ...state.expenses.map((expense) => ({
+          id: expense.id,
+          type: "Koszt",
+          title: `${expense.category || "Koszt"} · ${fmt(expense.amount)}`,
+          meta: `${expense.vendor || "bez dostawcy"} · ${expense.date}`,
+          date: expense.date || ""
+        })),
+        ...state.tickets.map((ticket) => ({
+          id: ticket.id,
+          type: "Zgłoszenie",
+          title: `${ticket.title} · ${unitLabel(ticket.unitId)}`,
+          meta: `${ticket.status} · ${ticket.createdAt}`,
+          date: ticket.createdAt || ""
+        })),
+        ...state.settlements.map((settlement) => ({
+          id: settlement.id,
+          type: "Rozliczenie",
+          title: `${settlement.tenantName} · ${fmt(settlement.total)}`,
+          meta: `${fmtMonth(settlement.month)} · ${settlement.unitLabel}`,
+          date: settlement.createdAt || ""
+        }))
+      ];
+
+      return items.sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 6);
+    }
+
+    function portfolioHealthScore() {
+      const { overdue, net } = totals();
+      const openTickets = state.tickets.filter((ticket) => ticket.status !== "zamknięte").length;
+      const occupancy = occupancyRate();
+      let score = 50;
+      score += Math.round(occupancy * 0.25);
+      score += net > 0 ? 12 : -12;
+      score -= Math.min(25, Math.round(overdue / 500));
+      score -= Math.min(18, openTickets * 2);
+      return Math.max(0, Math.min(100, score));
+    }
+
+    function buildingPerformance() {
+      return state.buildings.map((building) => {
+        const units = state.units.filter((unit) => unit.buildingId === building.id);
+        const unitIds = units.map((unit) => unit.id);
+        const leaseIds = state.leases.filter((lease) => unitIds.includes(lease.unitId)).map((lease) => lease.id);
+        const revenue = state.payments.filter((payment) => leaseIds.includes(payment.leaseId)).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+        const expense = state.expenses.filter((entry) => entry.buildingId === building.id || unitIds.includes(entry.unitId)).reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+        const occupied = units.filter((unit) => unit.status === "wynajęte").length;
+        return {
+          id: building.id,
+          name: building.name,
+          units: units.length,
+          occupancy: units.length ? Math.round((occupied / units.length) * 100) : 0,
+          revenue,
+          expense,
+          net: revenue - expense
+        };
+      }).sort((a, b) => b.net - a.net);
+    }
+
+    function topTenantsByBalance(limit = 5) {
+      return state.tenants
+        .map((tenant) => {
+          const ledger = tenantLedger(tenant.id);
+          return { id: tenant.id, name: tenant.name, unit: tenant.unitId ? unitLabel(tenant.unitId) : "Bez lokalu", balance: ledger.balance };
+        })
+        .sort((a, b) => b.balance - a.balance)
+        .slice(0, limit);
+    }
+
+    function globalSearchResults(query) {
+      const term = sanitizeText(query || "").toLowerCase();
+      if (!term) return [];
+
+      const results = [
+        ...state.buildings.map((building) => ({
+          id: building.id,
+          action: () => showPage("properties"),
+          title: building.name,
+          subtitle: `Budynek · ${building.address || "bez adresu"}`
+        })),
+        ...state.units.map((unit) => ({
+          id: unit.id,
+          action: () => showPage("properties"),
+          title: unitLabel(unit.id),
+          subtitle: `Lokal · ${unit.status} · ${fmt(unit.rentDefault || 0)}`
+        })),
+        ...state.tenants.map((tenant) => ({
+          id: tenant.id,
+          action: () => openTenantCard(tenant.id),
+          title: tenant.name,
+          subtitle: `Najemca · ${tenant.email || tenant.phone || "brak kontaktu"}`
+        })),
+        ...state.leases.map((lease) => ({
+          id: lease.id,
+          action: () => showPage("leases"),
+          title: leaseLabel(lease.id),
+          subtitle: `Umowa · ${lease.startDate || "brak daty"} · ${lease.status}`
+        }))
+      ];
+
+      return results.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(term)).slice(0, 8);
+    }
+
     function meterUnitDefault(type) {
       if (type === "prąd") return "kWh";
       return "m³";
@@ -671,10 +1271,52 @@
       window.location.href = `mailto:${encodeURIComponent(email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
 
+    function renderSearchResults() {
+      const results = globalSearchResults(globalSearch.value);
+      if (!results.length) {
+        searchResults.innerHTML = globalSearch.value.trim()
+          ? `<div class="empty-state">Brak wyników dla tego zapytania.</div>`
+          : "";
+        searchResults.classList.toggle("hidden", !globalSearch.value.trim());
+        return;
+      }
+
+      searchResults.innerHTML = results.map((result) => `
+        <button class="search-result" type="button" data-result-id="${result.id}">
+          <strong>${result.title}</strong>
+          <small>${result.subtitle}</small>
+        </button>
+      `).join("");
+      searchResults.classList.remove("hidden");
+      Array.from(searchResults.querySelectorAll(".search-result")).forEach((button, index) => {
+        button.addEventListener("click", () => {
+          results[index].action();
+          globalSearch.value = "";
+          searchResults.classList.add("hidden");
+        });
+      });
+    }
+
+    function updateWorkspaceChrome() {
+      const { totalUnits, vacantUnits, occupancy } = occupancyOverview();
+      const { net, overdue } = totals();
+      document.getElementById("sidebarCompany").textContent = state.settings.companyName || "RentFlow";
+      document.getElementById("sidebarSummary").textContent = `${totalUnits} lokali · ${occupancy}% obłożenia · ${fmt(overdue)} zaległości`;
+      document.getElementById("workspaceStatus").textContent = overdue > 0 ? "Wymaga uwagi" : "Tryb operacyjny";
+      document.getElementById("workspacePortfolio").textContent = `${totalUnits} lokali · ${vacantUnits} wolnych`;
+      document.getElementById("workspaceCashflow").textContent = `${fmt(net)} netto`;
+    }
+
     function renderNav() {
       const nav = document.getElementById("nav");
-      nav.innerHTML = pages.map(([id, label]) => `<button onclick="showPage('${id}')" id="nav_${id}">${label}</button>`).join("");
+      nav.innerHTML = pages.map(([id, label, sub]) => `
+        <button onclick="showPage('${id}')" id="nav_${id}">
+          <div>${label}</div>
+          <span>${sub.split(",")[0]}</span>
+        </button>
+      `).join("");
     }
+
     function showPage(id) {
       pages.forEach(([pid, label, sub]) => {
         document.getElementById(pid).classList.toggle("hidden", pid !== id);
@@ -684,34 +1326,144 @@
           document.getElementById("pageSubtitle").textContent = sub;
         }
       });
+      updateWorkspaceChrome();
     }
 
     function renderDashboard() {
       const { due, paid, overdue, expenses, net } = totals();
-      const openTickets = state.tickets.filter((t) => t.status !== "zamknięte").length;
-      const periodCount = state.periodSettlements.length;
+      const { totalUnits, vacantUnits, occupancy } = occupancyOverview();
+      const openTickets = state.tickets.filter((ticket) => ticket.status !== "zamknięte").length;
+      const score = portfolioHealthScore();
+      const upcomingLeases = expiringLeases(45);
+      const signals = operationalSignals();
+      const activities = recentActivity();
+      const buildings = buildingPerformance().slice(0, 5);
+      const tenants = topTenantsByBalance(5);
+      const collection = collectionRate();
 
       document.getElementById("dashboard").innerHTML = `
+        <div class="workspace-grid">
+          <div class="card hero-card">
+            <div class="hero-top">
+              <div class="eyebrow">Portfolio Health</div>
+              <div class="delta ${overdue > 0 ? "down" : ""}">${overdue > 0 ? "Zaległości aktywne" : "Portfel stabilny"}</div>
+            </div>
+            <div class="metric">${score}/100</div>
+            <div class="muted" style="color: rgba(255,255,255,0.8); max-width: 620px;">To syntetyczny wskaźnik jakości portfela: łączy obłożenie, zaległości, rentowność i ilość otwartych spraw operacyjnych.</div>
+            <div class="scorebar"><span style="width:${score}%"></span></div>
+            <div class="mini-stats">
+              <div class="mini-stat"><div class="small">Obłożenie</div><strong>${occupancy}%</strong></div>
+              <div class="mini-stat"><div class="small">Skuteczność windykacji</div><strong>${collection}%</strong></div>
+              <div class="mini-stat"><div class="small">Otwarte usterki</div><strong>${openTickets}</strong></div>
+              <div class="mini-stat"><div class="small">Wolne lokale</div><strong>${vacantUnits}</strong></div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <div class="panel-title"><h3>Sygnały operacyjne</h3></div>
+              <div class="signal-list">
+                ${signals.length ? signals.map((signal) => `
+                  <div class="signal-item ${signal.severity === "high" ? "danger-box" : ""}">
+                    <strong>${signal.title}</strong>
+                    <div class="muted">${signal.label}</div>
+                    <div class="signal-row">
+                      <span class="badge ${signal.severity === "high" ? "status-overdue" : "status-pending"}">${signal.kind}</span>
+                      <span>${signal.amount ? fmt(signal.amount) : signal.date || "w toku"}</span>
+                    </div>
+                  </div>
+                `).join("") : `<div class="empty-state">Brak krytycznych alarmów. Portfel wygląda stabilnie.</div>`}
+              </div>
+            </div>
+            <div class="card">
+              <div class="panel-title"><h3>Aktywność portfela</h3></div>
+              <div class="activity-list">
+                ${activities.length ? activities.map((item) => `
+                  <div class="activity-item">
+                    <strong>${item.type}</strong>
+                    <div>${item.title}</div>
+                    <div class="muted small">${item.meta}</div>
+                  </div>
+                `).join("") : `<div class="empty-state">Gdy pojawią się wpłaty, koszty i zgłoszenia, zobaczysz je tutaj.</div>`}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="grid cards">
-          <div class="card"><div class="muted">Budynki</div><div class="metric">${state.buildings.length}</div></div>
-          <div class="card"><div class="muted">Lokale</div><div class="metric">${state.units.length}</div><div class="small muted">Obłożenie ${occupancyRate()}%</div></div>
-          <div class="card"><div class="muted">Należności</div><div class="metric">${fmt(due)}</div></div>
-          <div class="card"><div class="muted">Wpłaty</div><div class="metric">${fmt(paid)}</div></div>
-        </div>
-        <div class="grid three-col section">
-          <div class="card"><div class="muted small">Zaległości</div><div class="metric" style="font-size:22px">${fmt(overdue)}</div></div>
-          <div class="card"><div class="muted small">Wynik netto</div><div class="metric" style="font-size:22px">${fmt(net)}</div></div>
-          <div class="card"><div class="muted small">Rozliczenia okresowe</div><div class="metric" style="font-size:22px">${periodCount}</div></div>
-        </div>
-        <div class="grid two section">
-          <div class="card"><div class="panel-title"><h3>Szybki podgląd</h3></div><canvas id="cashflowChart"></canvas></div>
           <div class="card">
-            <div class="panel-title"><h3>Zadania i alarmy</h3></div>
-            <div class="notice ${overdue > 0 ? "danger-box" : ""}">${overdue > 0 ? `Masz zaległości na ${fmt(overdue)}.` : "Brak przeterminowanych zaległości."}</div>
-            <div class="section">
-              <div class="card">Wolne lokale: <strong>${state.units.filter((u) => u.status === "wolne").length}</strong></div>
-              <div class="card section">Otwarte usterki: <strong>${openTickets}</strong></div>
-              <div class="card section">Snapshoty miesięczne: <strong>${state.settlements.length}</strong></div>
+            <div class="metric-card-top"><div><small>Portfel</small><div class="metric">${state.buildings.length}</div></div><div class="delta">${totalUnits} lokali</div></div>
+            <div class="muted">Budynki zarządzane w systemie</div>
+          </div>
+          <div class="card">
+            <div class="metric-card-top"><div><small>Przychody pobrane</small><div class="metric">${fmt(paid)}</div></div><div class="delta ${collection < 85 ? "down" : ""}">${collection}% collection</div></div>
+            <div class="muted">Wpłaty zaksięgowane od najemców</div>
+          </div>
+          <div class="card">
+            <div class="metric-card-top"><div><small>Zaległości</small><div class="metric">${fmt(overdue)}</div></div><div class="delta ${overdue > 0 ? "down" : ""}">${state.charges.filter((charge) => calcChargeStatus(charge) === "zaległe").length} spraw</div></div>
+            <div class="muted">Kwota wymagająca windykacji</div>
+          </div>
+          <div class="card">
+            <div class="metric-card-top"><div><small>Wynik netto</small><div class="metric">${fmt(net)}</div></div><div class="delta ${net < 0 ? "down" : ""}">${fmt(expenses)} kosztów</div></div>
+            <div class="muted">Wpłaty minus koszty operacyjne</div>
+          </div>
+        </div>
+
+        <div class="data-grid section">
+          <div class="card">
+            <div class="panel-title"><h3>Przepływ środków</h3></div>
+            <div class="legend"><span><i style="background:#66e3c4"></i>Przychody</span><span><i style="background:#d15b4c"></i>Koszty</span></div>
+            <canvas id="cashflowChart"></canvas>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <div class="panel-title"><h3>Wygasające umowy</h3></div>
+              <div class="ops-list">
+                ${upcomingLeases.length ? upcomingLeases.map((lease) => `
+                  <div class="ops-item">
+                    <strong>${leaseLabel(lease.id)}</strong>
+                    <div class="muted">Koniec: ${lease.endDate}</div>
+                  </div>
+                `).join("") : `<div class="empty-state">Brak umów wygasających w najbliższych 45 dniach.</div>`}
+              </div>
+            </div>
+            <div class="card">
+              <div class="panel-title"><h3>Pipeline należności</h3></div>
+              <div class="ops-list">
+                <div class="ops-item"><strong>${fmt(due)}</strong><div class="muted">Wszystkie naliczenia</div></div>
+                <div class="ops-item"><strong>${fmt(paid)}</strong><div class="muted">Wpłaty zaksięgowane</div></div>
+                <div class="ops-item"><strong>${fmt(due - paid)}</strong><div class="muted">Otwarte saldo portfela</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Najmocniejsze budynki</h3></div>
+            <div class="entity-list">
+              ${buildings.length ? buildings.map((building) => `
+                <div class="entity-item">
+                  <div>
+                    <strong>${building.name}</strong>
+                    <div class="meta">${building.units} lokali · ${building.occupancy}% obłożenia</div>
+                  </div>
+                  <div><strong>${fmt(building.net)}</strong><div class="meta">netto</div></div>
+                </div>
+              `).join("") : `<div class="empty-state">Dodaj pierwszy budynek, aby zobaczyć wydajność portfela.</div>`}
+            </div>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>Najemcy wymagający uwagi</h3></div>
+            <div class="entity-list">
+              ${tenants.length ? tenants.map((tenant) => `
+                <div class="entity-item">
+                  <div>
+                    <strong>${tenant.name}</strong>
+                    <div class="meta">${tenant.unit}</div>
+                  </div>
+                  <div><strong class="${tenant.balance > 0 ? "negative" : tenant.balance < 0 ? "positive" : ""}">${fmt(tenant.balance)}</strong><div class="meta">saldo</div></div>
+                </div>
+              `).join("") : `<div class="empty-state">Dodaj najemców, aby budować priorytety kolekcji.</div>`}
             </div>
           </div>
         </div>`;
@@ -1021,18 +1773,30 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     }
 
     function renderReports() {
-      const perBuilding = state.buildings.map((b) => {
-        const units = state.units.filter((u) => u.buildingId === b.id);
-        const leasedUnitIds = units.filter((u) => u.status === "wynajęte").map((u) => u.id);
-        const leaseIds = state.leases.filter((l) => leasedUnitIds.includes(l.unitId)).map((l) => l.id);
-        const income = state.payments.filter((p) => leaseIds.includes(p.leaseId)).reduce((a, b) => a + Number(b.amount || 0), 0);
-        const expense = state.expenses.filter((e) => e.buildingId === b.id || leasedUnitIds.includes(e.unitId)).reduce((a, b) => a + Number(b.amount || 0), 0);
-        return { name: b.name, units: units.length, occ: units.length ? Math.round((leasedUnitIds.length / units.length) * 100) : 0, income, expense, net: income - expense };
-      });
-
+      const perBuilding = buildingPerformance();
+      const { due, paid, overdue, expenses, net } = totals();
+      const score = portfolioHealthScore();
       document.getElementById("reports").innerHTML = `
-        <div class="grid cards"><div class="card"><div class="muted">Obłożenie</div><div class="metric">${occupancyRate()}%</div></div><div class="card"><div class="muted">Przychody</div><div class="metric">${fmt(totals().paid)}</div></div><div class="card"><div class="muted">Koszty</div><div class="metric">${fmt(totals().expenses)}</div></div><div class="card"><div class="muted">Wynik netto</div><div class="metric">${fmt(totals().net)}</div></div></div>
-        <div class="card section"><div class="panel-title"><h3>Wynik wg budynku</h3></div><table><thead><tr><th>Budynek</th><th>Lokale</th><th>Obłożenie</th><th>Przychód</th><th>Koszt</th><th>Netto</th></tr></thead><tbody>${perBuilding.map((r) => `<tr><td>${r.name}</td><td>${r.units}</td><td>${r.occ}%</td><td>${fmt(r.income)}</td><td>${fmt(r.expense)}</td><td>${fmt(r.net)}</td></tr>`).join("")}</tbody></table></div>`;
+        <div class="grid cards">
+          <div class="card"><div class="muted">Health score</div><div class="metric">${score}/100</div><div class="small muted">Wskaźnik jakości portfela</div></div>
+          <div class="card"><div class="muted">Obłożenie</div><div class="metric">${occupancyRate()}%</div><div class="small muted">Średnio w całym portfelu</div></div>
+          <div class="card"><div class="muted">Open receivables</div><div class="metric">${fmt(due - paid)}</div><div class="small muted">${fmt(overdue)} po terminie</div></div>
+          <div class="card"><div class="muted">Wynik netto</div><div class="metric">${fmt(net)}</div><div class="small muted">${fmt(expenses)} kosztów</div></div>
+        </div>
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Ranking budynków</h3></div>
+            <table><thead><tr><th>Budynek</th><th>Lokale</th><th>Obłożenie</th><th>Przychód</th><th>Koszt</th><th>Netto</th></tr></thead><tbody>${perBuilding.map((r) => `<tr><td>${r.name}</td><td>${r.units}</td><td>${r.occupancy}%</td><td>${fmt(r.revenue)}</td><td>${fmt(r.expense)}</td><td>${fmt(r.net)}</td></tr>`).join("")}</tbody></table>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>Rekomendacje operacyjne</h3></div>
+            <div class="ops-list">
+              <div class="ops-item"><strong>${overdue > 0 ? "Uruchom windykację miękką" : "Kontynuuj bieżący monitoring"}</strong><div class="muted">${overdue > 0 ? `Największa dźwignia dziś to odzyskanie ${fmt(overdue)} zaległości.` : "Brak przeterminowanych należności to dobry moment na porządkowanie umów i forecast."}</div></div>
+              <div class="ops-item"><strong>${expiringLeases(60).length} umów wymaga decyzji</strong><div class="muted">Sprawdź umowy kończące się w ciągu 60 dni i przygotuj odnowienia.</div></div>
+              <div class="ops-item"><strong>${state.tickets.filter((ticket) => ticket.status !== "zamknięte").length} otwartych spraw serwisowych</strong><div class="muted">Wysokie SLA obsługi najemców to jedna z głównych przewag nad konkurencją.</div></div>
+            </div>
+          </div>
+        </div>`;
     }
 
     function renderSettings() {
@@ -1054,6 +1818,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       renderMaintenance();
       renderReports();
       renderSettings();
+      updateWorkspaceChrome();
+      renderSearchResults();
     }
 
     function onMeterTypeChange() {
@@ -1420,6 +2186,20 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       e.target.value = "";
     });
 
+    globalSearch.addEventListener("input", () => {
+      renderSearchResults();
+    });
+
+    globalSearch.addEventListener("focus", () => {
+      renderSearchResults();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!searchResults.contains(event.target) && event.target !== globalSearch) {
+        searchResults.classList.add("hidden");
+      }
+    });
+
     function drawCashflowChart() {
       const canvas = document.getElementById("cashflowChart");
       if (!canvas) return;
@@ -1478,7 +2258,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
     async function init() {
       try {
-        const me = await fetch("/api/me");
+        const me = await fetch("/api/me", { credentials: "same-origin" });
         if (!me.ok) {
           location.href = "/login";
           return;
