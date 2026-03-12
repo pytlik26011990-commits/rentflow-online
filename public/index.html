@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RentFlow V6</title>
+  <title>RentFlow V7</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -154,6 +154,15 @@
     .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .positive { color: #8ef0b1; }
     .negative { color: #ff9c9c; }
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+      font-size: 12px;
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
     @media (max-width: 1200px) {
       .cards, .two, .three-col, .form-grid, .form-grid.three, .form-grid.two {
         grid-template-columns: 1fr 1fr;
@@ -170,8 +179,8 @@
 <body>
   <div class="app">
     <aside>
-      <div class="brand">RentFlow V6</div>
-      <div class="sub">Saldo, zaliczki, rozliczenia okresowe</div>
+      <div class="brand">RentFlow V7</div>
+      <div class="sub">Saldo, zaliczki, śmieci, internet, terminy płatności</div>
       <div class="nav" id="nav"></div>
     </aside>
 
@@ -222,7 +231,7 @@
       settlements: [],
       periodSettlements: [],
       settings: {
-        companyName: "RentFlow V6",
+        companyName: "RentFlow V7",
         ownerName: "Zarządca",
         baseCurrency: "PLN",
         utilityVAT: 23,
@@ -241,7 +250,7 @@
       ["properties", "Budynki i lokale", "Zarządzanie budynkami i mieszkaniami."],
       ["tenants", "Najemcy", "Baza najemców i kontaktów."],
       ["tenantCard", "Karta najemcy", "Saldo, historia, rozliczenia i wpłaty."],
-      ["leases", "Umowy", "Umowy najmu, czynsz, kaucje i zaliczki."],
+      ["leases", "Umowy", "Umowy najmu, zaliczki, śmieci, internet, terminy płatności."],
       ["meters", "Media", "Liczniki, odczyty, korekty i rozliczenia zużycia."],
       ["settlements", "Rozliczenia miesięczne", "Zamknięcie miesiąca i snapshoty miesięczne."],
       ["periodSettlements", "Rozliczenia okresowe", "Porównanie zaliczek z zużyciem rzeczywistym."],
@@ -293,6 +302,12 @@
       return new Date(y, m - 1, day).toISOString().slice(0, 10);
     }
 
+    function dueDateForMonthByDay(month, dayInput) {
+      const [y, m] = month.split("-").map(Number);
+      const day = Math.max(1, Math.min(28, Number(dayInput || 10)));
+      return new Date(y, m - 1, day).toISOString().slice(0, 10);
+    }
+
     function fmt(n = 0) {
       return new Intl.NumberFormat("pl-PL", {
         style: "currency",
@@ -335,7 +350,7 @@
       state.settlements ||= [];
       state.periodSettlements ||= [];
       state.settings ||= {};
-      state.settings.companyName ||= "RentFlow V6";
+      state.settings.companyName ||= "RentFlow V7";
       state.settings.ownerName ||= "";
       state.settings.baseCurrency ||= "PLN";
       state.settings.utilityVAT ||= 23;
@@ -349,6 +364,10 @@
         l.advanceElectricity ||= 0;
         l.advanceGas ||= 0;
         l.advanceHeat ||= 0;
+        l.feeWaste ||= 0;
+        l.feeInternet ||= 0;
+        l.rentDueDay ||= 5;
+        l.otherDueDay ||= 10;
       });
     }
 
@@ -519,23 +538,16 @@
       }
     }
 
-    function advanceLabel(key) {
-      switch (key) {
-        case "advanceColdWater": return "Zaliczka zimna woda";
-        case "advanceHotWater": return "Zaliczka ciepła woda";
-        case "advanceElectricity": return "Zaliczka prąd";
-        case "advanceGas": return "Zaliczka gaz";
-        case "advanceHeat": return "Zaliczka ciepło";
-        default: return key;
-      }
-    }
-
     function leaseAdvanceTotal(lease) {
       return Number(lease.advanceColdWater || 0)
         + Number(lease.advanceHotWater || 0)
         + Number(lease.advanceElectricity || 0)
         + Number(lease.advanceGas || 0)
         + Number(lease.advanceHeat || 0);
+    }
+
+    function leaseFixedFeesTotal(lease) {
+      return Number(lease.feeWaste || 0) + Number(lease.feeInternet || 0);
     }
 
     function tenantLedger(tenantId) {
@@ -601,7 +613,8 @@ Pozycje rozliczenia:
 ${lines}
 
 Razem do zapłaty: ${fmt(settlement.total)}
-Termin płatności: ${settlement.dueDate}
+Termin płatności czynszu: ${settlement.dueDateRent || "—"}
+Termin płatności pozostałych opłat: ${settlement.dueDateOther || "—"}
 ${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
 
 Pozdrawiam
@@ -656,11 +669,12 @@ th{background:#f2f2f2}
 <div><strong>Miesiąc:</strong> ${fmtMonth(settlement.month)}</div>
 <div><strong>Najemca:</strong> ${settlement.tenantName}</div>
 <div><strong>Lokal:</strong> ${settlement.unitLabel}</div>
-<div><strong>Termin płatności:</strong> ${settlement.dueDate}</div>
+<div><strong>Termin płatności czynszu:</strong> ${settlement.dueDateRent || "—"}</div>
+<div><strong>Termin płatności pozostałych opłat:</strong> ${settlement.dueDateOther || "—"}</div>
 ${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}
 </div>
 <table>
-<thead><tr><th>Pozycja</th><th>Ilość</th><th>Jednostka</th><th>Stawka</th><th class="right">Kwota</th></tr></thead>
+<thead><tr><th>Pozycja</th><th>Ilość</th><th>Jednostka</th><th>Stawka</th><th>Grupa płatności</th><th class="right">Kwota</th></tr></thead>
 <tbody>
 ${settlement.lines.map(line => `
 <tr>
@@ -668,10 +682,11 @@ ${settlement.lines.map(line => `
 <td>${line.qty ?? ""}</td>
 <td>${line.unit ?? ""}</td>
 <td>${line.rate ? fmt(line.rate) : ""}</td>
+<td>${line.group === "rent" ? "czynsz" : "pozostałe"}</td>
 <td class="right">${fmt(line.amount)}</td>
 </tr>
 `).join("")}
-<tr><td colspan="4" class="right"><strong>Razem</strong></td><td class="right"><strong>${fmt(settlement.total)}</strong></td></tr>
+<tr><td colspan="5" class="right"><strong>Razem</strong></td><td class="right"><strong>${fmt(settlement.total)}</strong></td></tr>
 </tbody>
 </table>
 </body>
@@ -965,7 +980,7 @@ ${settlement.details.map(d => `
 
         <div class="grid two section">
           <div class="card">
-            <div class="panel-title"><h3>Umowa i zaliczki</h3></div>
+            <div class="panel-title"><h3>Umowa i opłaty</h3></div>
             ${lease ? `
               <div class="details-box">Umowa: ${lease.startDate} - ${lease.endDate || "bezterminowo"}
 Czynsz: ${fmt(lease.rent)}
@@ -974,7 +989,12 @@ Zaliczka ciepła woda: ${fmt(lease.advanceHotWater)}
 Zaliczka prąd: ${fmt(lease.advanceElectricity)}
 Zaliczka gaz: ${fmt(lease.advanceGas)}
 Zaliczka ciepło: ${fmt(lease.advanceHeat)}
-Suma zaliczek: ${fmt(leaseAdvanceTotal(lease))}</div>
+Śmieci: ${fmt(lease.feeWaste || 0)}
+Internet: ${fmt(lease.feeInternet || 0)}
+Suma zaliczek mediów: ${fmt(leaseAdvanceTotal(lease))}
+Suma opłat stałych: ${fmt(leaseFixedFeesTotal(lease))}
+Termin czynszu: ${lease.rentDueDay || 5}
+Termin pozostałych opłat: ${lease.otherDueDay || 10}</div>
             ` : `<div class="notice warning-box">Brak przypisanej umowy.</div>`}
           </div>
 
@@ -1048,25 +1068,47 @@ Suma zaliczek: ${fmt(leaseAdvanceTotal(lease))}</div>
               <option>zakończona</option>
             </select>
           </div>
+
           <div class="form-grid section">
             <input id="l_adv_cold" type="number" step="0.01" placeholder="Zaliczka zimna woda" />
             <input id="l_adv_hot" type="number" step="0.01" placeholder="Zaliczka ciepła woda" />
             <input id="l_adv_el" type="number" step="0.01" placeholder="Zaliczka prąd" />
             <input id="l_adv_gas" type="number" step="0.01" placeholder="Zaliczka gaz" />
           </div>
+
           <div class="form-grid section">
             <input id="l_adv_heat" type="number" step="0.01" placeholder="Zaliczka ciepło" />
+            <input id="l_fee_waste" type="number" step="0.01" placeholder="Śmieci / miesiąc" />
+            <input id="l_fee_internet" type="number" step="0.01" placeholder="Internet / miesiąc" />
+            <input id="l_rent_due" type="number" value="5" placeholder="Termin płatności czynszu" />
           </div>
+
+          <div class="form-grid section">
+            <input id="l_other_due" type="number" value="10" placeholder="Termin płatności pozostałych opłat" />
+          </div>
+
           <div class="section"><button class="btn green" onclick="addLease()">Dodaj umowę</button></div>
         </div>
 
         <div class="card section">
           <div class="panel-title">
             <h3>Umowy</h3>
-            <button class="btn secondary" onclick="generateMonthlyCharges()">Generuj miesięczne czynsze</button>
+            <button class="btn secondary" onclick="generateMonthlyCharges()">Generuj miesięczne opłaty</button>
           </div>
           <table>
-            <thead><tr><th>Najemca</th><th>Lokal</th><th>Okres</th><th>Czynsz</th><th>Zaliczki</th><th>Status</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Najemca</th>
+                <th>Lokal</th>
+                <th>Okres</th>
+                <th>Czynsz</th>
+                <th>Stałe opłaty</th>
+                <th>Zaliczki media</th>
+                <th>Terminy</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
               ${state.leases.map((l) => `
                 <tr>
@@ -1074,7 +1116,15 @@ Suma zaliczek: ${fmt(leaseAdvanceTotal(lease))}</div>
                   <td>${unitLabel(l.unitId)}</td>
                   <td>${l.startDate}<br><span class="muted small">do ${l.endDate || "bezterminowo"}</span></td>
                   <td>${fmt(l.rent)}</td>
+                  <td>
+                    śmieci: ${fmt(l.feeWaste || 0)}<br>
+                    internet: ${fmt(l.feeInternet || 0)}
+                  </td>
                   <td>${fmt(leaseAdvanceTotal(l))}</td>
+                  <td>
+                    czynsz: ${l.rentDueDay || 5}<br>
+                    pozostałe: ${l.otherDueDay || 10}
+                  </td>
                   <td><span class="badge ${l.status === "aktywna" ? "status-active" : "status-closed"}">${l.status}</span></td>
                   <td><button class="btn secondary small" onclick="removeLease('${l.id}')">Usuń</button></td>
                 </tr>
@@ -1219,13 +1269,15 @@ Suma zaliczek: ${fmt(leaseAdvanceTotal(lease))}</div>
         const qty = line.qty !== undefined && line.qty !== null ? ` | ilość: ${line.qty}` : "";
         const unit = line.unit ? ` ${line.unit}` : "";
         const rate = line.rate ? ` | stawka: ${fmt(line.rate)}` : "";
-        return `${line.label}${qty}${unit}${rate} | kwota: ${fmt(line.amount)}`;
+        const group = line.group === "rent" ? " | termin: czynsz" : " | termin: pozostałe";
+        return `${line.label}${qty}${unit}${rate}${group} | kwota: ${fmt(line.amount)}`;
       }).join("\n");
 
       return `Miesiąc: ${fmtMonth(settlement.month)}
 Najemca: ${settlement.tenantName}
 Lokal: ${settlement.unitLabel}
-Termin płatności: ${settlement.dueDate}
+Termin płatności czynszu: ${settlement.dueDateRent || "—"}
+Termin płatności pozostałych opłat: ${settlement.dueDateOther || "—"}
 ${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
 
 Pozycje:
@@ -1517,7 +1569,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             <input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" />
             <input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" />
             <input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" />
-            <input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Dzień płatności" />
+            <input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Domyślny dzień płatności" />
           </div>
           <div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div>
         </div>
@@ -1652,11 +1704,19 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         deposit: Number(document.getElementById("l_deposit").value || 0),
         billingDay: Number(document.getElementById("l_billing").value || 5),
         status: document.getElementById("l_status").value,
+
         advanceColdWater: Number(document.getElementById("l_adv_cold").value || 0),
         advanceHotWater: Number(document.getElementById("l_adv_hot").value || 0),
         advanceElectricity: Number(document.getElementById("l_adv_el").value || 0),
         advanceGas: Number(document.getElementById("l_adv_gas").value || 0),
         advanceHeat: Number(document.getElementById("l_adv_heat").value || 0),
+
+        feeWaste: Number(document.getElementById("l_fee_waste").value || 0),
+        feeInternet: Number(document.getElementById("l_fee_internet").value || 0),
+
+        rentDueDay: Number(document.getElementById("l_rent_due").value || 5),
+        otherDueDay: Number(document.getElementById("l_other_due").value || 10),
+
         notes: ""
       });
 
@@ -1785,10 +1845,47 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         if (!unit || !tenant) continue;
 
         const lines = [];
-        lines.push({ label: "Czynsz", qty: 1, unit: "mies.", rate: Number(lease.rent || 0), amount: Number(lease.rent || 0) });
+
+        lines.push({
+          label: "Czynsz",
+          qty: 1,
+          unit: "mies.",
+          rate: Number(lease.rent || 0),
+          amount: Number(lease.rent || 0),
+          group: "rent"
+        });
 
         if (Number(unit.serviceCharge || 0) > 0) {
-          lines.push({ label: "Opłata administracyjna", qty: 1, unit: "mies.", rate: Number(unit.serviceCharge || 0), amount: Number(unit.serviceCharge || 0) });
+          lines.push({
+            label: "Opłata administracyjna",
+            qty: 1,
+            unit: "mies.",
+            rate: Number(unit.serviceCharge || 0),
+            amount: Number(unit.serviceCharge || 0),
+            group: "other"
+          });
+        }
+
+        if (Number(lease.feeWaste || 0) > 0) {
+          lines.push({
+            label: "Śmieci",
+            qty: 1,
+            unit: "mies.",
+            rate: Number(lease.feeWaste || 0),
+            amount: Number(lease.feeWaste || 0),
+            group: "other"
+          });
+        }
+
+        if (Number(lease.feeInternet || 0) > 0) {
+          lines.push({
+            label: "Internet",
+            qty: 1,
+            unit: "mies.",
+            rate: Number(lease.feeInternet || 0),
+            amount: Number(lease.feeInternet || 0),
+            group: "other"
+          });
         }
 
         const utilityLines = utilityBreakdownForUnit(unit.id, month);
@@ -1799,7 +1896,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             qty: u.usage,
             unit: u.meter.unit,
             rate: Number(u.meter.rate || 0),
-            amount: Number((u.amount || 0).toFixed(2))
+            amount: Number((u.amount || 0).toFixed(2)),
+            group: "other"
           });
         });
 
@@ -1813,7 +1911,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           tenantName: tenant.name,
           unitId: unit.id,
           unitLabel: unitLabel(unit.id),
-          dueDate: dueDateForMonth(month),
+          dueDateRent: dueDateForMonthByDay(month, lease.rentDueDay || 5),
+          dueDateOther: dueDateForMonthByDay(month, lease.otherDueDay || 10),
           bankAccount: state.settings.bankAccount || "",
           lines,
           total: Number(total.toFixed(2)),
@@ -2056,18 +2155,58 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       let created = 0;
 
       state.leases.filter((l) => l.status === "aktywna").forEach((l) => {
-        const exists = state.charges.some((c) => c.leaseId === l.id && c.type === `Czynsz ${month}`);
-        if (!exists) {
-          const unit = unitById(l.unitId);
-          const amount = Number(l.rent || 0) + Number(unit?.serviceCharge || 0);
-          const due = new Date();
-          due.setDate(Number(l.billingDay || 5));
+        const unit = unitById(l.unitId);
+
+        const rentExists = state.charges.some((c) => c.leaseId === l.id && c.type === `Czynsz ${month}`);
+        if (!rentExists && Number(l.rent || 0) > 0) {
           state.charges.push({
             id: uid("c"),
             leaseId: l.id,
             type: `Czynsz ${month}`,
-            amount,
-            dueDate: due.toISOString().slice(0, 10),
+            amount: Number(l.rent || 0),
+            dueDate: dueDateForMonthByDay(month, l.rentDueDay || 5),
+            status: "oczekujące",
+            notes: "Automatycznie wygenerowano"
+          });
+          created++;
+        }
+
+        const adminExists = state.charges.some((c) => c.leaseId === l.id && c.type === `Administracja ${month}`);
+        if (!adminExists && Number(unit?.serviceCharge || 0) > 0) {
+          state.charges.push({
+            id: uid("c"),
+            leaseId: l.id,
+            type: `Administracja ${month}`,
+            amount: Number(unit?.serviceCharge || 0),
+            dueDate: dueDateForMonthByDay(month, l.otherDueDay || 10),
+            status: "oczekujące",
+            notes: "Automatycznie wygenerowano"
+          });
+          created++;
+        }
+
+        const wasteExists = state.charges.some((c) => c.leaseId === l.id && c.type === `Śmieci ${month}`);
+        if (!wasteExists && Number(l.feeWaste || 0) > 0) {
+          state.charges.push({
+            id: uid("c"),
+            leaseId: l.id,
+            type: `Śmieci ${month}`,
+            amount: Number(l.feeWaste || 0),
+            dueDate: dueDateForMonthByDay(month, l.otherDueDay || 10),
+            status: "oczekujące",
+            notes: "Automatycznie wygenerowano"
+          });
+          created++;
+        }
+
+        const internetExists = state.charges.some((c) => c.leaseId === l.id && c.type === `Internet ${month}`);
+        if (!internetExists && Number(l.feeInternet || 0) > 0) {
+          state.charges.push({
+            id: uid("c"),
+            leaseId: l.id,
+            type: `Internet ${month}`,
+            amount: Number(l.feeInternet || 0),
+            dueDate: dueDateForMonthByDay(month, l.otherDueDay || 10),
             status: "oczekujące",
             notes: "Automatycznie wygenerowano"
           });
