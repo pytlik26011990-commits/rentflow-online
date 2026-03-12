@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RentFlow V3 - Logowanie</title>
+  <style>
+    body{margin:0;font-family:Inter,Arial,sans-serif;background:linear-gradient(180deg,#0a0f1d 0%,#0f1730 100%);color:#eef4ff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .wrap{width:100%;max-width:980px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    .card{background:#131a2e;border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:24px}
+    h1,h2{margin-top:0}
+    input{width:100%;padding:12px;margin-bottom:12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:#0d1428;color:#fff}
+    button{width:100%;padding:12px;border:none;border-radius:12px;font-weight:700;cursor:pointer;background:linear-gradient(135deg,#5ea1ff,#7e8cff);color:#fff}
+    .msg{margin-top:10px;color:#ffb3b3;min-height:20px}
+    @media (max-width:820px){.wrap{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>RentFlow V3</h1>
+      <p>Wersja z logowaniem i PostgreSQL.</p>
+      <h2>Logowanie</h2>
+      <input id="loginEmail" type="email" placeholder="E-mail" />
+      <input id="loginPassword" type="password" placeholder="Hasło" />
+      <button onclick="login()">Zaloguj</button>
+      <div id="loginMsg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Załóż konto właściciela</h2>
+      <input id="regCompany" placeholder="Nazwa firmy / marki" />
+      <input id="regName" placeholder="Imię i nazwisko" />
+      <input id="regEmail" type="email" placeholder="E-mail" />
+      <input id="regPassword" type="password" placeholder="Hasło" />
+      <button onclick="registerUser()">Utwórz konto</button>
+      <div id="regMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <script>
+    async function login() {
+      const r = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: document.getElementById("loginEmail").value,
+          password: document.getElementById("loginPassword").value
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        document.getElementById("loginMsg").textContent = data.error || "Błąd logowania";
+        return;
+      }
+      location.href = "/";
+    }
+
+    async function registerUser() {
+      const r = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName: document.getElementById("regCompany").value,
+          name: document.getElementById("regName").value,
+          email: document.getElementById("regEmail").value,
+          password: document.getElementById("regPassword").value
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        document.getElementById("regMsg").textContent = data.error || "Błąd rejestracji";
+        return;
+      }
+      location.href = "/";
+    }
+  </script>
+</body>
+</html>

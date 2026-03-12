@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RentFlow Pro</title>
+  <title>RentFlow V3</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -223,7 +223,7 @@
 <body>
   <div class="app">
     <aside>
-      <div class="brand">RentFlow Pro</div>
+      <div class="brand">RentFlow V3</div>
       <div class="sub">System zarządzania najmem online</div>
       <div class="nav" id="nav"></div>
     </aside>
@@ -235,10 +235,10 @@
           <p id="pageSubtitle">Podgląd portfela najmu, płatności i mediów.</p>
         </div>
         <div class="actions">
-          <button class="btn secondary" onclick="resetDemo()">Przywróć demo</button>
           <button class="btn secondary" onclick="exportJSON()">Eksport JSON</button>
           <button class="btn secondary" onclick="exportCSVBundle()">Eksport CSV</button>
           <button class="btn yellow" onclick="importFile.click()">Import JSON</button>
+          <button class="btn red" onclick="logout()">Wyloguj</button>
         </div>
       </div>
 
@@ -270,7 +270,7 @@
       expenses: [],
       tickets: [],
       settings: {
-        companyName: "RentFlow Pro",
+        companyName: "RentFlow V3",
         ownerName: "Zarządca",
         baseCurrency: "PLN",
         utilityVAT: 23,
@@ -333,11 +333,9 @@
       state = await apiGet("/api/state");
     }
 
-    async function resetDemo() {
-      if (!confirm("Na pewno przywrócić dane demo?")) return;
-      const res = await apiPost("/api/reset-demo", {});
-      state = res.data;
-      renderAll();
+    async function logout() {
+      await fetch("/api/logout", { method: "POST" });
+      location.href = "/login";
     }
 
     function buildingName(id) {
@@ -628,7 +626,8 @@
             <select id="m_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
             <select id="m_type">
               <option>prąd</option>
-              <option>woda</option>
+              <option>zimna woda</option>
+              <option>ciepła woda</option>
               <option>gaz</option>
               <option>ciepło</option>
             </select>
@@ -942,10 +941,6 @@
       state.tenants.forEach((t) => { if (t.unitId === id) t.unitId = ""; });
       state.leases = state.leases.filter((l) => l.unitId !== id);
       state.meters = state.meters.filter((m) => m.unitId !== id);
-      state.meterReadings = state.meterReadings.filter((r) => {
-        const meter = state.meters.find((m) => m.id === r.meterId);
-        return !!meter;
-      });
       await save();
     }
 
@@ -1292,10 +1287,20 @@
     }
 
     async function init() {
-      renderNav();
-      await load();
-      renderAll();
-      showPage("dashboard");
+      try {
+        const me = await fetch("/api/me");
+        if (!me.ok) {
+          location.href = "/login";
+          return;
+        }
+
+        renderNav();
+        await load();
+        renderAll();
+        showPage("dashboard");
+      } catch (e) {
+        location.href = "/login";
+      }
     }
 
     init();

@@ -1,13 +1,17 @@
 {
-    "name": "rentflow-online",
-    "version": "1.0.0",
-    "description": "System zarządzania najmem mieszkań online",
-    "main": "server.js",
-    "type": "commonjs",
-    "scripts": {
-      "start": "node server.js"
-    },
-    "dependencies": {
-      "express": "^4.21.2"
-    }
+  "name": "rentflow-v3",
+  "version": "3.0.0",
+  "description": "RentFlow V3 - system zarządzania najmem z logowaniem i PostgreSQL",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "connect-pg-simple": "^10.0.0",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "pg": "^8.13.1"
   }
+}
