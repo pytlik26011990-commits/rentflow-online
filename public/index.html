@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RentFlow V8</title>
+  <title>RentFlow V9</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -93,6 +93,7 @@
       gap: 10px;
       align-items: center;
       margin-bottom: 14px;
+      flex-wrap: wrap;
     }
     .panel-title h3 { margin: 0; }
     input, select, textarea {
@@ -170,8 +171,8 @@
 <body>
   <div class="app">
     <aside>
-      <div class="brand">RentFlow V8</div>
-      <div class="sub">Opłaty stałe, media, saldo, terminy</div>
+      <div class="brand">RentFlow V9</div>
+      <div class="sub">Indywidualne rozliczenia umów + kontrola mediów</div>
       <div class="nav" id="nav"></div>
     </aside>
 
@@ -222,7 +223,7 @@
       settlements: [],
       periodSettlements: [],
       settings: {
-        companyName: "RentFlow V8",
+        companyName: "RentFlow V9",
         ownerName: "Zarządca",
         baseCurrency: "PLN",
         utilityVAT: 23,
@@ -235,6 +236,7 @@
     let selectedSettlementId = null;
     let selectedPeriodSettlementId = null;
     let selectedTenantCardId = null;
+    let settlementPreviewLeaseId = "";
 
     const pages = [
       ["dashboard", "Dashboard", "Podgląd portfela najmu, płatności i mediów."],
@@ -242,8 +244,8 @@
       ["tenants", "Najemcy", "Baza najemców i kontaktów."],
       ["tenantCard", "Karta najemcy", "Saldo, historia, rozliczenia i wpłaty."],
       ["leases", "Umowy", "Umowy najmu, opłaty stałe, media i terminy płatności."],
-      ["meters", "Media", "Liczniki, odczyty, korekty i rozliczenia zużycia."],
-      ["settlements", "Rozliczenia miesięczne", "Snapshot miesiąca i pełne pozycje rozliczenia."],
+      ["meters", "Media", "Liczniki, odczyty, korekty i kontrola zużycia."],
+      ["settlements", "Rozliczenia miesięczne", "Każda umowa osobno, z kontrolą brakujących mediów."],
       ["periodSettlements", "Rozliczenia okresowe", "Porównanie zaliczek z kosztami rzeczywistymi."],
       ["payments", "Opłaty i płatności", "Należności, wpłaty i zaległości."],
       ["expenses", "Koszty", "Koszty budynków i lokali."],
@@ -258,23 +260,13 @@
       return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
     }
 
-    function today() {
-      return new Date().toISOString().slice(0, 10);
-    }
-
-    function currentMonth() {
-      return new Date().toISOString().slice(0, 7);
-    }
-
-    function monthStart(month) {
-      return `${month}-01`;
-    }
-
+    function today() { return new Date().toISOString().slice(0, 10); }
+    function currentMonth() { return new Date().toISOString().slice(0, 7); }
+    function monthStart(month) { return `${month}-01`; }
     function monthEnd(month) {
       const [y, m] = month.split("-").map(Number);
       return new Date(y, m, 0).toISOString().slice(0, 10);
     }
-
     function monthRange(from, to) {
       const arr = [];
       let [y, m] = from.split("-").map(Number);
@@ -286,7 +278,6 @@
       }
       return arr;
     }
-
     function dueDateForMonthByDay(month, dayInput) {
       const [y, m] = month.split("-").map(Number);
       const day = Math.max(1, Math.min(28, Number(dayInput || 10)));
@@ -294,12 +285,8 @@
     }
 
     function fmt(n = 0) {
-      return new Intl.NumberFormat("pl-PL", {
-        style: "currency",
-        currency: state.settings.baseCurrency || "PLN"
-      }).format(Number(n || 0));
+      return new Intl.NumberFormat("pl-PL", { style: "currency", currency: state.settings.baseCurrency || "PLN" }).format(Number(n || 0));
     }
-
     function fmtMonth(month) {
       const [y, m] = month.split("-");
       return `${m}.${y}`;
@@ -310,7 +297,6 @@
       if (!r.ok) throw new Error("Błąd pobierania");
       return r.json();
     }
-
     async function apiPost(url, data) {
       const r = await fetch(url, {
         method: "POST",
@@ -335,7 +321,7 @@
       state.settlements ||= [];
       state.periodSettlements ||= [];
       state.settings ||= {};
-      state.settings.companyName ||= "RentFlow V8";
+      state.settings.companyName ||= "RentFlow V9";
       state.settings.ownerName ||= "";
       state.settings.baseCurrency ||= "PLN";
       state.settings.utilityVAT ||= 23;
@@ -361,79 +347,48 @@
       await apiPost("/api/state", state);
       renderAll();
     }
-
     async function load() {
       state = await apiGet("/api/state");
       normalizeState();
     }
-
     async function logout() {
       await fetch("/api/logout", { method: "POST" });
       location.href = "/login";
     }
 
-    function buildingName(id) {
-      return state.buildings.find((b) => b.id === id)?.name || "—";
-    }
-
-    function unitById(id) {
-      return state.units.find(u => u.id === id);
-    }
-
+    function buildingName(id) { return state.buildings.find((b) => b.id === id)?.name || "—"; }
+    function unitById(id) { return state.units.find(u => u.id === id); }
     function unitLabel(id) {
       const u = state.units.find((x) => x.id === id);
       return u ? `${buildingName(u.buildingId)} / lokal ${u.code}` : "—";
     }
-
-    function tenantName(id) {
-      return state.tenants.find((t) => t.id === id)?.name || "—";
-    }
-
-    function tenantById(id) {
-      return state.tenants.find((t) => t.id === id);
-    }
-
-    function leaseById(id) {
-      return state.leases.find(l => l.id === id);
-    }
-
+    function tenantName(id) { return state.tenants.find((t) => t.id === id)?.name || "—"; }
+    function tenantById(id) { return state.tenants.find((t) => t.id === id); }
+    function leaseById(id) { return state.leases.find(l => l.id === id); }
     function leaseLabel(id) {
       const l = state.leases.find((x) => x.id === id);
       return l ? `${tenantName(l.tenantId)} — ${unitLabel(l.unitId)}` : "—";
     }
-
-    function activeLeaseByUnit(unitId) {
-      return state.leases.find((l) => l.unitId === unitId && l.status === "aktywna");
-    }
-
-    function activeLeaseByTenant(tenantId) {
-      return state.leases.find((l) => l.tenantId === tenantId && l.status === "aktywna");
-    }
+    function activeLeaseByUnit(unitId) { return state.leases.find((l) => l.unitId === unitId && l.status === "aktywna"); }
+    function activeLeaseByTenant(tenantId) { return state.leases.find((l) => l.tenantId === tenantId && l.status === "aktywna"); }
 
     function chargePaidAmount(chargeId) {
-      return state.payments
-        .filter((p) => p.chargeId === chargeId)
-        .reduce((a, b) => a + Number(b.amount || 0), 0);
+      return state.payments.filter((p) => p.chargeId === chargeId).reduce((a, b) => a + Number(b.amount || 0), 0);
     }
-
     function calcChargeStatus(c) {
       const paid = chargePaidAmount(c.id);
       if (paid >= Number(c.amount)) return "opłacone";
       if (new Date(c.dueDate) < new Date(today())) return "zaległe";
       return "oczekujące";
     }
-
     function occupancyRate() {
       if (!state.units.length) return 0;
       return Math.round((state.units.filter((u) => u.status === "wynajęte").length / state.units.length) * 100);
     }
-
     function totals() {
       const due = state.charges.reduce((a, c) => a + Number(c.amount || 0), 0);
       const paid = state.payments.reduce((a, p) => a + Number(p.amount || 0), 0);
-      const overdue = state.charges
-        .filter((c) => calcChargeStatus(c) === "zaległe")
-        .reduce((a, c) => a + Math.max(0, Number(c.amount) - chargePaidAmount(c.id)), 0);
+      const overdue = state.charges.filter((c) => calcChargeStatus(c) === "zaległe").reduce((a, c) => a + Math.max(0, Number(c.amount) - chargePaidAmount(c.id)), 0);
       const expenses = state.expenses.reduce((a, e) => a + Number(e.amount || 0), 0);
       return { due, paid, overdue, expenses, net: paid - expenses };
     }
@@ -442,71 +397,46 @@
       if (type === "prąd") return "kWh";
       return "m³";
     }
-
     function readingsForMeter(meterId) {
-      return state.meterReadings
-        .filter((r) => r.meterId === meterId)
-        .sort((a, b) => (a.date + a.id).localeCompare(b.date + b.id));
+      return state.meterReadings.filter((r) => r.meterId === meterId).sort((a, b) => (a.date + a.id).localeCompare(b.date + b.id));
     }
-
     function latestReadingOnOrBefore(meterId, date) {
       const all = readingsForMeter(meterId).filter((r) => r.date <= date);
       return all.length ? all[all.length - 1] : null;
     }
-
     function readingBefore(meterId, date) {
       const all = readingsForMeter(meterId).filter((r) => r.date < date);
       return all.length ? all[all.length - 1] : null;
     }
-
     function previousReadingOf(reading) {
       const all = readingsForMeter(reading.meterId);
       const idx = all.findIndex((r) => r.id === reading.id);
       if (idx <= 0) return null;
       return all[idx - 1];
     }
-
     function nextReadingOf(reading) {
       const all = readingsForMeter(reading.meterId);
       const idx = all.findIndex((r) => r.id === reading.id);
       if (idx < 0 || idx >= all.length - 1) return null;
       return all[idx + 1];
     }
-
     function meterConsumptionForMonth(meterId, month) {
       const meter = state.meters.find((m) => m.id === meterId);
       if (!meter) return null;
 
       const start = monthStart(month);
       const end = monthEnd(month);
-
       const startReading = readingBefore(meterId, start);
       const endReading = latestReadingOnOrBefore(meterId, end);
 
       if (!startReading || !endReading) {
-        return {
-          meter,
-          usage: 0,
-          amount: 0,
-          startValue: startReading?.value ?? null,
-          endValue: endReading?.value ?? null,
-          ready: false
-        };
+        return { meter, usage: 0, amount: 0, startValue: startReading?.value ?? null, endValue: endReading?.value ?? null, ready: false };
       }
 
       const usage = Math.max(0, Number(endReading.value) - Number(startReading.value));
       const amount = usage * Number(meter.rate || 0);
-
-      return {
-        meter,
-        usage,
-        amount,
-        startValue: startReading.value,
-        endValue: endReading.value,
-        ready: true
-      };
+      return { meter, usage, amount, startValue: startReading.value, endValue: endReading.value, ready: true };
     }
-
     function utilityBreakdownForUnit(unitId, month) {
       const meters = state.meters.filter((m) => m.unitId === unitId);
       return meters.map((m) => meterConsumptionForMonth(m.id, month));
@@ -522,7 +452,6 @@
         default: return null;
       }
     }
-
     function leaseAdvanceTotal(lease) {
       return Number(lease.advanceColdWater || 0)
         + Number(lease.advanceHotWater || 0)
@@ -530,228 +459,123 @@
         + Number(lease.advanceGas || 0)
         + Number(lease.advanceHeat || 0);
     }
-
     function leaseFixedFeesTotal(lease) {
       return Number(lease.feeWaste || 0) + Number(lease.feeInternet || 0);
     }
 
-    function monthlyOtherChargesForLease(lease, month) {
+    function getMissingMeterTypesForLeaseMonth(lease, month) {
+      const meters = state.meters.filter(m => m.unitId === lease.unitId);
+      const expectedTypes = meters.map(m => m.type);
+      const missing = [];
+      for (const meter of meters) {
+        const result = meterConsumptionForMonth(meter.id, month);
+        if (!result?.ready) missing.push(meter.type);
+      }
+      return [...new Set(missing)];
+    }
+
+    function buildMonthlySettlementDraft(lease, month) {
       const unit = unitById(lease.unitId);
-      const out = [];
+      const tenant = tenantById(lease.tenantId);
+      if (!unit || !tenant) return null;
+
+      const lines = [];
+      lines.push({ label: "Czynsz", qty: 1, unit: "mies.", rate: Number(lease.rent || 0), amount: Number(lease.rent || 0), group: "rent" });
 
       if (Number(unit?.serviceCharge || 0) > 0) {
-        out.push({ label: "Opłata administracyjna", amount: Number(unit.serviceCharge || 0), group: "other" });
+        lines.push({ label: "Opłata administracyjna", qty: 1, unit: "mies.", rate: Number(unit.serviceCharge || 0), amount: Number(unit.serviceCharge || 0), group: "other" });
       }
       if (Number(lease.feeWaste || 0) > 0) {
-        out.push({ label: "Śmieci", amount: Number(lease.feeWaste || 0), group: "other" });
+        lines.push({ label: "Śmieci", qty: 1, unit: "mies.", rate: Number(lease.feeWaste || 0), amount: Number(lease.feeWaste || 0), group: "other" });
       }
       if (Number(lease.feeInternet || 0) > 0) {
-        out.push({ label: "Internet", amount: Number(lease.feeInternet || 0), group: "other" });
+        lines.push({ label: "Internet", qty: 1, unit: "mies.", rate: Number(lease.feeInternet || 0), amount: Number(lease.feeInternet || 0), group: "other" });
       }
 
-      const utilityAdvanceMap = [
+      const advanceRows = [
         ["advanceColdWater", "Zaliczka zimna woda"],
         ["advanceHotWater", "Zaliczka ciepła woda"],
         ["advanceElectricity", "Zaliczka prąd"],
         ["advanceGas", "Zaliczka gaz"],
         ["advanceHeat", "Zaliczka ciepło"]
       ];
-
-      utilityAdvanceMap.forEach(([key, label]) => {
+      advanceRows.forEach(([key, label]) => {
         if (Number(lease[key] || 0) > 0) {
-          out.push({ label, amount: Number(lease[key] || 0), group: "other" });
+          lines.push({ label, qty: 1, unit: "mies.", rate: Number(lease[key] || 0), amount: Number(lease[key] || 0), group: "other" });
         }
       });
 
-      return out;
+      const utilityLines = utilityBreakdownForUnit(unit.id, month);
+      utilityLines.forEach((u) => {
+        if (!u || !u.meter || !u.ready) return;
+        lines.push({
+          label: `Rzeczywiste zużycie: ${u.meter.type}`,
+          qty: u.usage,
+          unit: u.meter.unit,
+          rate: Number(u.meter.rate || 0),
+          amount: Number((u.amount || 0).toFixed(2)),
+          group: "other"
+        });
+      });
+
+      const total = lines.reduce((a, b) => a + Number(b.amount || 0), 0);
+      const missingTypes = getMissingMeterTypesForLeaseMonth(lease, month);
+
+      return {
+        month,
+        leaseId: lease.id,
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        unitId: unit.id,
+        unitLabel: unitLabel(unit.id),
+        dueDateRent: dueDateForMonthByDay(month, lease.rentDueDay || 5),
+        dueDateOther: dueDateForMonthByDay(month, lease.otherDueDay || 10),
+        bankAccount: state.settings.bankAccount || "",
+        lines,
+        total: Number(total.toFixed(2)),
+        missingTypes,
+        canGenerate: missingTypes.length === 0
+      };
     }
 
     function tenantLedger(tenantId) {
       const lease = activeLeaseByTenant(tenantId) || state.leases.find(l => l.tenantId === tenantId);
       if (!lease) return { items: [], charges: 0, payments: 0, balance: 0 };
 
-      const chargeItems = state.charges
-        .filter(c => c.leaseId === lease.id)
-        .map(c => ({
-          date: c.dueDate,
-          type: "Obciążenie",
-          label: c.type,
-          amount: Number(c.amount || 0)
-        }));
+      const chargeItems = state.charges.filter(c => c.leaseId === lease.id).map(c => ({ date: c.dueDate, type: "Obciążenie", label: c.type, amount: Number(c.amount || 0) }));
+      const paymentItems = state.payments.filter(p => p.leaseId === lease.id).map(p => ({ date: p.date, type: "Wpłata", label: p.method, amount: -Number(p.amount || 0) }));
+      const settlementItems = state.periodSettlements.filter(s => s.tenantId === tenantId).map(s => ({ date: s.createdAt?.slice(0,10) || today(), type: "Rozliczenie okresowe", label: `${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}`, amount: Number(s.finalDifference || 0) }));
 
-      const paymentItems = state.payments
-        .filter(p => p.leaseId === lease.id)
-        .map(p => ({
-          date: p.date,
-          type: "Wpłata",
-          label: p.method,
-          amount: -Number(p.amount || 0)
-        }));
-
-      const settlementItems = state.periodSettlements
-        .filter(s => s.tenantId === tenantId)
-        .map(s => ({
-          date: s.createdAt?.slice(0,10) || today(),
-          type: "Rozliczenie okresowe",
-          label: `${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}`,
-          amount: Number(s.finalDifference || 0)
-        }));
-
-      const items = [...chargeItems, ...paymentItems, ...settlementItems]
-        .sort((a,b) => (a.date + a.type).localeCompare(b.date + b.type));
-
+      const items = [...chargeItems, ...paymentItems, ...settlementItems].sort((a,b) => (a.date + a.type).localeCompare(b.date + b.type));
       const charges = chargeItems.reduce((a,b)=>a+b.amount,0) + settlementItems.reduce((a,b)=>a+b.amount,0);
       const payments = paymentItems.reduce((a,b)=>a+Math.abs(b.amount),0);
       const balance = charges - payments;
-
       return { items, charges, payments, balance };
     }
 
-    function findSettlement(id) {
-      return state.settlements.find((s) => s.id === id);
-    }
-
-    function findPeriodSettlement(id) {
-      return state.periodSettlements.find((s) => s.id === id);
-    }
+    function findSettlement(id) { return state.settlements.find((s) => s.id === id); }
+    function findPeriodSettlement(id) { return state.periodSettlements.find((s) => s.id === id); }
 
     function settlementMessage(settlement) {
       const tenant = tenantById(settlement.tenantId);
       const name = tenant?.name || "Najemca";
       const lines = settlement.lines.map((l) => `- ${l.label}: ${fmt(l.amount)}`).join("\n");
-
-      return `Dzień dobry ${name},
-
-przesyłam rozliczenie za ${fmtMonth(settlement.month)} dla lokalu:
-${settlement.unitLabel}
-
-Pozycje rozliczenia:
-${lines}
-
-Razem do zapłaty: ${fmt(settlement.total)}
-Termin płatności czynszu: ${settlement.dueDateRent || "—"}
-Termin płatności pozostałych opłat: ${settlement.dueDateOther || "—"}
-${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
-
-Pozdrawiam
-${state.settings.ownerName || state.settings.companyName}`;
+      return `Dzień dobry ${name},\n\nprzesyłam rozliczenie za ${fmtMonth(settlement.month)} dla lokalu:\n${settlement.unitLabel}\n\nPozycje rozliczenia:\n${lines}\n\nRazem do zapłaty: ${fmt(settlement.total)}\nTermin płatności czynszu: ${settlement.dueDateRent || "—"}\nTermin płatności pozostałych opłat: ${settlement.dueDateOther || "—"}\n${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}\n\nPozdrawiam\n${state.settings.ownerName || state.settings.companyName}`;
     }
 
     function periodSettlementMessage(settlement) {
       const tenant = tenantById(settlement.tenantId);
       const name = tenant?.name || "Najemca";
-      const lines = settlement.details.map((d) => {
-        const diff = Number(d.difference || 0);
-        return `- ${d.label}: koszt rzeczywisty ${fmt(d.actual)}, zaliczki ${fmt(d.advances)}, różnica ${fmt(diff)}`;
-      }).join("\n");
-
-      return `Dzień dobry ${name},
-
-przesyłam rozliczenie okresowe mediów za okres ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}.
-
-Szczegóły:
-${lines}
-
-Łączna różnica: ${fmt(settlement.finalDifference)}
-${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 0 ? "Nadpłata / do zwrotu" : "Rozliczenie wyszło na zero"}
-${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
-
-Pozdrawiam
-${state.settings.ownerName || state.settings.companyName}`;
+      const lines = settlement.details.map((d) => `- ${d.label}: koszt rzeczywisty ${fmt(d.actual)}, zaliczki ${fmt(d.advances)}, różnica ${fmt(d.difference)}`).join("\n");
+      return `Dzień dobry ${name},\n\nprzesyłam rozliczenie okresowe mediów za okres ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}.\n\nSzczegóły:\n${lines}\n\nŁączna różnica: ${fmt(settlement.finalDifference)}\n${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 0 ? "Nadpłata / do zwrotu" : "Rozliczenie wyszło na zero"}\n${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}\n\nPozdrawiam\n${state.settings.ownerName || state.settings.companyName}`;
     }
 
     function settlementPrintableHtml(settlement) {
-      return `
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-<meta charset="UTF-8" />
-<title>Rozliczenie ${settlement.month}</title>
-<style>
-body{font-family:Arial,sans-serif;padding:32px;color:#111}
-h1{margin-bottom:4px}
-table{width:100%;border-collapse:collapse;margin-top:20px}
-th,td{border:1px solid #ccc;padding:10px;text-align:left}
-th{background:#f2f2f2}
-.right{text-align:right}
-.box{margin-top:20px;padding:14px;border:1px solid #ddd}
-</style>
-</head>
-<body>
-<h1>Rozliczenie najmu</h1>
-<div>${state.settings.companyName}</div>
-<div>${state.settings.ownerName || ""}</div>
-<div class="box">
-<div><strong>Miesiąc:</strong> ${fmtMonth(settlement.month)}</div>
-<div><strong>Najemca:</strong> ${settlement.tenantName}</div>
-<div><strong>Lokal:</strong> ${settlement.unitLabel}</div>
-<div><strong>Termin płatności czynszu:</strong> ${settlement.dueDateRent || "—"}</div>
-<div><strong>Termin płatności pozostałych opłat:</strong> ${settlement.dueDateOther || "—"}</div>
-${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}
-</div>
-<table>
-<thead><tr><th>Pozycja</th><th>Ilość</th><th>Jednostka</th><th>Stawka</th><th>Grupa płatności</th><th class="right">Kwota</th></tr></thead>
-<tbody>
-${settlement.lines.map(line => `
-<tr>
-<td>${line.label}</td>
-<td>${line.qty ?? ""}</td>
-<td>${line.unit ?? ""}</td>
-<td>${line.rate ? fmt(line.rate) : ""}</td>
-<td>${line.group === "rent" ? "czynsz" : "pozostałe"}</td>
-<td class="right">${fmt(line.amount)}</td>
-</tr>
-`).join("")}
-<tr><td colspan="5" class="right"><strong>Razem</strong></td><td class="right"><strong>${fmt(settlement.total)}</strong></td></tr>
-</tbody>
-</table>
-</body>
-</html>`;
+      return `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8" /><title>Rozliczenie ${settlement.month}</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#111}h1{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ccc;padding:10px;text-align:left}th{background:#f2f2f2}.right{text-align:right}.box{margin-top:20px;padding:14px;border:1px solid #ddd}</style></head><body><h1>Rozliczenie najmu</h1><div>${state.settings.companyName}</div><div>${state.settings.ownerName || ""}</div><div class="box"><div><strong>Miesiąc:</strong> ${fmtMonth(settlement.month)}</div><div><strong>Najemca:</strong> ${settlement.tenantName}</div><div><strong>Lokal:</strong> ${settlement.unitLabel}</div><div><strong>Termin płatności czynszu:</strong> ${settlement.dueDateRent || "—"}</div><div><strong>Termin płatności pozostałych opłat:</strong> ${settlement.dueDateOther || "—"}</div>${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}</div><table><thead><tr><th>Pozycja</th><th>Ilość</th><th>Jednostka</th><th>Stawka</th><th>Grupa płatności</th><th class="right">Kwota</th></tr></thead><tbody>${settlement.lines.map(line => `<tr><td>${line.label}</td><td>${line.qty ?? ""}</td><td>${line.unit ?? ""}</td><td>${line.rate ? fmt(line.rate) : ""}</td><td>${line.group === "rent" ? "czynsz" : "pozostałe"}</td><td class="right">${fmt(line.amount)}</td></tr>`).join("")}<tr><td colspan="5" class="right"><strong>Razem</strong></td><td class="right"><strong>${fmt(settlement.total)}</strong></td></tr></tbody></table></body></html>`;
     }
 
     function periodSettlementPrintableHtml(settlement) {
-      return `
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-<meta charset="UTF-8" />
-<title>Rozliczenie okresowe</title>
-<style>
-body{font-family:Arial,sans-serif;padding:32px;color:#111}
-h1{margin-bottom:4px}
-table{width:100%;border-collapse:collapse;margin-top:20px}
-th,td{border:1px solid #ccc;padding:10px;text-align:left}
-th{background:#f2f2f2}
-.right{text-align:right}
-.box{margin-top:20px;padding:14px;border:1px solid #ddd}
-</style>
-</head>
-<body>
-<h1>Rozliczenie okresowe mediów</h1>
-<div>${state.settings.companyName}</div>
-<div>${state.settings.ownerName || ""}</div>
-<div class="box">
-<div><strong>Okres:</strong> ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}</div>
-<div><strong>Najemca:</strong> ${settlement.tenantName}</div>
-<div><strong>Lokal:</strong> ${settlement.unitLabel}</div>
-${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}
-</div>
-<table>
-<thead><tr><th>Pozycja</th><th class="right">Koszt rzeczywisty</th><th class="right">Zaliczki</th><th class="right">Różnica</th></tr></thead>
-<tbody>
-${settlement.details.map(d => `
-<tr>
-<td>${d.label}</td>
-<td class="right">${fmt(d.actual)}</td>
-<td class="right">${fmt(d.advances)}</td>
-<td class="right">${fmt(d.difference)}</td>
-</tr>
-`).join("")}
-<tr><td colspan="3" class="right"><strong>Wynik końcowy</strong></td><td class="right"><strong>${fmt(settlement.finalDifference)}</strong></td></tr>
-</tbody>
-</table>
-</body>
-</html>`;
+      return `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8" /><title>Rozliczenie okresowe</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#111}h1{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ccc;padding:10px;text-align:left}th{background:#f2f2f2}.right{text-align:right}.box{margin-top:20px;padding:14px;border:1px solid #ddd}</style></head><body><h1>Rozliczenie okresowe mediów</h1><div>${state.settings.companyName}</div><div>${state.settings.ownerName || ""}</div><div class="box"><div><strong>Okres:</strong> ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}</div><div><strong>Najemca:</strong> ${settlement.tenantName}</div><div><strong>Lokal:</strong> ${settlement.unitLabel}</div>${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}</div><table><thead><tr><th>Pozycja</th><th class="right">Koszt rzeczywisty</th><th class="right">Zaliczki</th><th class="right">Różnica</th></tr></thead><tbody>${settlement.details.map(d => `<tr><td>${d.label}</td><td class="right">${fmt(d.actual)}</td><td class="right">${fmt(d.advances)}</td><td class="right">${fmt(d.difference)}</td></tr>`).join("")}<tr><td colspan="3" class="right"><strong>Wynik końcowy</strong></td><td class="right"><strong>${fmt(settlement.finalDifference)}</strong></td></tr></tbody></table></body></html>`;
     }
 
     function openPrintWindow(html) {
@@ -762,13 +586,9 @@ ${settlement.details.map(d => `
       w.focus();
       setTimeout(() => w.print(), 400);
     }
-
     function copyToClipboard(text) {
-      navigator.clipboard.writeText(text)
-        .then(() => alert("Skopiowano."))
-        .catch(() => alert("Nie udało się skopiować."));
+      navigator.clipboard.writeText(text).then(() => alert("Skopiowano.")).catch(() => alert("Nie udało się skopiować."));
     }
-
     function mailtoText(email, subject, body) {
       window.location.href = `mailto:${encodeURIComponent(email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
@@ -777,7 +597,6 @@ ${settlement.details.map(d => `
       const nav = document.getElementById("nav");
       nav.innerHTML = pages.map(([id, label]) => `<button onclick="showPage('${id}')" id="nav_${id}">${label}</button>`).join("");
     }
-
     function showPage(id) {
       pages.forEach(([pid, label, sub]) => {
         document.getElementById(pid).classList.toggle("hidden", pid !== id);
@@ -801,31 +620,23 @@ ${settlement.details.map(d => `
           <div class="card"><div class="muted">Należności</div><div class="metric">${fmt(due)}</div></div>
           <div class="card"><div class="muted">Wpłaty</div><div class="metric">${fmt(paid)}</div></div>
         </div>
-
         <div class="grid three-col section">
           <div class="card"><div class="muted small">Zaległości</div><div class="metric" style="font-size:22px">${fmt(overdue)}</div></div>
           <div class="card"><div class="muted small">Wynik netto</div><div class="metric" style="font-size:22px">${fmt(net)}</div></div>
           <div class="card"><div class="muted small">Rozliczenia okresowe</div><div class="metric" style="font-size:22px">${periodCount}</div></div>
         </div>
-
         <div class="grid two section">
-          <div class="card">
-            <div class="panel-title"><h3>Szybki podgląd</h3></div>
-            <canvas id="cashflowChart"></canvas>
-          </div>
+          <div class="card"><div class="panel-title"><h3>Szybki podgląd</h3></div><canvas id="cashflowChart"></canvas></div>
           <div class="card">
             <div class="panel-title"><h3>Zadania i alarmy</h3></div>
-            <div class="notice ${overdue > 0 ? "danger-box" : ""}">
-              ${overdue > 0 ? `Masz zaległości na ${fmt(overdue)}.` : "Brak przeterminowanych zaległości."}
-            </div>
+            <div class="notice ${overdue > 0 ? "danger-box" : ""}">${overdue > 0 ? `Masz zaległości na ${fmt(overdue)}.` : "Brak przeterminowanych zaległości."}</div>
             <div class="section">
               <div class="card">Wolne lokale: <strong>${state.units.filter((u) => u.status === "wolne").length}</strong></div>
               <div class="card section">Otwarte usterki: <strong>${openTickets}</strong></div>
               <div class="card section">Snapshoty miesięczne: <strong>${state.settlements.length}</strong></div>
             </div>
           </div>
-        </div>
-      `;
+        </div>`;
       drawCashflowChart();
     }
 
@@ -840,66 +651,32 @@ ${settlement.details.map(d => `
           </div>
           <div class="section"><button class="btn green" onclick="addBuilding()">Dodaj budynek</button></div>
         </div>
-
         <div class="card section">
           <div class="panel-title"><h3>Dodaj lokal</h3></div>
           <div class="form-grid">
             <select id="u_building">${state.buildings.map((b) => `<option value="${b.id}">${b.name}</option>`).join("")}</select>
             <input id="u_code" placeholder="Nr lokalu" />
-            <select id="u_type">
-              <option>kawalerka</option>
-              <option>2 pokoje</option>
-              <option>3 pokoje</option>
-              <option>4 pokoje</option>
-            </select>
+            <select id="u_type"><option>kawalerka</option><option>2 pokoje</option><option>3 pokoje</option><option>4 pokoje</option></select>
             <input id="u_area" type="number" placeholder="Metraż m²" />
             <input id="u_floor" type="number" placeholder="Piętro" />
             <input id="u_rent" type="number" placeholder="Czynsz bazowy" />
             <input id="u_service" type="number" placeholder="Opłata adm." />
-            <select id="u_status">
-              <option>wynajęte</option>
-              <option>wolne</option>
-              <option>serwis</option>
-            </select>
+            <select id="u_status"><option>wynajęte</option><option>wolne</option><option>serwis</option></select>
           </div>
           <div class="section"><button class="btn green" onclick="addUnit()">Dodaj lokal</button></div>
         </div>
-
         <div class="card section">
           <div class="panel-title"><h3>Budynki</h3></div>
-          <table>
-            <thead><tr><th>Nazwa</th><th>Adres</th><th>Lokale</th><th></th></tr></thead>
-            <tbody>
-              ${state.buildings.map((b) => `
-                <tr>
-                  <td>${b.name}</td>
-                  <td>${b.address || "—"}</td>
-                  <td>${state.units.filter((u) => u.buildingId === b.id).length}</td>
-                  <td><button class="btn secondary small" onclick="removeBuilding('${b.id}')">Usuń</button></td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
+          <table><thead><tr><th>Nazwa</th><th>Adres</th><th>Lokale</th><th></th></tr></thead><tbody>
+            ${state.buildings.map((b) => `<tr><td>${b.name}</td><td>${b.address || "—"}</td><td>${state.units.filter((u) => u.buildingId === b.id).length}</td><td><button class="btn secondary small" onclick="removeBuilding('${b.id}')">Usuń</button></td></tr>`).join("")}
+          </tbody></table>
         </div>
-
         <div class="card section">
           <div class="panel-title"><h3>Lokale</h3></div>
-          <table>
-            <thead><tr><th>Lokal</th><th>Typ</th><th>Status</th><th>Czynsz</th><th></th></tr></thead>
-            <tbody>
-              ${state.units.map((u) => `
-                <tr>
-                  <td>${unitLabel(u.id)}</td>
-                  <td>${u.type}, ${u.area} m²</td>
-                  <td><span class="badge ${u.status === "wynajęte" ? "status-active" : "status-pending"}">${u.status}</span></td>
-                  <td>${fmt(u.rentDefault)}</td>
-                  <td><button class="btn secondary small" onclick="removeUnit('${u.id}')">Usuń</button></td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
+          <table><thead><tr><th>Lokal</th><th>Typ</th><th>Status</th><th>Czynsz</th><th></th></tr></thead><tbody>
+            ${state.units.map((u) => `<tr><td>${unitLabel(u.id)}</td><td>${u.type}, ${u.area} m²</td><td><span class="badge ${u.status === "wynajęte" ? "status-active" : "status-pending"}">${u.status}</span></td><td>${fmt(u.rentDefault)}</td><td><button class="btn secondary small" onclick="removeUnit('${u.id}')">Usuń</button></td></tr>`).join("")}
+          </tbody></table>
+        </div>`;
     }
 
     function renderTenants() {
@@ -910,52 +687,25 @@ ${settlement.details.map(d => `
             <input id="t_name" placeholder="Imię i nazwisko" />
             <input id="t_phone" placeholder="Telefon" />
             <input id="t_email" placeholder="E-mail" />
-            <select id="t_unit">
-              <option value="">Bez przypisania</option>
-              ${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}
-            </select>
+            <select id="t_unit"><option value="">Bez przypisania</option>${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
           </div>
           <div class="section"><button class="btn green" onclick="addTenant()">Dodaj najemcę</button></div>
         </div>
-
         <div class="card section">
           <div class="panel-title"><h3>Najemcy</h3></div>
-          <table>
-            <thead><tr><th>Najemca</th><th>Kontakt</th><th>Lokal</th><th>Saldo</th><th></th></tr></thead>
-            <tbody>
-              ${state.tenants.map((t) => {
-                const ledger = tenantLedger(t.id);
-                return `
-                  <tr>
-                    <td><strong>${t.name}</strong></td>
-                    <td>${t.phone || "—"}<br><span class="muted small">${t.email || "—"}</span></td>
-                    <td>${t.unitId ? unitLabel(t.unitId) : "—"}</td>
-                    <td class="${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}">${fmt(ledger.balance)}</td>
-                    <td class="inline-actions">
-                      <button class="btn secondary small" onclick="openTenantCard('${t.id}')">Karta</button>
-                      <button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button>
-                    </td>
-                  </tr>
-                `;
-              }).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
+          <table><thead><tr><th>Najemca</th><th>Kontakt</th><th>Lokal</th><th>Saldo</th><th></th></tr></thead><tbody>
+            ${state.tenants.map((t) => {
+              const ledger = tenantLedger(t.id);
+              return `<tr><td><strong>${t.name}</strong></td><td>${t.phone || "—"}<br><span class="muted small">${t.email || "—"}</span></td><td>${t.unitId ? unitLabel(t.unitId) : "—"}</td><td class="${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}">${fmt(ledger.balance)}</td><td class="inline-actions"><button class="btn secondary small" onclick="openTenantCard('${t.id}')">Karta</button><button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button></td></tr>`;
+            }).join("")}
+          </tbody></table>
+        </div>`;
     }
 
     function renderTenantCard() {
       const tenant = selectedTenantCardId ? tenantById(selectedTenantCardId) : null;
       if (!tenant) {
-        document.getElementById("tenantCard").innerHTML = `
-          <div class="card">
-            <div class="panel-title"><h3>Wybierz najemcę</h3></div>
-            <select id="tenant_card_select" onchange="openTenantCard(this.value)">
-              <option value="">— wybierz —</option>
-              ${state.tenants.map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
-            </select>
-          </div>
-        `;
+        document.getElementById("tenantCard").innerHTML = `<div class="card"><div class="panel-title"><h3>Wybierz najemcę</h3></div><select id="tenant_card_select" onchange="openTenantCard(this.value)"><option value="">— wybierz —</option>${state.tenants.map(t => `<option value="${t.id}">${t.name}</option>`).join("")}</select></div>`;
         return;
       }
 
@@ -965,105 +715,20 @@ ${settlement.details.map(d => `
       const tenantPeriodSettlements = state.periodSettlements.filter(s => s.tenantId === tenant.id).slice().sort((a,b)=>(b.toMonth+b.createdAt).localeCompare(a.toMonth+a.createdAt));
 
       document.getElementById("tenantCard").innerHTML = `
-        <div class="card">
-          <div class="panel-title"><h3>Karta najemcy</h3></div>
-          <div class="form-grid two">
-            <select id="tenant_card_select" onchange="openTenantCard(this.value)">
-              ${state.tenants.map(t => `<option value="${t.id}" ${t.id === tenant.id ? "selected" : ""}>${t.name}</option>`).join("")}
-            </select>
-            <div class="notice">
-              Najemca: <strong>${tenant.name}</strong><br>
-              Lokal: <strong>${tenant.unitId ? unitLabel(tenant.unitId) : "—"}</strong><br>
-              E-mail: <strong>${tenant.email || "—"}</strong>
-            </div>
-          </div>
-        </div>
-
+        <div class="card"><div class="panel-title"><h3>Karta najemcy</h3></div><div class="form-grid two"><select id="tenant_card_select" onchange="openTenantCard(this.value)">${state.tenants.map(t => `<option value="${t.id}" ${t.id === tenant.id ? "selected" : ""}>${t.name}</option>`).join("")}</select><div class="notice">Najemca: <strong>${tenant.name}</strong><br>Lokal: <strong>${tenant.unitId ? unitLabel(tenant.unitId) : "—"}</strong><br>E-mail: <strong>${tenant.email || "—"}</strong></div></div></div>
         <div class="grid three-col section">
-          <div class="card">
-            <div class="muted small">Saldo należności</div>
-            <div class="metric ${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}" style="font-size:24px">${fmt(ledger.balance)}</div>
-          </div>
-          <div class="card">
-            <div class="muted small">Naliczenia razem</div>
-            <div class="metric" style="font-size:24px">${fmt(ledger.charges)}</div>
-          </div>
-          <div class="card">
-            <div class="muted small">Wpłaty razem</div>
-            <div class="metric" style="font-size:24px">${fmt(ledger.payments)}</div>
-          </div>
+          <div class="card"><div class="muted small">Saldo należności</div><div class="metric ${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}" style="font-size:24px">${fmt(ledger.balance)}</div></div>
+          <div class="card"><div class="muted small">Naliczenia razem</div><div class="metric" style="font-size:24px">${fmt(ledger.charges)}</div></div>
+          <div class="card"><div class="muted small">Wpłaty razem</div><div class="metric" style="font-size:24px">${fmt(ledger.payments)}</div></div>
         </div>
-
         <div class="grid two section">
-          <div class="card">
-            <div class="panel-title"><h3>Umowa i opłaty</h3></div>
-            ${lease ? `
-              <div class="details-box">Umowa: ${lease.startDate} - ${lease.endDate || "bezterminowo"}
-Czynsz: ${fmt(lease.rent)}
-Zaliczka zimna woda: ${fmt(lease.advanceColdWater)}
-Zaliczka ciepła woda: ${fmt(lease.advanceHotWater)}
-Zaliczka prąd: ${fmt(lease.advanceElectricity)}
-Zaliczka gaz: ${fmt(lease.advanceGas)}
-Zaliczka ciepło: ${fmt(lease.advanceHeat)}
-Śmieci: ${fmt(lease.feeWaste || 0)}
-Internet: ${fmt(lease.feeInternet || 0)}
-Suma zaliczek mediów: ${fmt(leaseAdvanceTotal(lease))}
-Suma opłat stałych: ${fmt(leaseFixedFeesTotal(lease))}
-Termin czynszu: ${lease.rentDueDay || 5}
-Termin pozostałych opłat: ${lease.otherDueDay || 10}</div>
-            ` : `<div class="notice warning-box">Brak przypisanej umowy.</div>`}
-          </div>
-
-          <div class="card">
-            <div class="panel-title"><h3>Historia salda</h3></div>
-            <table>
-              <thead><tr><th>Data</th><th>Typ</th><th>Opis</th><th>Kwota</th></tr></thead>
-              <tbody>
-                ${ledger.items.map(i => `
-                  <tr>
-                    <td>${i.date}</td>
-                    <td>${i.type}</td>
-                    <td>${i.label}</td>
-                    <td class="${i.amount > 0 ? "negative" : "positive"}">${fmt(i.amount)}</td>
-                  </tr>
-                `).join("") || `<tr><td colspan="4">Brak historii</td></tr>`}
-              </tbody>
-            </table>
-          </div>
+          <div class="card"><div class="panel-title"><h3>Umowa i opłaty</h3></div>${lease ? `<div class="details-box">Umowa: ${lease.startDate} - ${lease.endDate || "bezterminowo"}\nCzynsz: ${fmt(lease.rent)}\nZaliczka zimna woda: ${fmt(lease.advanceColdWater)}\nZaliczka ciepła woda: ${fmt(lease.advanceHotWater)}\nZaliczka prąd: ${fmt(lease.advanceElectricity)}\nZaliczka gaz: ${fmt(lease.advanceGas)}\nZaliczka ciepło: ${fmt(lease.advanceHeat)}\nŚmieci: ${fmt(lease.feeWaste || 0)}\nInternet: ${fmt(lease.feeInternet || 0)}\nSuma zaliczek mediów: ${fmt(leaseAdvanceTotal(lease))}\nSuma opłat stałych: ${fmt(leaseFixedFeesTotal(lease))}\nTermin czynszu: ${lease.rentDueDay || 5}\nTermin pozostałych opłat: ${lease.otherDueDay || 10}</div>` : `<div class="notice warning-box">Brak przypisanej umowy.</div>`}</div>
+          <div class="card"><div class="panel-title"><h3>Historia salda</h3></div><table><thead><tr><th>Data</th><th>Typ</th><th>Opis</th><th>Kwota</th></tr></thead><tbody>${ledger.items.map(i => `<tr><td>${i.date}</td><td>${i.type}</td><td>${i.label}</td><td class="${i.amount > 0 ? "negative" : "positive"}">${fmt(i.amount)}</td></tr>`).join("") || `<tr><td colspan="4">Brak historii</td></tr>`}</tbody></table></div>
         </div>
-
         <div class="grid two section">
-          <div class="card">
-            <div class="panel-title"><h3>Rozliczenia miesięczne</h3></div>
-            <table>
-              <thead><tr><th>Miesiąc</th><th>Razem</th></tr></thead>
-              <tbody>
-                ${tenantSettlements.map(s => `
-                  <tr>
-                    <td>${fmtMonth(s.month)}</td>
-                    <td>${fmt(s.total)}</td>
-                  </tr>
-                `).join("") || `<tr><td colspan="2">Brak</td></tr>`}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="card">
-            <div class="panel-title"><h3>Rozliczenia okresowe</h3></div>
-            <table>
-              <thead><tr><th>Okres</th><th>Wynik</th></tr></thead>
-              <tbody>
-                ${tenantPeriodSettlements.map(s => `
-                  <tr>
-                    <td>${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}</td>
-                    <td class="${s.finalDifference > 0 ? "negative" : s.finalDifference < 0 ? "positive" : ""}">${fmt(s.finalDifference)}</td>
-                  </tr>
-                `).join("") || `<tr><td colspan="2">Brak</td></tr>`}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
+          <div class="card"><div class="panel-title"><h3>Rozliczenia miesięczne</h3></div><table><thead><tr><th>Miesiąc</th><th>Razem</th></tr></thead><tbody>${tenantSettlements.map(s => `<tr><td>${fmtMonth(s.month)}</td><td>${fmt(s.total)}</td></tr>`).join("") || `<tr><td colspan="2">Brak</td></tr>`}</tbody></table></div>
+          <div class="card"><div class="panel-title"><h3>Rozliczenia okresowe</h3></div><table><thead><tr><th>Okres</th><th>Wynik</th></tr></thead><tbody>${tenantPeriodSettlements.map(s => `<tr><td>${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}</td><td class="${s.finalDifference > 0 ? "negative" : s.finalDifference < 0 ? "positive" : ""}">${fmt(s.finalDifference)}</td></tr>`).join("") || `<tr><td colspan="2">Brak</td></tr>`}</tbody></table></div>
+        </div>`;
     }
 
     function renderLeases() {
@@ -1077,77 +742,31 @@ Termin pozostałych opłat: ${lease.otherDueDay || 10}</div>
             <input id="l_end" type="date" />
             <input id="l_rent" type="number" placeholder="Czynsz" />
             <input id="l_deposit" type="number" placeholder="Kaucja" />
-            <select id="l_status">
-              <option>aktywna</option>
-              <option>wypowiedziana</option>
-              <option>zakończona</option>
-            </select>
+            <select id="l_status"><option>aktywna</option><option>wypowiedziana</option><option>zakończona</option></select>
           </div>
-
           <div class="form-grid section">
             <input id="l_adv_cold" type="number" step="0.01" placeholder="Zaliczka zimna woda" />
             <input id="l_adv_hot" type="number" step="0.01" placeholder="Zaliczka ciepła woda" />
             <input id="l_adv_el" type="number" step="0.01" placeholder="Zaliczka prąd" />
             <input id="l_adv_gas" type="number" step="0.01" placeholder="Zaliczka gaz" />
           </div>
-
           <div class="form-grid section">
             <input id="l_adv_heat" type="number" step="0.01" placeholder="Zaliczka ciepło" />
             <input id="l_fee_waste" type="number" step="0.01" placeholder="Śmieci / miesiąc" />
             <input id="l_fee_internet" type="number" step="0.01" placeholder="Internet / miesiąc" />
             <input id="l_rent_due" type="number" value="5" placeholder="Termin płatności czynszu" />
           </div>
-
           <div class="form-grid section">
             <input id="l_other_due" type="number" value="10" placeholder="Termin płatności pozostałych opłat" />
           </div>
-
           <div class="section"><button class="btn green" onclick="addLease()">Dodaj umowę</button></div>
         </div>
-
         <div class="card section">
-          <div class="panel-title">
-            <h3>Umowy</h3>
-            <button class="btn secondary" onclick="generateMonthlyCharges()">Generuj miesięczne opłaty</button>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Najemca</th>
-                <th>Lokal</th>
-                <th>Okres</th>
-                <th>Czynsz</th>
-                <th>Stałe opłaty</th>
-                <th>Zaliczki media</th>
-                <th>Terminy</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${state.leases.map((l) => `
-                <tr>
-                  <td>${tenantName(l.tenantId)}</td>
-                  <td>${unitLabel(l.unitId)}</td>
-                  <td>${l.startDate}<br><span class="muted small">do ${l.endDate || "bezterminowo"}</span></td>
-                  <td>${fmt(l.rent)}</td>
-                  <td>
-                    śmieci: ${fmt(l.feeWaste || 0)}<br>
-                    internet: ${fmt(l.feeInternet || 0)}
-                  </td>
-                  <td>${fmt(leaseAdvanceTotal(l))}</td>
-                  <td>
-                    czynsz: ${l.rentDueDay || 5}<br>
-                    pozostałe: ${l.otherDueDay || 10}
-                  </td>
-                  <td><span class="badge ${l.status === "aktywna" ? "status-active" : "status-closed"}">${l.status}</span></td>
-                  <td><button class="btn secondary small" onclick="removeLease('${l.id}')">Usuń</button></td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
+          <div class="panel-title"><h3>Umowy</h3><button class="btn secondary" onclick="generateMonthlyCharges()">Generuj miesięczne opłaty</button></div>
+          <table><thead><tr><th>Najemca</th><th>Lokal</th><th>Okres</th><th>Czynsz</th><th>Stałe opłaty</th><th>Zaliczki media</th><th>Terminy</th><th>Status</th><th></th></tr></thead><tbody>
+            ${state.leases.map((l) => `<tr><td>${tenantName(l.tenantId)}</td><td>${unitLabel(l.unitId)}</td><td>${l.startDate}<br><span class="muted small">do ${l.endDate || "bezterminowo"}</span></td><td>${fmt(l.rent)}</td><td>śmieci: ${fmt(l.feeWaste || 0)}<br>internet: ${fmt(l.feeInternet || 0)}</td><td>${fmt(leaseAdvanceTotal(l))}</td><td>czynsz: ${l.rentDueDay || 5}<br>pozostałe: ${l.otherDueDay || 10}</td><td><span class="badge ${l.status === "aktywna" ? "status-active" : "status-closed"}">${l.status}</span></td><td><button class="btn secondary small" onclick="removeLease('${l.id}')">Usuń</button></td></tr>`).join("")}
+          </tbody></table>
+        </div>`;
     }
 
     function renderMeters() {
@@ -1156,20 +775,13 @@ Termin pozostałych opłat: ${lease.otherDueDay || 10}</div>
           <div class="panel-title"><h3>Dodaj licznik</h3></div>
           <div class="form-grid three">
             <select id="m_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
-            <select id="m_type" onchange="onMeterTypeChange()">
-              <option>prąd</option>
-              <option>zimna woda</option>
-              <option>ciepła woda</option>
-              <option>gaz</option>
-              <option>ciepło</option>
-            </select>
+            <select id="m_type" onchange="onMeterTypeChange()"><option>prąd</option><option>zimna woda</option><option>ciepła woda</option><option>gaz</option><option>ciepło</option></select>
             <input id="m_serial" placeholder="Nr seryjny" />
             <input id="m_rate" type="number" step="0.01" placeholder="Stawka za jednostkę" />
             <input id="m_unit_name" placeholder="Jednostka np. kWh / m³" value="kWh" />
             <div><button class="btn green" onclick="addMeter()">Dodaj licznik</button></div>
           </div>
         </div>
-
         <div class="card section">
           <div class="panel-title"><h3>Dodaj odczyt</h3></div>
           <div class="form-grid three">
@@ -1180,106 +792,82 @@ Termin pozostałych opłat: ${lease.otherDueDay || 10}</div>
           <div id="meterHint" class="notice section">Wybierz licznik.</div>
           <div class="section"><button class="btn green" onclick="addReading()">Dodaj odczyt</button></div>
         </div>
-
         <div class="card section">
           <div class="panel-title"><h3>Historia odczytów z korektą</h3></div>
-          <table>
-            <thead><tr><th>Data</th><th>Licznik</th><th>Stan</th><th></th></tr></thead>
-            <tbody>
-              ${state.meterReadings
-                .slice()
-                .sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id))
-                .map((r) => {
-                  const meter = state.meters.find((m) => m.id === r.meterId);
-                  return `
-                    <tr>
-                      <td>${r.date}</td>
-                      <td>${meter ? `${unitLabel(meter.unitId)} — ${meter.type}` : "—"}</td>
-                      <td>${r.value}</td>
-                      <td class="inline-actions">
-                        <button class="btn secondary small" onclick="editReading('${r.id}')">Edytuj</button>
-                        <button class="btn red small" onclick="deleteReading('${r.id}')">Usuń</button>
-                      </td>
-                    </tr>
-                  `;
-                }).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
+          <table><thead><tr><th>Data</th><th>Licznik</th><th>Stan</th><th></th></tr></thead><tbody>
+            ${state.meterReadings.slice().sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id)).map((r) => {
+              const meter = state.meters.find((m) => m.id === r.meterId);
+              return `<tr><td>${r.date}</td><td>${meter ? `${unitLabel(meter.unitId)} — ${meter.type}` : "—"}</td><td>${r.value}</td><td class="inline-actions"><button class="btn secondary small" onclick="editReading('${r.id}')">Edytuj</button><button class="btn red small" onclick="deleteReading('${r.id}')">Usuń</button></td></tr>`;
+            }).join("")}
+          </tbody></table>
+        </div>`;
       onMeterTypeChange();
       showMeterHint();
     }
 
     function renderSettlements() {
       const monthDefault = currentMonth();
+      const previewLease = settlementPreviewLeaseId ? leaseById(settlementPreviewLeaseId) : (state.leases.find(l => l.status === "aktywna") || null);
+      const preview = previewLease ? buildMonthlySettlementDraft(previewLease, monthDefault) : null;
       const selected = selectedSettlementId ? findSettlement(selectedSettlementId) : null;
 
       document.getElementById("settlements").innerHTML = `
         <div class="card">
-          <div class="panel-title"><h3>Zamknięcie miesiąca</h3></div>
-          <div class="form-grid two">
-            <input id="settlement_month" type="month" value="${monthDefault}" />
-            <div class="notice warning-box">
-              To jest pełne rozliczenie miesięczne: czynsz, administracja, śmieci, internet, zaliczki media i koszty rzeczywiste mediów.
-            </div>
+          <div class="panel-title"><h3>Wygeneruj rozliczenie miesięczne</h3></div>
+          <div class="form-grid three">
+            <input id="settlement_month" type="month" value="${monthDefault}" onchange="refreshSettlementPreview()" />
+            <select id="settlement_lease" onchange="refreshSettlementPreview()">${state.leases.filter(l => l.status === "aktywna").map(l => `<option value="${l.id}" ${previewLease?.id === l.id ? "selected" : ""}>${leaseLabel(l.id)}</option>`).join("")}</select>
+            <div class="inline-actions"><button class="btn green" onclick="generateSelectedSettlement()">Wygeneruj tylko tę umowę</button></div>
           </div>
-          <div class="section inline-actions">
-            <button class="btn green" onclick="closeMonth()">Zamknij miesiąc i wygeneruj rozliczenia</button>
-            <button class="btn red" onclick="deleteMonthSettlements()">Usuń cały miesiąc</button>
+          <div class="section ${preview && !preview.canGenerate ? 'notice danger-box' : 'notice'}">
+            ${preview ? (preview.canGenerate ? 'Ta umowa ma komplet danych do rozliczenia.' : `Brakuje odczytów dla: ${preview.missingTypes.join(', ')}. System zablokuje generowanie, żeby nie zrobić miesiąca bez mediów.`) : 'Brak aktywnych umów.'}
           </div>
         </div>
 
         <div class="grid two section">
           <div class="card">
-            <div class="panel-title"><h3>Historia rozliczeń miesięcznych</h3></div>
-            <table>
-              <thead><tr><th>Miesiąc</th><th>Najemca</th><th>Lokal</th><th>Razem</th><th></th></tr></thead>
-              <tbody>
-                ${state.settlements
-                  .slice()
-                  .sort((a, b) => (b.month + b.createdAt).localeCompare(a.month + a.createdAt))
-                  .map((s) => `
-                    <tr>
-                      <td>${fmtMonth(s.month)}</td>
-                      <td>${s.tenantName}</td>
-                      <td>${s.unitLabel}</td>
-                      <td>${fmt(s.total)}</td>
-                      <td class="inline-actions">
-                        <button class="btn secondary small" onclick="selectSettlement('${s.id}')">Podgląd</button>
-                        <button class="btn red small" onclick="deleteSettlement('${s.id}')">Usuń</button>
-                      </td>
-                    </tr>
-                  `).join("") || `<tr><td colspan="5">Brak rozliczeń</td></tr>`}
-              </tbody>
-            </table>
+            <div class="panel-title"><h3>Podgląd dla wybranej umowy</h3></div>
+            ${preview ? `<div class="details-box">${buildSettlementDetails(preview)}</div>` : `<div class="notice warning-box">Brak danych do podglądu.</div>`}
           </div>
-
           <div class="card">
-            <div class="panel-title">
-              <h3>Podgląd rozliczenia</h3>
-              ${selected ? `
-                <div class="inline-actions">
-                  <button class="btn secondary small" onclick="copySettlementMessage()">Kopiuj</button>
-                  <button class="btn secondary small" onclick="sendSettlementMail()">Mail</button>
-                  <button class="btn secondary small" onclick="printSettlement()">Drukuj</button>
-                </div>
-              ` : ""}
-            </div>
-            ${selected ? `<div class="details-box">${buildSettlementDetails(selected)}</div>` : `<div class="notice warning-box">Wybierz rozliczenie.</div>`}
+            <div class="panel-title"><h3>Historia rozliczeń miesięcznych</h3></div>
+            <table><thead><tr><th>Miesiąc</th><th>Najemca</th><th>Lokal</th><th>Razem</th><th></th></tr></thead><tbody>
+              ${state.settlements.slice().sort((a, b) => (b.month + b.createdAt).localeCompare(a.month + a.createdAt)).map((s) => `<tr><td>${fmtMonth(s.month)}</td><td>${s.tenantName}</td><td>${s.unitLabel}</td><td>${fmt(s.total)}</td><td class="inline-actions"><button class="btn secondary small" onclick="selectSettlement('${s.id}')">Podgląd</button><button class="btn red small" onclick="deleteSettlement('${s.id}')">Usuń</button></td></tr>`).join("") || `<tr><td colspan="5">Brak rozliczeń</td></tr>`}
+            </tbody></table>
           </div>
         </div>
 
-        ${selected ? `
-          <div class="card section">
-            <div class="panel-title"><h3>Wiadomość dla najemcy</h3></div>
-            <textarea>${settlementMessage(selected)}</textarea>
-          </div>
-        ` : ""}
+        ${selected ? `<div class="card section"><div class="panel-title"><h3>Wybrane rozliczenie</h3><div class="inline-actions"><button class="btn secondary small" onclick="copySettlementMessage()">Kopiuj</button><button class="btn secondary small" onclick="sendSettlementMail()">Mail</button><button class="btn secondary small" onclick="printSettlement()">Drukuj</button></div></div><div class="details-box">${buildSettlementDetails(selected)}</div><div class="section"><textarea>${settlementMessage(selected)}</textarea></div></div>` : ''}
       `;
     }
 
+    function refreshSettlementPreview() {
+      settlementPreviewLeaseId = document.getElementById("settlement_lease")?.value || settlementPreviewLeaseId;
+      renderSettlements();
+    }
+
+    async function generateSelectedSettlement() {
+      const month = document.getElementById("settlement_month")?.value;
+      const leaseId = document.getElementById("settlement_lease")?.value;
+      if (!month || !leaseId) return alert("Wybierz miesiąc i umowę.");
+      if (state.settlements.some(s => s.month === month && s.leaseId === leaseId)) {
+        return alert("To rozliczenie już istnieje. Usuń je, jeśli chcesz wygenerować ponownie.");
+      }
+      const lease = leaseById(leaseId);
+      if (!lease) return alert("Nie znaleziono umowy.");
+      const draft = buildMonthlySettlementDraft(lease, month);
+      if (!draft) return alert("Nie udało się przygotować rozliczenia.");
+      if (!draft.canGenerate) return alert(`Brakuje odczytów dla: ${draft.missingTypes.join(', ')}`);
+
+      state.settlements.push({ id: uid("st"), ...draft, createdAt: new Date().toISOString() });
+      selectedSettlementId = state.settlements[state.settlements.length - 1].id;
+      await save();
+      showPage("settlements");
+      alert("Wygenerowano rozliczenie dla wybranej umowy.");
+    }
+
     function buildSettlementDetails(settlement) {
+      const missing = settlement.missingTypes?.length ? `\nBRAKUJĄCE MEDIA: ${settlement.missingTypes.join(', ')}` : '';
       const lines = settlement.lines.map((line) => {
         const qty = line.qty !== undefined && line.qty !== null ? ` | ilość: ${line.qty}` : "";
         const unit = line.unit ? ` ${line.unit}` : "";
@@ -1293,7 +881,7 @@ Najemca: ${settlement.tenantName}
 Lokal: ${settlement.unitLabel}
 Termin płatności czynszu: ${settlement.dueDateRent || "—"}
 Termin płatności pozostałych opłat: ${settlement.dueDateOther || "—"}
-${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
+${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}${missing}
 
 Pozycje:
 ${lines}
@@ -1303,7 +891,6 @@ Razem: ${fmt(settlement.total)}`;
 
     function renderPeriodSettlements() {
       const selected = selectedPeriodSettlementId ? findPeriodSettlement(selectedPeriodSettlementId) : null;
-
       document.getElementById("periodSettlements").innerHTML = `
         <div class="card">
           <div class="panel-title"><h3>Nowe rozliczenie okresowe</h3></div>
@@ -1312,64 +899,18 @@ Razem: ${fmt(settlement.total)}`;
             <input id="ps_from" type="month" value="${currentMonth()}" />
             <input id="ps_to" type="month" value="${currentMonth()}" />
           </div>
-          <div class="section inline-actions">
-            <button class="btn green" onclick="generatePeriodSettlement()">Wygeneruj rozliczenie okresowe</button>
-          </div>
+          <div class="section inline-actions"><button class="btn green" onclick="generatePeriodSettlement()">Wygeneruj rozliczenie okresowe</button></div>
         </div>
-
         <div class="grid two section">
-          <div class="card">
-            <div class="panel-title"><h3>Historia rozliczeń okresowych</h3></div>
-            <table>
-              <thead><tr><th>Najemca</th><th>Okres</th><th>Wynik</th><th></th></tr></thead>
-              <tbody>
-                ${state.periodSettlements
-                  .slice()
-                  .sort((a,b)=>(b.toMonth + b.createdAt).localeCompare(a.toMonth + a.createdAt))
-                  .map(s => `
-                    <tr>
-                      <td>${s.tenantName}</td>
-                      <td>${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}</td>
-                      <td class="${s.finalDifference > 0 ? "negative" : s.finalDifference < 0 ? "positive" : ""}">${fmt(s.finalDifference)}</td>
-                      <td class="inline-actions">
-                        <button class="btn secondary small" onclick="selectPeriodSettlement('${s.id}')">Podgląd</button>
-                        <button class="btn red small" onclick="deletePeriodSettlement('${s.id}')">Usuń</button>
-                      </td>
-                    </tr>
-                  `).join("") || `<tr><td colspan="4">Brak rozliczeń okresowych</td></tr>`}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="card">
-            <div class="panel-title">
-              <h3>Podgląd rozliczenia okresowego</h3>
-              ${selected ? `
-                <div class="inline-actions">
-                  <button class="btn secondary small" onclick="copyPeriodSettlementMessage()">Kopiuj</button>
-                  <button class="btn secondary small" onclick="sendPeriodSettlementMail()">Mail</button>
-                  <button class="btn secondary small" onclick="printPeriodSettlement()">Drukuj</button>
-                </div>
-              ` : ""}
-            </div>
-            ${selected ? `<div class="details-box">${buildPeriodSettlementDetails(selected)}</div>` : `<div class="notice warning-box">Wybierz rozliczenie okresowe.</div>`}
-          </div>
+          <div class="card"><div class="panel-title"><h3>Historia rozliczeń okresowych</h3></div><table><thead><tr><th>Najemca</th><th>Okres</th><th>Wynik</th><th></th></tr></thead><tbody>${state.periodSettlements.slice().sort((a,b)=>(b.toMonth + b.createdAt).localeCompare(a.toMonth + a.createdAt)).map(s => `<tr><td>${s.tenantName}</td><td>${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}</td><td class="${s.finalDifference > 0 ? "negative" : s.finalDifference < 0 ? "positive" : ""}">${fmt(s.finalDifference)}</td><td class="inline-actions"><button class="btn secondary small" onclick="selectPeriodSettlement('${s.id}')">Podgląd</button><button class="btn red small" onclick="deletePeriodSettlement('${s.id}')">Usuń</button></td></tr>`).join("") || `<tr><td colspan="4">Brak rozliczeń okresowych</td></tr>`}</tbody></table></div>
+          <div class="card"><div class="panel-title"><h3>Podgląd rozliczenia okresowego</h3>${selected ? `<div class="inline-actions"><button class="btn secondary small" onclick="copyPeriodSettlementMessage()">Kopiuj</button><button class="btn secondary small" onclick="sendPeriodSettlementMail()">Mail</button><button class="btn secondary small" onclick="printPeriodSettlement()">Drukuj</button></div>` : ""}</div>${selected ? `<div class="details-box">${buildPeriodSettlementDetails(selected)}</div>` : `<div class="notice warning-box">Wybierz rozliczenie okresowe.</div>`}</div>
         </div>
-
-        ${selected ? `
-          <div class="card section">
-            <div class="panel-title"><h3>Wiadomość dla najemcy</h3></div>
-            <textarea>${periodSettlementMessage(selected)}</textarea>
-          </div>
-        ` : ""}
+        ${selected ? `<div class="card section"><div class="panel-title"><h3>Wiadomość dla najemcy</h3></div><textarea>${periodSettlementMessage(selected)}</textarea></div>` : ""}
       `;
     }
 
     function buildPeriodSettlementDetails(settlement) {
-      const lines = settlement.details.map(d => {
-        return `${d.label} | koszt rzeczywisty: ${fmt(d.actual)} | zaliczki: ${fmt(d.advances)} | różnica: ${fmt(d.difference)}`;
-      }).join("\n");
-
+      const lines = settlement.details.map(d => `${d.label} | koszt rzeczywisty: ${fmt(d.actual)} | zaliczki: ${fmt(d.advances)} | różnica: ${fmt(d.difference)}`).join("\n");
       return `Najemca: ${settlement.tenantName}
 Lokal: ${settlement.unitLabel}
 Okres: ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}
@@ -1384,154 +925,21 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
     function renderPayments() {
       document.getElementById("payments").innerHTML = `
-        <div class="card">
-          <div class="panel-title"><h3>Dodaj opłatę</h3></div>
-          <div class="form-grid">
-            <select id="c_lease">${state.leases.map((l) => `<option value="${l.id}">${leaseLabel(l.id)}</option>`).join("")}</select>
-            <input id="c_type" value="Czynsz miesięczny" placeholder="Typ opłaty" />
-            <input id="c_amount" type="number" step="0.01" placeholder="Kwota" />
-            <input id="c_due" type="date" value="${today()}" />
-          </div>
-          <div class="section"><button class="btn green" onclick="addCharge()">Dodaj opłatę</button></div>
-        </div>
-
-        <div class="card section">
-          <div class="panel-title"><h3>Zaksięguj wpłatę</h3></div>
-          <div class="form-grid">
-            <select id="p_charge">${state.charges.map((c) => `<option value="${c.id}">${leaseLabel(c.leaseId)} — ${c.type} — ${fmt(c.amount)}</option>`).join("")}</select>
-            <input id="p_date" type="date" value="${today()}" />
-            <input id="p_amount" type="number" step="0.01" placeholder="Kwota" />
-            <select id="p_method">
-              <option>przelew</option>
-              <option>gotówka</option>
-              <option>BLIK</option>
-              <option>karta</option>
-            </select>
-          </div>
-          <div class="section"><button class="btn green" onclick="addPayment()">Dodaj płatność</button></div>
-        </div>
-
-        <div class="card section">
-          <div class="panel-title"><h3>Opłaty</h3></div>
-          <table>
-            <thead><tr><th>Umowa</th><th>Typ</th><th>Termin</th><th>Kwota</th><th>Wpłacono</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-              ${state.charges.map((c) => {
-                const status = calcChargeStatus(c);
-                const paid = chargePaidAmount(c.id);
-                const cls = status === "opłacone" ? "status-active" : status === "zaległe" ? "status-overdue" : "status-pending";
-                return `
-                  <tr>
-                    <td>${leaseLabel(c.leaseId)}</td>
-                    <td>${c.type}</td>
-                    <td>${c.dueDate}</td>
-                    <td>${fmt(c.amount)}</td>
-                    <td>${fmt(paid)}</td>
-                    <td><span class="badge ${cls}">${status}</span></td>
-                    <td><button class="btn secondary small" onclick="removeCharge('${c.id}')">Usuń</button></td>
-                  </tr>
-                `;
-              }).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
+        <div class="card"><div class="panel-title"><h3>Dodaj opłatę</h3></div><div class="form-grid"><select id="c_lease">${state.leases.map((l) => `<option value="${l.id}">${leaseLabel(l.id)}</option>`).join("")}</select><input id="c_type" value="Czynsz miesięczny" placeholder="Typ opłaty" /><input id="c_amount" type="number" step="0.01" placeholder="Kwota" /><input id="c_due" type="date" value="${today()}" /></div><div class="section"><button class="btn green" onclick="addCharge()">Dodaj opłatę</button></div></div>
+        <div class="card section"><div class="panel-title"><h3>Zaksięguj wpłatę</h3></div><div class="form-grid"><select id="p_charge">${state.charges.map((c) => `<option value="${c.id}">${leaseLabel(c.leaseId)} — ${c.type} — ${fmt(c.amount)}</option>`).join("")}</select><input id="p_date" type="date" value="${today()}" /><input id="p_amount" type="number" step="0.01" placeholder="Kwota" /><select id="p_method"><option>przelew</option><option>gotówka</option><option>BLIK</option><option>karta</option></select></div><div class="section"><button class="btn green" onclick="addPayment()">Dodaj płatność</button></div></div>
+        <div class="card section"><div class="panel-title"><h3>Opłaty</h3></div><table><thead><tr><th>Umowa</th><th>Typ</th><th>Termin</th><th>Kwota</th><th>Wpłacono</th><th>Status</th><th></th></tr></thead><tbody>${state.charges.map((c) => { const status = calcChargeStatus(c); const paid = chargePaidAmount(c.id); const cls = status === "opłacone" ? "status-active" : status === "zaległe" ? "status-overdue" : "status-pending"; return `<tr><td>${leaseLabel(c.leaseId)}</td><td>${c.type}</td><td>${c.dueDate}</td><td>${fmt(c.amount)}</td><td>${fmt(paid)}</td><td><span class="badge ${cls}">${status}</span></td><td><button class="btn secondary small" onclick="removeCharge('${c.id}')">Usuń</button></td></tr>`; }).join("")}</tbody></table></div>`;
     }
 
     function renderExpenses() {
       document.getElementById("expenses").innerHTML = `
-        <div class="card">
-          <div class="panel-title"><h3>Dodaj koszt</h3></div>
-          <div class="form-grid">
-            <input id="e_date" type="date" value="${today()}" />
-            <select id="e_building">
-              <option value="">Bez budynku</option>
-              ${state.buildings.map((b) => `<option value="${b.id}">${b.name}</option>`).join("")}
-            </select>
-            <select id="e_unit">
-              <option value="">Bez lokalu</option>
-              ${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}
-            </select>
-            <input id="e_category" placeholder="Kategoria" />
-            <input id="e_amount" type="number" step="0.01" placeholder="Kwota" />
-            <input id="e_vendor" placeholder="Dostawca / wykonawca" />
-            <input id="e_notes" placeholder="Notatki" />
-          </div>
-          <div class="section"><button class="btn green" onclick="addExpense()">Dodaj koszt</button></div>
-        </div>
-
-        <div class="card section">
-          <div class="panel-title"><h3>Koszty</h3></div>
-          <table>
-            <thead><tr><th>Data</th><th>Obiekt</th><th>Kategoria</th><th>Dostawca</th><th>Kwota</th><th></th></tr></thead>
-            <tbody>
-              ${state.expenses.map((e) => `
-                <tr>
-                  <td>${e.date}</td>
-                  <td>${e.unitId ? unitLabel(e.unitId) : e.buildingId ? buildingName(e.buildingId) : "—"}</td>
-                  <td>${e.category}</td>
-                  <td>${e.vendor || "—"}</td>
-                  <td>${fmt(e.amount)}</td>
-                  <td><button class="btn secondary small" onclick="removeExpense('${e.id}')">Usuń</button></td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
+        <div class="card"><div class="panel-title"><h3>Dodaj koszt</h3></div><div class="form-grid"><input id="e_date" type="date" value="${today()}" /><select id="e_building"><option value="">Bez budynku</option>${state.buildings.map((b) => `<option value="${b.id}">${b.name}</option>`).join("")}</select><select id="e_unit"><option value="">Bez lokalu</option>${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select><input id="e_category" placeholder="Kategoria" /><input id="e_amount" type="number" step="0.01" placeholder="Kwota" /><input id="e_vendor" placeholder="Dostawca / wykonawca" /><input id="e_notes" placeholder="Notatki" /></div><div class="section"><button class="btn green" onclick="addExpense()">Dodaj koszt</button></div></div>
+        <div class="card section"><div class="panel-title"><h3>Koszty</h3></div><table><thead><tr><th>Data</th><th>Obiekt</th><th>Kategoria</th><th>Dostawca</th><th>Kwota</th><th></th></tr></thead><tbody>${state.expenses.map((e) => `<tr><td>${e.date}</td><td>${e.unitId ? unitLabel(e.unitId) : e.buildingId ? buildingName(e.buildingId) : "—"}</td><td>${e.category}</td><td>${e.vendor || "—"}</td><td>${fmt(e.amount)}</td><td><button class="btn secondary small" onclick="removeExpense('${e.id}')">Usuń</button></td></tr>`).join("")}</tbody></table></div>`;
     }
 
     function renderMaintenance() {
       document.getElementById("maintenance").innerHTML = `
-        <div class="card">
-          <div class="panel-title"><h3>Dodaj zgłoszenie</h3></div>
-          <div class="form-grid">
-            <select id="tk_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
-            <select id="tk_tenant">
-              <option value="">Bez najemcy</option>
-              ${state.tenants.map((t) => `<option value="${t.id}">${t.name}</option>`).join("")}
-            </select>
-            <input id="tk_title" placeholder="Tytuł zgłoszenia" />
-            <select id="tk_priority">
-              <option>niski</option>
-              <option>średni</option>
-              <option>wysoki</option>
-            </select>
-            <select id="tk_status">
-              <option>otwarte</option>
-              <option>w trakcie</option>
-              <option>zamknięte</option>
-            </select>
-            <input id="tk_assignee" placeholder="Wykonawca / opiekun" />
-            <input id="tk_notes" placeholder="Notatki" />
-          </div>
-          <div class="section"><button class="btn green" onclick="addTicket()">Dodaj zgłoszenie</button></div>
-        </div>
-
-        <div class="card section">
-          <div class="panel-title"><h3>Zgłoszenia</h3></div>
-          <table>
-            <thead><tr><th>Data</th><th>Lokal</th><th>Zgłoszenie</th><th>Priorytet</th><th>Status</th><th>Opiekun</th><th></th></tr></thead>
-            <tbody>
-              ${state.tickets.map((t) => {
-                const stCls = t.status === "zamknięte" ? "status-closed" : t.status === "w trakcie" ? "status-pending" : "status-open";
-                const prCls = t.priority === "wysoki" ? "status-overdue" : t.priority === "średni" ? "status-pending" : "status-active";
-                return `
-                  <tr>
-                    <td>${t.createdAt}</td>
-                    <td>${unitLabel(t.unitId)}</td>
-                    <td><strong>${t.title}</strong><br><span class="muted small">${tenantName(t.tenantId)} ${t.notes ? "• " + t.notes : ""}</span></td>
-                    <td><span class="badge ${prCls}">${t.priority}</span></td>
-                    <td><span class="badge ${stCls}">${t.status}</span></td>
-                    <td>${t.assignee || "—"}</td>
-                    <td><button class="btn secondary small" onclick="removeTicket('${t.id}')">Usuń</button></td>
-                  </tr>
-                `;
-              }).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
+        <div class="card"><div class="panel-title"><h3>Dodaj zgłoszenie</h3></div><div class="form-grid"><select id="tk_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select><select id="tk_tenant"><option value="">Bez najemcy</option>${state.tenants.map((t) => `<option value="${t.id}">${t.name}</option>`).join("")}</select><input id="tk_title" placeholder="Tytuł zgłoszenia" /><select id="tk_priority"><option>niski</option><option>średni</option><option>wysoki</option></select><select id="tk_status"><option>otwarte</option><option>w trakcie</option><option>zamknięte</option></select><input id="tk_assignee" placeholder="Wykonawca / opiekun" /><input id="tk_notes" placeholder="Notatki" /></div><div class="section"><button class="btn green" onclick="addTicket()">Dodaj zgłoszenie</button></div></div>
+        <div class="card section"><div class="panel-title"><h3>Zgłoszenia</h3></div><table><thead><tr><th>Data</th><th>Lokal</th><th>Zgłoszenie</th><th>Priorytet</th><th>Status</th><th>Opiekun</th><th></th></tr></thead><tbody>${state.tickets.map((t) => { const stCls = t.status === "zamknięte" ? "status-closed" : t.status === "w trakcie" ? "status-pending" : "status-open"; const prCls = t.priority === "wysoki" ? "status-overdue" : t.priority === "średni" ? "status-pending" : "status-active"; return `<tr><td>${t.createdAt}</td><td>${unitLabel(t.unitId)}</td><td><strong>${t.title}</strong><br><span class="muted small">${tenantName(t.tenantId)} ${t.notes ? "• " + t.notes : ""}</span></td><td><span class="badge ${prCls}">${t.priority}</span></td><td><span class="badge ${stCls}">${t.status}</span></td><td>${t.assignee || "—"}</td><td><button class="btn secondary small" onclick="removeTicket('${t.id}')">Usuń</button></td></tr>`; }).join("")}</tbody></table></div>`;
     }
 
     function renderReports() {
@@ -1545,50 +953,13 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       });
 
       document.getElementById("reports").innerHTML = `
-        <div class="grid cards">
-          <div class="card"><div class="muted">Obłożenie</div><div class="metric">${occupancyRate()}%</div></div>
-          <div class="card"><div class="muted">Przychody</div><div class="metric">${fmt(totals().paid)}</div></div>
-          <div class="card"><div class="muted">Koszty</div><div class="metric">${fmt(totals().expenses)}</div></div>
-          <div class="card"><div class="muted">Wynik netto</div><div class="metric">${fmt(totals().net)}</div></div>
-        </div>
-
-        <div class="card section">
-          <div class="panel-title"><h3>Wynik wg budynku</h3></div>
-          <table>
-            <thead><tr><th>Budynek</th><th>Lokale</th><th>Obłożenie</th><th>Przychód</th><th>Koszt</th><th>Netto</th></tr></thead>
-            <tbody>
-              ${perBuilding.map((r) => `
-                <tr>
-                  <td>${r.name}</td>
-                  <td>${r.units}</td>
-                  <td>${r.occ}%</td>
-                  <td>${fmt(r.income)}</td>
-                  <td>${fmt(r.expense)}</td>
-                  <td>${fmt(r.net)}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
+        <div class="grid cards"><div class="card"><div class="muted">Obłożenie</div><div class="metric">${occupancyRate()}%</div></div><div class="card"><div class="muted">Przychody</div><div class="metric">${fmt(totals().paid)}</div></div><div class="card"><div class="muted">Koszty</div><div class="metric">${fmt(totals().expenses)}</div></div><div class="card"><div class="muted">Wynik netto</div><div class="metric">${fmt(totals().net)}</div></div></div>
+        <div class="card section"><div class="panel-title"><h3>Wynik wg budynku</h3></div><table><thead><tr><th>Budynek</th><th>Lokale</th><th>Obłożenie</th><th>Przychód</th><th>Koszt</th><th>Netto</th></tr></thead><tbody>${perBuilding.map((r) => `<tr><td>${r.name}</td><td>${r.units}</td><td>${r.occ}%</td><td>${fmt(r.income)}</td><td>${fmt(r.expense)}</td><td>${fmt(r.net)}</td></tr>`).join("")}</tbody></table></div>`;
     }
 
     function renderSettings() {
       document.getElementById("settings").innerHTML = `
-        <div class="card">
-          <div class="panel-title"><h3>Ustawienia</h3></div>
-          <div class="form-grid">
-            <input id="s_company" value="${state.settings.companyName || ""}" placeholder="Nazwa firmy" />
-            <input id="s_owner" value="${state.settings.ownerName || ""}" placeholder="Właściciel / zarządca" />
-            <input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" />
-            <input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" />
-            <input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" />
-            <input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" />
-            <input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Domyślny dzień płatności" />
-          </div>
-          <div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div>
-        </div>
-      `;
+        <div class="card"><div class="panel-title"><h3>Ustawienia</h3></div><div class="form-grid"><input id="s_company" value="${state.settings.companyName || ""}" placeholder="Nazwa firmy" /><input id="s_owner" value="${state.settings.ownerName || ""}" placeholder="Właściciel / zarządca" /><input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" /><input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" /><input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" /><input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" /><input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Domyślny dzień płatności" /></div><div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div></div>`;
     }
 
     function renderAll() {
@@ -1613,15 +984,11 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       if (!type || !unitInput) return;
       unitInput.value = meterUnitDefault(type);
     }
-
     function showMeterHint() {
       const meterId = document.getElementById("r_meter")?.value;
       const hint = document.getElementById("meterHint");
       if (!hint) return;
-      if (!meterId) {
-        hint.textContent = "Wybierz licznik.";
-        return;
-      }
+      if (!meterId) { hint.textContent = "Wybierz licznik."; return; }
       const arr = readingsForMeter(meterId);
       const last = arr.length ? arr[arr.length - 1] : null;
       hint.textContent = last ? `Ostatni zapisany stan: ${last.value} z dnia ${last.date}` : "To będzie pierwszy odczyt tego licznika.";
@@ -1630,42 +997,22 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     async function addBuilding() {
       const name = document.getElementById("b_name").value.trim();
       if (!name) return alert("Podaj nazwę budynku.");
-      state.buildings.push({
-        id: uid("b"),
-        name,
-        address: document.getElementById("b_address").value.trim(),
-        notes: document.getElementById("b_notes").value.trim(),
-        createdAt: today()
-      });
+      state.buildings.push({ id: uid("b"), name, address: document.getElementById("b_address").value.trim(), notes: document.getElementById("b_notes").value.trim(), createdAt: today() });
       await save();
     }
-
     async function removeBuilding(id) {
       if (!confirm("Usunąć budynek?")) return;
       state.buildings = state.buildings.filter((x) => x.id !== id);
       state.units = state.units.filter((u) => u.buildingId !== id);
       await save();
     }
-
     async function addUnit() {
       const buildingId = document.getElementById("u_building").value;
       const code = document.getElementById("u_code").value.trim();
       if (!buildingId || !code) return alert("Wybierz budynek i podaj numer lokalu.");
-      state.units.push({
-        id: uid("u"),
-        buildingId,
-        code,
-        type: document.getElementById("u_type").value,
-        area: Number(document.getElementById("u_area").value || 0),
-        floor: Number(document.getElementById("u_floor").value || 0),
-        rentDefault: Number(document.getElementById("u_rent").value || 0),
-        serviceCharge: Number(document.getElementById("u_service").value || 0),
-        status: document.getElementById("u_status").value,
-        notes: ""
-      });
+      state.units.push({ id: uid("u"), buildingId, code, type: document.getElementById("u_type").value, area: Number(document.getElementById("u_area").value || 0), floor: Number(document.getElementById("u_floor").value || 0), rentDefault: Number(document.getElementById("u_rent").value || 0), serviceCharge: Number(document.getElementById("u_service").value || 0), status: document.getElementById("u_status").value, notes: "" });
       await save();
     }
-
     async function removeUnit(id) {
       if (!confirm("Usunąć lokal?")) return;
       state.units = state.units.filter((x) => x.id !== id);
@@ -1675,293 +1022,109 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.meterReadings = state.meterReadings.filter((r) => state.meters.some((m) => m.id === r.meterId));
       await save();
     }
-
     async function addTenant() {
       const name = document.getElementById("t_name").value.trim();
       if (!name) return alert("Podaj imię i nazwisko.");
-      state.tenants.push({
-        id: uid("t"),
-        name,
-        phone: document.getElementById("t_phone").value.trim(),
-        email: document.getElementById("t_email").value.trim(),
-        unitId: document.getElementById("t_unit").value,
-        status: "aktywny",
-        notes: ""
-      });
+      state.tenants.push({ id: uid("t"), name, phone: document.getElementById("t_phone").value.trim(), email: document.getElementById("t_email").value.trim(), unitId: document.getElementById("t_unit").value, status: "aktywny", notes: "" });
       await save();
     }
-
     async function removeTenant(id) {
       if (!confirm("Usunąć najemcę?")) return;
       state.tenants = state.tenants.filter((x) => x.id !== id);
       state.leases = state.leases.filter((l) => l.tenantId !== id);
       await save();
     }
-
     function openTenantCard(id) {
       selectedTenantCardId = id;
       renderTenantCard();
       showPage("tenantCard");
     }
-
     async function addLease() {
       const tenantId = document.getElementById("l_tenant").value;
       const unitId = document.getElementById("l_unit").value;
       if (!tenantId || !unitId) return alert("Wybierz najemcę i lokal.");
-
       state.leases.push({
-        id: uid("l"),
-        tenantId,
-        unitId,
+        id: uid("l"), tenantId, unitId,
         startDate: document.getElementById("l_start").value,
         endDate: document.getElementById("l_end").value,
         rent: Number(document.getElementById("l_rent").value || 0),
         deposit: Number(document.getElementById("l_deposit").value || 0),
         status: document.getElementById("l_status").value,
-
         advanceColdWater: Number(document.getElementById("l_adv_cold").value || 0),
         advanceHotWater: Number(document.getElementById("l_adv_hot").value || 0),
         advanceElectricity: Number(document.getElementById("l_adv_el").value || 0),
         advanceGas: Number(document.getElementById("l_adv_gas").value || 0),
         advanceHeat: Number(document.getElementById("l_adv_heat").value || 0),
-
         feeWaste: Number(document.getElementById("l_fee_waste").value || 0),
         feeInternet: Number(document.getElementById("l_fee_internet").value || 0),
-
         rentDueDay: Number(document.getElementById("l_rent_due").value || 5),
         otherDueDay: Number(document.getElementById("l_other_due").value || 10),
-
         notes: ""
       });
-
       const unit = state.units.find((u) => u.id === unitId);
       if (unit) unit.status = "wynajęte";
       const tenant = state.tenants.find((t) => t.id === tenantId);
       if (tenant) tenant.unitId = unitId;
       await save();
     }
-
     async function removeLease(id) {
       if (!confirm("Usunąć umowę?")) return;
       state.leases = state.leases.filter((x) => x.id !== id);
       await save();
     }
-
     async function addMeter() {
       const unitId = document.getElementById("m_unit").value;
       const type = document.getElementById("m_type").value;
       if (!unitId) return alert("Wybierz lokal.");
-      state.meters.push({
-        id: uid("m"),
-        unitId,
-        type,
-        serial: document.getElementById("m_serial").value.trim(),
-        rate: Number(document.getElementById("m_rate").value || 0),
-        unit: document.getElementById("m_unit_name").value.trim() || meterUnitDefault(type)
-      });
+      state.meters.push({ id: uid("m"), unitId, type, serial: document.getElementById("m_serial").value.trim(), rate: Number(document.getElementById("m_rate").value || 0), unit: document.getElementById("m_unit_name").value.trim() || meterUnitDefault(type) });
       await save();
     }
-
-    function validateReadingAgainstNeighbors(readingId, meterId, date, value) {
-      const temp = { id: readingId || "temp", meterId, date, value: Number(value) };
-      const meterReadings = state.meterReadings
-        .filter((r) => r.meterId === meterId && r.id !== readingId)
-        .concat(temp)
-        .sort((a, b) => (a.date + a.id).localeCompare(b.date + b.id));
-
-      const idx = meterReadings.findIndex((r) => r.id === temp.id);
-      const prev = idx > 0 ? meterReadings[idx - 1] : null;
-      const next = idx < meterReadings.length - 1 ? meterReadings[idx + 1] : null;
-
-      if (prev && Number(value) < Number(prev.value)) {
-        return `Stan nie może być mniejszy od poprzedniego odczytu (${prev.value} z ${prev.date}).`;
-      }
-      if (next && Number(value) > Number(next.value)) {
-        return `Stan nie może być większy od następnego odczytu (${next.value} z ${next.date}).`;
-      }
-      return null;
-    }
-
     async function addReading() {
       const meterId = document.getElementById("r_meter").value;
       const date = document.getElementById("r_date").value;
       const value = Number(document.getElementById("r_value").value || 0);
-
       if (!meterId || !date) return alert("Wybierz licznik i datę.");
-
       const error = validateReadingAgainstNeighbors(null, meterId, date, value);
       if (error) return alert(error);
-
       state.meterReadings.push({ id: uid("r"), meterId, date, value });
       await save();
     }
-
+    function validateReadingAgainstNeighbors(readingId, meterId, date, value) {
+      const temp = { id: readingId || "temp", meterId, date, value: Number(value) };
+      const meterReadings = state.meterReadings.filter((r) => r.meterId === meterId && r.id !== readingId).concat(temp).sort((a, b) => (a.date + a.id).localeCompare(b.date + b.id));
+      const idx = meterReadings.findIndex((r) => r.id === temp.id);
+      const prev = idx > 0 ? meterReadings[idx - 1] : null;
+      const next = idx < meterReadings.length - 1 ? meterReadings[idx + 1] : null;
+      if (prev && Number(value) < Number(prev.value)) return `Stan nie może być mniejszy od poprzedniego odczytu (${prev.value} z ${prev.date}).`;
+      if (next && Number(value) > Number(next.value)) return `Stan nie może być większy od następnego odczytu (${next.value} z ${next.date}).`;
+      return null;
+    }
     async function editReading(id) {
       const reading = state.meterReadings.find((r) => r.id === id);
       if (!reading) return;
-
       const newDate = prompt("Podaj nową datę odczytu (RRRR-MM-DD):", reading.date);
       if (!newDate) return;
-
       const newValueRaw = prompt("Podaj nowy stan licznika:", reading.value);
       if (newValueRaw === null) return;
-
       const newValue = Number(newValueRaw);
       if (Number.isNaN(newValue)) return alert("Stan licznika musi być liczbą.");
-
       const error = validateReadingAgainstNeighbors(id, reading.meterId, newDate, newValue);
       if (error) return alert(error);
-
       reading.date = newDate;
       reading.value = newValue;
       await save();
     }
-
     async function deleteReading(id) {
       const reading = state.meterReadings.find((r) => r.id === id);
       if (!reading) return;
-
       const next = nextReadingOf(reading);
       const prev = previousReadingOf(reading);
-      if (next && prev && Number(next.value) < Number(prev.value)) {
-        return alert("Nie można usunąć tego odczytu, bo rozwali to kolejność stanów licznika.");
-      }
-
+      if (next && prev && Number(next.value) < Number(prev.value)) return alert("Nie można usunąć tego odczytu, bo rozwali to kolejność stanów licznika.");
       if (!confirm("Usunąć odczyt licznika?")) return;
       state.meterReadings = state.meterReadings.filter((r) => r.id !== id);
       await save();
     }
-
-    function settlementExists(month, leaseId) {
-      return state.settlements.some((s) => s.month === month && s.leaseId === leaseId);
-    }
-
-    async function closeMonth() {
-      const month = document.getElementById("settlement_month").value;
-      if (!month) return alert("Wybierz miesiąc.");
-
-      const activeLeases = state.leases.filter((l) => l.status === "aktywna");
-      if (!activeLeases.length) return alert("Brak aktywnych umów.");
-
-      let created = 0;
-
-      for (const lease of activeLeases) {
-        if (settlementExists(month, lease.id)) continue;
-
-        const unit = unitById(lease.unitId);
-        const tenant = tenantById(lease.tenantId);
-        if (!unit || !tenant) continue;
-
-        const lines = [];
-
-        lines.push({
-          label: "Czynsz",
-          qty: 1,
-          unit: "mies.",
-          rate: Number(lease.rent || 0),
-          amount: Number(lease.rent || 0),
-          group: "rent"
-        });
-
-        if (Number(unit?.serviceCharge || 0) > 0) {
-          lines.push({
-            label: "Opłata administracyjna",
-            qty: 1,
-            unit: "mies.",
-            rate: Number(unit.serviceCharge || 0),
-            amount: Number(unit.serviceCharge || 0),
-            group: "other"
-          });
-        }
-
-        if (Number(lease.feeWaste || 0) > 0) {
-          lines.push({
-            label: "Śmieci",
-            qty: 1,
-            unit: "mies.",
-            rate: Number(lease.feeWaste || 0),
-            amount: Number(lease.feeWaste || 0),
-            group: "other"
-          });
-        }
-
-        if (Number(lease.feeInternet || 0) > 0) {
-          lines.push({
-            label: "Internet",
-            qty: 1,
-            unit: "mies.",
-            rate: Number(lease.feeInternet || 0),
-            amount: Number(lease.feeInternet || 0),
-            group: "other"
-          });
-        }
-
-        const advanceRows = [
-          ["advanceColdWater", "Zaliczka zimna woda"],
-          ["advanceHotWater", "Zaliczka ciepła woda"],
-          ["advanceElectricity", "Zaliczka prąd"],
-          ["advanceGas", "Zaliczka gaz"],
-          ["advanceHeat", "Zaliczka ciepło"]
-        ];
-
-        advanceRows.forEach(([key, label]) => {
-          if (Number(lease[key] || 0) > 0) {
-            lines.push({
-              label,
-              qty: 1,
-              unit: "mies.",
-              rate: Number(lease[key] || 0),
-              amount: Number(lease[key] || 0),
-              group: "other"
-            });
-          }
-        });
-
-        const utilityLines = utilityBreakdownForUnit(unit.id, month);
-        utilityLines.forEach((u) => {
-          if (!u || !u.meter || !u.ready) return;
-          lines.push({
-            label: `Rzeczywiste zużycie: ${u.meter.type}`,
-            qty: u.usage,
-            unit: u.meter.unit,
-            rate: Number(u.meter.rate || 0),
-            amount: Number((u.amount || 0).toFixed(2)),
-            group: "other"
-          });
-        });
-
-        const total = lines.reduce((a, b) => a + Number(b.amount || 0), 0);
-
-        state.settlements.push({
-          id: uid("st"),
-          month,
-          leaseId: lease.id,
-          tenantId: tenant.id,
-          tenantName: tenant.name,
-          unitId: unit.id,
-          unitLabel: unitLabel(unit.id),
-          dueDateRent: dueDateForMonthByDay(month, lease.rentDueDay || 5),
-          dueDateOther: dueDateForMonthByDay(month, lease.otherDueDay || 10),
-          bankAccount: state.settings.bankAccount || "",
-          lines,
-          total: Number(total.toFixed(2)),
-          createdAt: new Date().toISOString()
-        });
-
-        created++;
-      }
-
-      selectedSettlementId = state.settlements.length ? state.settlements[state.settlements.length - 1].id : null;
-      await save();
-      alert(`Zapisano ${created} rozliczeń za ${fmtMonth(month)}.`);
-      showPage("settlements");
-    }
-
-    function selectSettlement(id) {
-      selectedSettlementId = id;
-      renderSettlements();
-    }
-
+    function selectSettlement(id) { selectedSettlementId = id; renderSettlements(); }
     async function deleteSettlement(id) {
       const s = findSettlement(id);
       if (!s) return;
@@ -1970,89 +1133,40 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       if (selectedSettlementId === id) selectedSettlementId = null;
       await save();
     }
-
-    async function deleteMonthSettlements() {
-      const month = document.getElementById("settlement_month").value;
-      if (!month) return alert("Wybierz miesiąc.");
-      const count = state.settlements.filter((s) => s.month === month).length;
-      if (!count) return alert("Brak rozliczeń dla tego miesiąca.");
-      if (!confirm(`Usunąć wszystkie rozliczenia za ${fmtMonth(month)}? Ilość: ${count}`)) return;
-      state.settlements = state.settlements.filter((s) => s.month !== month);
-      if (selectedSettlementId && !findSettlement(selectedSettlementId)) selectedSettlementId = null;
-      await save();
-      alert(`Usunięto ${count} rozliczeń za ${fmtMonth(month)}.`);
-    }
-
-    function selectPeriodSettlement(id) {
-      selectedPeriodSettlementId = id;
-      renderPeriodSettlements();
-    }
-
+    function selectPeriodSettlement(id) { selectedPeriodSettlementId = id; renderPeriodSettlements(); }
     async function generatePeriodSettlement() {
       const leaseId = document.getElementById("ps_lease").value;
       const fromMonth = document.getElementById("ps_from").value;
       const toMonth = document.getElementById("ps_to").value;
-
       if (!leaseId || !fromMonth || !toMonth) return alert("Uzupełnij wszystkie pola.");
       if (fromMonth > toMonth) return alert("Miesiąc początkowy nie może być późniejszy od końcowego.");
-
       const lease = leaseById(leaseId);
       if (!lease) return alert("Nie znaleziono umowy.");
-
       const tenant = tenantById(lease.tenantId);
       const unit = unitById(lease.unitId);
       if (!tenant || !unit) return alert("Brak najemcy lub lokalu.");
-
       const months = monthRange(fromMonth, toMonth);
       const meterTypes = ["zimna woda", "ciepła woda", "prąd", "gaz", "ciepło"];
       const details = [];
-
       for (const type of meterTypes) {
         const key = advanceKeyForType(type);
         const monthlyAdvance = Number(lease[key] || 0);
         const advances = monthlyAdvance * months.length;
-
         const actual = months.reduce((sum, month) => {
           const unitLines = utilityBreakdownForUnit(unit.id, month);
           const matching = unitLines.filter(x => x?.meter?.type === type && x.ready);
           return sum + matching.reduce((a,b)=>a+Number(b.amount || 0),0);
         }, 0);
-
-        if (advances !== 0 || actual !== 0) {
-          details.push({
-            type,
-            label: type,
-            actual: Number(actual.toFixed(2)),
-            advances: Number(advances.toFixed(2)),
-            difference: Number((actual - advances).toFixed(2))
-          });
-        }
+        if (advances !== 0 || actual !== 0) details.push({ type, label: type, actual: Number(actual.toFixed(2)), advances: Number(advances.toFixed(2)), difference: Number((actual - advances).toFixed(2)) });
       }
-
       const finalDifference = Number(details.reduce((a,b)=>a+Number(b.difference || 0),0).toFixed(2));
-
-      const record = {
-        id: uid("ps"),
-        leaseId,
-        tenantId: tenant.id,
-        tenantName: tenant.name,
-        unitId: unit.id,
-        unitLabel: unitLabel(unit.id),
-        fromMonth,
-        toMonth,
-        details,
-        finalDifference,
-        bankAccount: state.settings.bankAccount || "",
-        createdAt: new Date().toISOString()
-      };
-
+      const record = { id: uid("ps"), leaseId, tenantId: tenant.id, tenantName: tenant.name, unitId: unit.id, unitLabel: unitLabel(unit.id), fromMonth, toMonth, details, finalDifference, bankAccount: state.settings.bankAccount || "", createdAt: new Date().toISOString() };
       state.periodSettlements.push(record);
       selectedPeriodSettlementId = record.id;
       await save();
       showPage("periodSettlements");
       alert("Wygenerowano rozliczenie okresowe.");
     }
-
     async function deletePeriodSettlement(id) {
       const s = findPeriodSettlement(id);
       if (!s) return;
@@ -2061,118 +1175,44 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       if (selectedPeriodSettlementId === id) selectedPeriodSettlementId = null;
       await save();
     }
-
-    function copySettlementMessage() {
-      const settlement = findSettlement(selectedSettlementId);
-      if (!settlement) return;
-      copyToClipboard(settlementMessage(settlement));
-    }
-
-    function sendSettlementMail() {
-      const settlement = findSettlement(selectedSettlementId);
-      if (!settlement) return;
-      const tenant = tenantById(settlement.tenantId);
-      mailtoText(tenant?.email || "", `Rozliczenie najmu za ${fmtMonth(settlement.month)}`, settlementMessage(settlement));
-    }
-
-    function printSettlement() {
-      const settlement = findSettlement(selectedSettlementId);
-      if (!settlement) return;
-      openPrintWindow(settlementPrintableHtml(settlement));
-    }
-
-    function copyPeriodSettlementMessage() {
-      const settlement = findPeriodSettlement(selectedPeriodSettlementId);
-      if (!settlement) return;
-      copyToClipboard(periodSettlementMessage(settlement));
-    }
-
-    function sendPeriodSettlementMail() {
-      const settlement = findPeriodSettlement(selectedPeriodSettlementId);
-      if (!settlement) return;
-      const tenant = tenantById(settlement.tenantId);
-      mailtoText(tenant?.email || "", `Rozliczenie okresowe mediów ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}`, periodSettlementMessage(settlement));
-    }
-
-    function printPeriodSettlement() {
-      const settlement = findPeriodSettlement(selectedPeriodSettlementId);
-      if (!settlement) return;
-      openPrintWindow(periodSettlementPrintableHtml(settlement));
-    }
-
+    function copySettlementMessage() { const settlement = findSettlement(selectedSettlementId); if (!settlement) return; copyToClipboard(settlementMessage(settlement)); }
+    function sendSettlementMail() { const settlement = findSettlement(selectedSettlementId); if (!settlement) return; const tenant = tenantById(settlement.tenantId); mailtoText(tenant?.email || "", `Rozliczenie najmu za ${fmtMonth(settlement.month)}`, settlementMessage(settlement)); }
+    function printSettlement() { const settlement = findSettlement(selectedSettlementId); if (!settlement) return; openPrintWindow(settlementPrintableHtml(settlement)); }
+    function copyPeriodSettlementMessage() { const settlement = findPeriodSettlement(selectedPeriodSettlementId); if (!settlement) return; copyToClipboard(periodSettlementMessage(settlement)); }
+    function sendPeriodSettlementMail() { const settlement = findPeriodSettlement(selectedPeriodSettlementId); if (!settlement) return; const tenant = tenantById(settlement.tenantId); mailtoText(tenant?.email || "", `Rozliczenie okresowe mediów ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}`, periodSettlementMessage(settlement)); }
+    function printPeriodSettlement() { const settlement = findPeriodSettlement(selectedPeriodSettlementId); if (!settlement) return; openPrintWindow(periodSettlementPrintableHtml(settlement)); }
     async function addCharge() {
       const leaseId = document.getElementById("c_lease").value;
       if (!leaseId) return alert("Wybierz umowę.");
-      state.charges.push({
-        id: uid("c"),
-        leaseId,
-        type: document.getElementById("c_type").value.trim(),
-        amount: Number(document.getElementById("c_amount").value || 0),
-        dueDate: document.getElementById("c_due").value,
-        status: "oczekujące",
-        notes: ""
-      });
+      state.charges.push({ id: uid("c"), leaseId, type: document.getElementById("c_type").value.trim(), amount: Number(document.getElementById("c_amount").value || 0), dueDate: document.getElementById("c_due").value, status: "oczekujące", notes: "" });
       await save();
     }
-
     async function removeCharge(id) {
       if (!confirm("Usunąć opłatę?")) return;
       state.charges = state.charges.filter((x) => x.id !== id);
       state.payments = state.payments.filter((p) => p.chargeId !== id);
       await save();
     }
-
     async function addPayment() {
       const chargeId = document.getElementById("p_charge").value;
       const charge = state.charges.find((c) => c.id === chargeId);
       if (!charge) return alert("Wybierz opłatę.");
-      state.payments.push({
-        id: uid("p"),
-        leaseId: charge.leaseId,
-        chargeId,
-        date: document.getElementById("p_date").value,
-        amount: Number(document.getElementById("p_amount").value || 0),
-        method: document.getElementById("p_method").value,
-        notes: ""
-      });
+      state.payments.push({ id: uid("p"), leaseId: charge.leaseId, chargeId, date: document.getElementById("p_date").value, amount: Number(document.getElementById("p_amount").value || 0), method: document.getElementById("p_method").value, notes: "" });
       await save();
     }
-
     async function addExpense() {
-      state.expenses.push({
-        id: uid("e"),
-        date: document.getElementById("e_date").value,
-        buildingId: document.getElementById("e_building").value,
-        unitId: document.getElementById("e_unit").value,
-        category: document.getElementById("e_category").value.trim(),
-        amount: Number(document.getElementById("e_amount").value || 0),
-        vendor: document.getElementById("e_vendor").value.trim(),
-        notes: document.getElementById("e_notes").value.trim()
-      });
+      state.expenses.push({ id: uid("e"), date: document.getElementById("e_date").value, buildingId: document.getElementById("e_building").value, unitId: document.getElementById("e_unit").value, category: document.getElementById("e_category").value.trim(), amount: Number(document.getElementById("e_amount").value || 0), vendor: document.getElementById("e_vendor").value.trim(), notes: document.getElementById("e_notes").value.trim() });
       await save();
     }
-
     async function removeExpense(id) {
       if (!confirm("Usunąć koszt?")) return;
       state.expenses = state.expenses.filter((x) => x.id !== id);
       await save();
     }
-
     async function addTicket() {
-      state.tickets.push({
-        id: uid("tk"),
-        createdAt: today(),
-        unitId: document.getElementById("tk_unit").value,
-        tenantId: document.getElementById("tk_tenant").value,
-        title: document.getElementById("tk_title").value.trim(),
-        priority: document.getElementById("tk_priority").value,
-        status: document.getElementById("tk_status").value,
-        assignee: document.getElementById("tk_assignee").value.trim(),
-        notes: document.getElementById("tk_notes").value.trim()
-      });
+      state.tickets.push({ id: uid("tk"), createdAt: today(), unitId: document.getElementById("tk_unit").value, tenantId: document.getElementById("tk_tenant").value, title: document.getElementById("tk_title").value.trim(), priority: document.getElementById("tk_priority").value, status: document.getElementById("tk_status").value, assignee: document.getElementById("tk_assignee").value.trim(), notes: document.getElementById("tk_notes").value.trim() });
       await save();
     }
-
     async function removeTicket(id) {
       if (!confirm("Usunąć zgłoszenie?")) return;
       state.tickets = state.tickets.filter((x) => x.id !== id);
@@ -2182,38 +1222,25 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     async function generateMonthlyCharges() {
       const month = currentMonth();
       let created = 0;
-
       state.leases.filter((l) => l.status === "aktywna").forEach((l) => {
         const unit = unitById(l.unitId);
-
         const addIfMissing = (type, amount, dueDate) => {
           const exists = state.charges.some((c) => c.leaseId === l.id && c.type === type);
           if (!exists && Number(amount || 0) > 0) {
-            state.charges.push({
-              id: uid("c"),
-              leaseId: l.id,
-              type,
-              amount: Number(amount || 0),
-              dueDate,
-              status: "oczekujące",
-              notes: "Automatycznie wygenerowano"
-            });
+            state.charges.push({ id: uid("c"), leaseId: l.id, type, amount: Number(amount || 0), dueDate, status: "oczekujące", notes: "Automatycznie wygenerowano" });
             created++;
           }
         };
-
         addIfMissing(`Czynsz ${month}`, Number(l.rent || 0), dueDateForMonthByDay(month, l.rentDueDay || 5));
         addIfMissing(`Administracja ${month}`, Number(unit?.serviceCharge || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
         addIfMissing(`Śmieci ${month}`, Number(l.feeWaste || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
         addIfMissing(`Internet ${month}`, Number(l.feeInternet || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
-
         addIfMissing(`Zaliczka zimna woda ${month}`, Number(l.advanceColdWater || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
         addIfMissing(`Zaliczka ciepła woda ${month}`, Number(l.advanceHotWater || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
         addIfMissing(`Zaliczka prąd ${month}`, Number(l.advanceElectricity || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
         addIfMissing(`Zaliczka gaz ${month}`, Number(l.advanceGas || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
         addIfMissing(`Zaliczka ciepło ${month}`, Number(l.advanceHeat || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
       });
-
       await save();
       alert(`Wygenerowano ${created} opłat.`);
     }
@@ -2239,18 +1266,13 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
-
-    function exportJSON() {
-      downloadFile("rentflow_backup.json", JSON.stringify(state, null, 2), "application/json");
-    }
-
+    function exportJSON() { downloadFile("rentflow_backup.json", JSON.stringify(state, null, 2), "application/json"); }
     function csv(rows) {
       if (!rows.length) return "";
       const headers = Object.keys(rows[0]);
       const esc = (v) => `"${String(v ?? "").replaceAll('"','""')}"`;
       return [headers.join(";"), ...rows.map(r => headers.map(h => esc(r[h])).join(";"))].join("\n");
     }
-
     function exportCSVBundle() {
       const files = {
         buildings: csv(state.buildings),
@@ -2303,7 +1325,6 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
       const income = months.map((m) => state.payments.filter((p) => p.date.startsWith(m)).reduce((a, b) => a + Number(b.amount || 0), 0));
       const costs = months.map((m) => state.expenses.filter((e) => e.date.startsWith(m)).reduce((a, b) => a + Number(b.amount || 0), 0));
-
       const max = Math.max(100, ...income, ...costs);
       const pad = 34;
 
@@ -2331,14 +1352,12 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
       drawSeries(income, "#66e3c4");
       drawSeries(costs, "#ff7272");
-
       ctx.fillStyle = "#9fb0d0";
       ctx.font = "12px Arial";
       months.forEach((m, i) => {
         const x = pad + i * ((w - pad * 2) / (months.length - 1 || 1));
         ctx.fillText(m.slice(5), x - 8, h - 10);
       });
-
       ctx.fillStyle = "#66e3c4";
       ctx.fillText("Przychody", pad, 16);
       ctx.fillStyle = "#ff7272";
