@@ -795,6 +795,17 @@
     let editingTenantId = null;
     let editingLeaseId = null;
 
+    function defaultDocumentTemplates() {
+      return {
+        leaseAgreement: "",
+        handoverProtocol: "",
+        paymentDemand: "",
+        leaseTermination: "",
+        depositReceipt: "",
+        paymentReceipt: ""
+      };
+    }
+
     const ownerPages = [
       ["dashboard", "Dashboard", "Podgląd portfela najmu, płatności i mediów."],
       ["properties", "Budynki i lokale", "Zarządzanie budynkami i mieszkaniami."],
@@ -1043,6 +1054,10 @@
       state.settings.reminderDaysBeforeDue = Number(state.settings.reminderDaysBeforeDue || 3);
       state.settings.reminderDaysBeforeLeaseEnd = Number(state.settings.reminderDaysBeforeLeaseEnd || 45);
       state.settings.reminderDaysBeforeDocumentExpiry = Number(state.settings.reminderDaysBeforeDocumentExpiry || 30);
+      state.settings.documentTemplates = {
+        ...defaultDocumentTemplates(),
+        ...(state.settings.documentTemplates || {})
+      };
 
       state.leases = state.leases.map((lease) => ({
         ...lease,
@@ -1594,6 +1609,10 @@
         depositReceipt: "Przyjęcie kaucji",
         paymentReceipt: "Przyjęcie czynszu i opłat"
       })[kind] || "Dokument";
+    }
+
+    function adminTemplateKinds() {
+      return ["leaseAgreement", "handoverProtocol", "paymentDemand", "leaseTermination", "depositReceipt", "paymentReceipt"];
     }
 
     function findGeneratedDocument(id) {
@@ -2177,7 +2196,7 @@
       return {
         title: "Umowa najmu",
         subject: `Umowa najmu · ${tenant.name}`,
-        bodyHtml: `
+        bodyHtml: applyDocumentTemplate("leaseAgreement", tenantId, `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Wynajmujący</strong><br>${landlordIdentityBlock()}</div>
         <div class="box"><strong>Najemca</strong><br>${tenantIdentityMarkup(tenant)}</div>
@@ -2190,7 +2209,7 @@
         <h2>Dodatkowe opłaty i media</h2>
         <p>Zaliczka zimna woda: ${fmt(lease.advanceColdWater)}<br>Zaliczka ciepła woda: ${fmt(lease.advanceHotWater)}<br>Zaliczka prąd: ${fmt(lease.advanceElectricity)}<br>Zaliczka gaz: ${fmt(lease.advanceGas)}<br>Zaliczka ciepło: ${fmt(lease.advanceHeat)}<br>Śmieci: ${fmt(lease.feeWaste || 0)}<br>Internet: ${fmt(lease.feeInternet || 0)}</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
-      `
+      `)
       };
     }
 
@@ -2204,13 +2223,83 @@
       return draft ? htmlDocumentShell(draft.title, `<h1>${draft.title}</h1>${draft.bodyHtml}`) : "";
     }
 
+    function templateValue(value) {
+      return sanitizeText(value == null || value === "" ? "—" : value);
+    }
+
+    function documentTemplateContext(tenantId) {
+      const { tenant, lease, unit, building } = leaseDocumentContext(tenantId);
+      const payment = lease ? latestPaymentForLease(lease.id) : null;
+      const overdueItems = lease ? overdueChargesForLease(lease.id) : [];
+      const overdueTotal = overdueItems.reduce((sum, item) => sum + chargeOutstandingAmount(item), 0);
+      const meterLines = unit
+        ? state.meters
+          .filter((meter) => meter.unitId === unit.id)
+          .map((meter) => `${meter.type}: ${latestReadingOnOrBefore(meter.id, today())?.value ?? "—"} ${meter.unit || ""}`)
+          .join("<br>")
+        : "";
+
+      return {
+        "{{today}}": templateValue(today()),
+        "{{company_name}}": templateValue(state.settings.companyName || "RentFlow"),
+        "{{owner_name}}": templateValue(state.settings.ownerName || state.settings.companyName || "—"),
+        "{{owner_address}}": templateValue(state.settings.ownerAddress || "—"),
+        "{{owner_document}}": templateValue(state.settings.ownerDocument || "—"),
+        "{{owner_bank_account}}": templateValue(state.settings.bankAccount || "—"),
+        "{{landlord_identity}}": landlordIdentityBlock(),
+        "{{tenant_name}}": templateValue(tenant?.name),
+        "{{tenant_email}}": templateValue(tenant?.email),
+        "{{tenant_phone}}": templateValue(tenant?.phone),
+        "{{tenant_address}}": tenantFormalAddress(tenant),
+        "{{tenant_identity}}": tenant ? tenantIdentityMarkup(tenant) : "—",
+        "{{tenant_pesel}}": templateValue(tenant?.pesel),
+        "{{tenant_id_card}}": templateValue(tenant?.idCardNumber),
+        "{{unit_label}}": templateValue(unit ? unitLabel(unit.id) : "—"),
+        "{{unit_type}}": templateValue(unit?.type),
+        "{{unit_area}}": templateValue(unit?.area ? `${unit.area} m²` : "—"),
+        "{{building_name}}": templateValue(building?.name),
+        "{{building_address}}": templateValue(building?.address),
+        "{{lease_start}}": templateValue(lease?.startDate),
+        "{{lease_end}}": templateValue(lease?.endDate || "czas nieoznaczony"),
+        "{{lease_rent}}": templateValue(lease ? fmt(lease.rent) : "—"),
+        "{{lease_deposit}}": templateValue(lease ? fmt(lease.deposit) : "—"),
+        "{{lease_rent_due_day}}": templateValue(lease?.rentDueDay ? `${lease.rentDueDay}` : "—"),
+        "{{lease_other_due_day}}": templateValue(lease?.otherDueDay ? `${lease.otherDueDay}` : "—"),
+        "{{lease_advances_total}}": templateValue(lease ? fmt(leaseAdvanceTotal(lease)) : "—"),
+        "{{lease_advances_breakdown}}": lease ? `
+          Zaliczka zimna woda: ${fmt(lease.advanceColdWater)}<br>
+          Zaliczka ciepła woda: ${fmt(lease.advanceHotWater)}<br>
+          Zaliczka prąd: ${fmt(lease.advanceElectricity)}<br>
+          Zaliczka gaz: ${fmt(lease.advanceGas)}<br>
+          Zaliczka ciepło: ${fmt(lease.advanceHeat)}<br>
+          Śmieci: ${fmt(lease.feeWaste || 0)}<br>
+          Internet: ${fmt(lease.feeInternet || 0)}
+        ` : "—",
+        "{{meter_readings}}": meterLines || "Brak przypisanych liczników.",
+        "{{payment_date}}": templateValue(payment?.date),
+        "{{payment_amount}}": templateValue(payment ? fmt(payment.amount) : "—"),
+        "{{payment_method}}": templateValue(payment?.method),
+        "{{overdue_total}}": templateValue(fmt(overdueTotal)),
+        "{{overdue_table}}": overdueItems.length
+          ? `<table><thead><tr><th>Pozycja</th><th>Termin</th><th>Kwota</th></tr></thead><tbody>${overdueItems.map((item) => `<tr><td>${item.type}</td><td>${item.dueDate}</td><td>${fmt(chargeOutstandingAmount(item))}</td></tr>`).join("")}</tbody></table>`
+          : `<p>Brak zaległości na dzień wygenerowania.</p>`
+      };
+    }
+
+    function applyDocumentTemplate(kind, tenantId, fallbackHtml) {
+      const template = String(state.settings.documentTemplates?.[kind] || "").trim();
+      if (!template) return fallbackHtml;
+      const context = documentTemplateContext(tenantId);
+      return template.replace(/\{\{[a-z0-9_]+\}\}/gi, (token) => context[token] ?? token);
+    }
+
     function buildHandoverProtocolDraft(tenantId) {
       const { tenant, lease, unit, building } = leaseDocumentContext(tenantId);
       if (!tenant || !unit) return null;
       return {
         title: "Protokół zdawczo-odbiorczy",
         subject: `Protokół odbioru · ${tenant.name}`,
-        bodyHtml: `
+        bodyHtml: applyDocumentTemplate("handoverProtocol", tenantId, `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Lokal</strong><br>${unitLabel(unit.id)}<br>Adres: ${building?.address || "—"}</div>
         <div class="box"><strong>Strony</strong><br>Wynajmujący: ${state.settings.ownerName || state.settings.companyName || "—"}<br>Najemca: ${tenant.name || "—"}</div>
@@ -2221,7 +2310,7 @@
         <h2>Powiązana umowa</h2>
         <p>Umowa od ${lease?.startDate || "—"} do ${lease?.endDate || "—"}.</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
-      `
+      `)
       };
     }
 
@@ -2233,7 +2322,7 @@
       return {
         title: "Przedsądowe wezwanie do zapłaty",
         subject: `Wezwanie do zapłaty · ${tenant.name}`,
-        bodyHtml: `
+        bodyHtml: applyDocumentTemplate("paymentDemand", tenantId, `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Adresat</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <div class="box"><strong>Nadawca</strong><br>${landlordIdentityBlock()}</div>
@@ -2241,7 +2330,7 @@
         <table><thead><tr><th>Pozycja</th><th>Termin</th><th>Kwota pozostała</th></tr></thead><tbody>${overdueItems.length ? overdueItems.map((item) => `<tr><td>${item.type}</td><td>${item.dueDate}</td><td>${fmt(chargeOutstandingAmount(item))}</td></tr>`).join("") : `<tr><td colspan="3">Brak zaległości na dzień wygenerowania.</td></tr>`}<tr><td colspan="2"><strong>Łącznie</strong></td><td><strong>${fmt(total)}</strong></td></tr></tbody></table>
         <p class="section">Prosimy o uregulowanie należności w terminie 7 dni od doręczenia niniejszego wezwania pod rygorem skierowania sprawy na drogę postępowania sądowego.</p>
         <div class="signature" style="margin-top:36px">Wynajmujący</div>
-      `
+      `)
       };
     }
 
@@ -2251,14 +2340,14 @@
       return {
         title: "Wypowiedzenie umowy najmu",
         subject: `Wypowiedzenie umowy · ${tenant.name}`,
-        bodyHtml: `
+        bodyHtml: applyDocumentTemplate("leaseTermination", tenantId, `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <div class="box"><strong>Umowa</strong><br>Lokal: ${unit ? unitLabel(unit.id) : "—"}<br>Data rozpoczęcia: ${lease.startDate || "—"}<br>Data zakończenia wskazana w umowie: ${lease.endDate || "—"}</div>
         <p>Wypowiadam umowę najmu z zachowaniem okresu wypowiedzenia wynikającego z umowy / przepisów prawa. Proszę o opuszczenie lokalu, rozliczenie wszystkich należności oraz uzgodnienie terminu zdania lokalu i podpisania protokołu końcowego.</p>
         <p>Przyczynę wypowiedzenia oraz datę ustania stosunku najmu należy uzupełnić zgodnie z konkretnym stanem faktycznym.</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Potwierdzenie odbioru</div></div>
-      `
+      `)
       };
     }
 
@@ -2268,14 +2357,14 @@
       return {
         title: "Potwierdzenie przyjęcia kaucji",
         subject: `Przyjęcie kaucji · ${tenant.name}`,
-        bodyHtml: `
+        bodyHtml: applyDocumentTemplate("depositReceipt", tenantId, `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <p>Potwierdzam przyjęcie kaucji zabezpieczającej z tytułu umowy najmu dotyczącej lokalu ${unit ? unitLabel(unit.id) : "—"}.</p>
         <p>Kwota kaucji: <strong>${fmt(lease.deposit)}</strong></p>
         <p>Kaucja została przyjęta na zabezpieczenie należności wynikających z umowy najmu.</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
-      `
+      `)
       };
     }
 
@@ -2286,13 +2375,13 @@
       return {
         title: "Potwierdzenie przyjęcia płatności",
         subject: `Przyjęcie płatności · ${tenant.name}`,
-        bodyHtml: `
+        bodyHtml: applyDocumentTemplate("paymentReceipt", tenantId, `
         <p class="muted">Data wygenerowania: ${today()}</p>
         <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <div class="box"><strong>Płatność</strong><br>Data wpłaty: ${payment.date || "—"}<br>Kwota: ${fmt(payment.amount)}<br>Metoda: ${payment.method || "—"}<br>Lokal: ${unit ? unitLabel(unit.id) : "—"}</div>
         <p>Potwierdzam przyjęcie płatności z tytułu czynszu / pozostałych opłat wynikających z umowy najmu.</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
-      `
+      `)
       };
     }
 
@@ -3612,7 +3701,48 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       }
 
       document.getElementById("settings").innerHTML = `
-        <div class="card"><div class="panel-title"><h3>Ustawienia</h3></div><div class="form-grid"><input id="s_company" value="${state.settings.companyName || ""}" placeholder="Nazwa firmy" /><input id="s_owner" value="${state.settings.ownerName || ""}" placeholder="Właściciel / zarządca" /><input id="s_owner_address" value="${state.settings.ownerAddress || ""}" placeholder="Adres właściciela / siedziby" /><input id="s_owner_document" value="${state.settings.ownerDocument || ""}" placeholder="Dokument / PESEL / NIP właściciela" /><input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" /><input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" /><input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" /><input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" /><input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Domyślny dzień płatności" /><input id="s_reminder_due" type="number" value="${state.settings.reminderDaysBeforeDue || 3}" placeholder="Ile dni przed płatnością przypominać" /><input id="s_reminder_lease" type="number" value="${state.settings.reminderDaysBeforeLeaseEnd || 45}" placeholder="Ile dni przed końcem umowy przypominać" /><input id="s_reminder_doc" type="number" value="${state.settings.reminderDaysBeforeDocumentExpiry || 30}" placeholder="Ile dni przed końcem dokumentu przypominać" /></div><div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div></div>`;
+        <div class="card">
+          <div class="panel-title"><h3>Ustawienia</h3></div>
+          <div class="form-grid">
+            <input id="s_company" value="${state.settings.companyName || ""}" placeholder="Nazwa firmy" />
+            <input id="s_owner" value="${state.settings.ownerName || ""}" placeholder="Właściciel / zarządca" />
+            <input id="s_owner_address" value="${state.settings.ownerAddress || ""}" placeholder="Adres właściciela / siedziby" />
+            <input id="s_owner_document" value="${state.settings.ownerDocument || ""}" placeholder="Dokument / PESEL / NIP właściciela" />
+            <input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" />
+            <input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" />
+            <input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" />
+            <input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" />
+            <input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Domyślny dzień płatności" />
+            <input id="s_reminder_due" type="number" value="${state.settings.reminderDaysBeforeDue || 3}" placeholder="Ile dni przed płatnością przypominać" />
+            <input id="s_reminder_lease" type="number" value="${state.settings.reminderDaysBeforeLeaseEnd || 45}" placeholder="Ile dni przed końcem umowy przypominać" />
+            <input id="s_reminder_doc" type="number" value="${state.settings.reminderDaysBeforeDocumentExpiry || 30}" placeholder="Ile dni przed końcem dokumentu przypominać" />
+          </div>
+          <div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div>
+        </div>
+        <div class="card section">
+          <div class="panel-title"><h3>Wzory dokumentów administracyjnych</h3></div>
+          <div class="notice">Wklej własny wzór HTML lub zwykły tekst z prostymi znacznikami. Podczas generowania dla najemcy system podstawi dane automatycznie.</div>
+          <div class="section notice">
+            Dostępne znaczniki:
+            <br><code>{{today}}</code>, <code>{{company_name}}</code>, <code>{{owner_name}}</code>, <code>{{owner_address}}</code>, <code>{{owner_document}}</code>, <code>{{owner_bank_account}}</code>
+            <br><code>{{tenant_name}}</code>, <code>{{tenant_address}}</code>, <code>{{tenant_email}}</code>, <code>{{tenant_phone}}</code>, <code>{{tenant_pesel}}</code>, <code>{{tenant_id_card}}</code>, <code>{{tenant_identity}}</code>
+            <br><code>{{unit_label}}</code>, <code>{{unit_type}}</code>, <code>{{unit_area}}</code>, <code>{{building_name}}</code>, <code>{{building_address}}</code>
+            <br><code>{{lease_start}}</code>, <code>{{lease_end}}</code>, <code>{{lease_rent}}</code>, <code>{{lease_deposit}}</code>, <code>{{lease_rent_due_day}}</code>, <code>{{lease_other_due_day}}</code>, <code>{{lease_advances_total}}</code>, <code>{{lease_advances_breakdown}}</code>
+            <br><code>{{payment_date}}</code>, <code>{{payment_amount}}</code>, <code>{{payment_method}}</code>, <code>{{overdue_total}}</code>, <code>{{overdue_table}}</code>, <code>{{meter_readings}}</code>, <code>{{landlord_identity}}</code>
+          </div>
+          <div class="entity-list section">
+            ${adminTemplateKinds().map((kind) => `
+              <div class="card">
+                <div class="panel-title"><h3>${generatedDocumentLabel(kind)}</h3></div>
+                <textarea id="tpl_${kind}" rows="10" placeholder="Wklej własny wzór dla dokumentu ${generatedDocumentLabel(kind)}">${state.settings.documentTemplates?.[kind] || ""}</textarea>
+              </div>
+            `).join("")}
+          </div>
+          <div class="section inline-actions">
+            <button class="btn green" onclick="saveSettings()">Zapisz ustawienia i wzory</button>
+            <button class="btn secondary" onclick="clearAdminTemplates()">Wyczyść wzory</button>
+          </div>
+        </div>`;
     }
 
     function renderCommunications() {
@@ -4415,8 +4545,19 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.settings.reminderDaysBeforeDue = Math.min(30, Math.max(1, Number(document.getElementById("s_reminder_due").value || 3)));
       state.settings.reminderDaysBeforeLeaseEnd = Math.min(180, Math.max(1, Number(document.getElementById("s_reminder_lease").value || 45)));
       state.settings.reminderDaysBeforeDocumentExpiry = Math.min(180, Math.max(1, Number(document.getElementById("s_reminder_doc").value || 30)));
+      state.settings.documentTemplates = {
+        ...defaultDocumentTemplates(),
+        ...Object.fromEntries(adminTemplateKinds().map((kind) => [kind, document.getElementById(`tpl_${kind}`)?.value || ""]))
+      };
       await save();
       alert("Zapisano ustawienia.");
+    }
+
+    function clearAdminTemplates() {
+      adminTemplateKinds().forEach((kind) => {
+        const input = document.getElementById(`tpl_${kind}`);
+        if (input) input.value = "";
+      });
     }
 
     function downloadFile(filename, content, mime) {
