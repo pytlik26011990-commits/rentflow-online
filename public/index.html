@@ -777,6 +777,7 @@
       messages: [],
       taxAdjustments: [],
       taxPayments: [],
+      taxAnnualClosings: [],
       settlements: [],
       periodSettlements: [],
       settings: {
@@ -1207,6 +1208,7 @@
       state.messages = state.messages.filter((message) => (!message.tenantId || tenantIds.has(message.tenantId)) && (!message.leaseId || leaseIds.has(message.leaseId)) && (!message.unitId || unitIds.has(message.unitId)));
       state.taxAdjustments = state.taxAdjustments.filter((entry) => entry.date);
       state.taxPayments = state.taxPayments.filter((entry) => entry.periodKey);
+      state.taxAnnualClosings = state.taxAnnualClosings.filter((entry) => !entry.unitId || unitIds.has(entry.unitId));
       state.settlements = state.settlements.filter((settlement) => (!settlement.leaseId || leaseIds.has(settlement.leaseId)) && (!settlement.tenantId || tenantIds.has(settlement.tenantId)) && (!settlement.unitId || unitIds.has(settlement.unitId)));
       state.periodSettlements = state.periodSettlements.filter((settlement) => !settlement.tenantId || tenantIds.has(settlement.tenantId));
     }
@@ -1229,6 +1231,7 @@
       state.messages ||= [];
       state.taxAdjustments ||= [];
       state.taxPayments ||= [];
+      state.taxAnnualClosings ||= [];
       state.settlements ||= [];
       state.periodSettlements ||= [];
       state.settings ||= {};
@@ -1290,6 +1293,11 @@
         rent: Number(lease.rent || 0),
         deposit: Number(lease.deposit || 0)
       }));
+      state.units = state.units.map((unit) => ({
+        ...unit,
+        taxBookkeepingEnabled: unit?.taxBookkeepingEnabled === true,
+        taxBookkeepingStartMonth: unit?.taxBookkeepingStartMonth || ""
+      }));
 
       state.tickets = state.tickets.map(normalizeTicket);
       state.tasks = state.tasks.map((task) => ({
@@ -1342,6 +1350,7 @@
       state.taxAdjustments = state.taxAdjustments.map((entry) => ({
         ...entry,
         date: entry?.date || today(),
+        unitId: sanitizeText(entry?.unitId || ""),
         amount: Number(entry?.amount || 0),
         mode: ["increase", "decrease"].includes(entry?.mode) ? entry.mode : "increase",
         note: sanitizeText(entry?.note || "")
@@ -1350,9 +1359,29 @@
         ...entry,
         periodKey: sanitizeText(entry?.periodKey || ""),
         paymentDate: entry?.paymentDate || today(),
+        unitId: sanitizeText(entry?.unitId || ""),
         amount: Number(entry?.amount || 0),
         note: sanitizeText(entry?.note || "")
       })).filter((entry) => entry.amount > 0);
+      state.taxAnnualClosings = state.taxAnnualClosings.map((entry) => ({
+        ...entry,
+        year: Number(entry?.year || 0),
+        unitId: sanitizeText(entry?.unitId || ""),
+        scope: ["portfolio", "unit"].includes(entry?.scope) ? entry.scope : "unit",
+        acceptedAt: entry?.acceptedAt || "",
+        acceptedBy: sanitizeText(entry?.acceptedBy || ""),
+        note: sanitizeText(entry?.note || ""),
+        snapshot: {
+          taxableRevenue: Number(entry?.snapshot?.taxableRevenue || 0),
+          taxDue: Number(entry?.snapshot?.taxDue || 0),
+          taxPaid: Number(entry?.snapshot?.taxPaid || 0),
+          taxRemaining: Number(entry?.snapshot?.taxRemaining || 0),
+          taxableRevenueRounded: Number(entry?.snapshot?.taxableRevenueRounded || 0),
+          taxDueRounded: Number(entry?.snapshot?.taxDueRounded || 0),
+          taxPaidRounded: Number(entry?.snapshot?.taxPaidRounded || 0),
+          taxRemainingRounded: Number(entry?.snapshot?.taxRemainingRounded || 0)
+        }
+      })).filter((entry) => entry.year > 0);
       state.documents = state.documents.map((document) => ({
         ...document,
         attachments: Array.isArray(document?.attachments)
@@ -1483,6 +1512,20 @@
       return state.charges.find((charge) => charge.id === payment.chargeId)?.type || "Wpłata bez przypisanej opłaty";
     }
 
+    function paymentUnitId(payment) {
+      return leaseById(payment.leaseId)?.unitId || "";
+    }
+
+    function shouldBookkeepUnit(unit, year = selectedTaxYearValue()) {
+      if (!unit?.taxBookkeepingEnabled) return false;
+      if (!unit.taxBookkeepingStartMonth) return true;
+      return String(unit.taxBookkeepingStartMonth).slice(0, 4) <= String(year);
+    }
+
+    function bookkeptUnits(year = selectedTaxYearValue()) {
+      return state.units.filter((unit) => shouldBookkeepUnit(unit, year));
+    }
+
     function paymentExcludedFromPrivateRentalTax(payment) {
       const label = `${paymentChargeType(payment)} ${payment.method || ""}`.toLowerCase();
       return privateRentalTaxExcludedKeywords().some((keyword) => label.includes(keyword));
@@ -1523,12 +1566,21 @@
       return new Date(dueYear, dueMonth - 1, 20).toISOString().slice(0, 10);
     }
 
-    function privateRentalRevenueRows(year = selectedTaxYearValue()) {
+    function privateRentalRevenueRows(year = selectedTaxYearValue(), unitId = "") {
       return state.payments
         .filter((payment) => String(payment.date || "").startsWith(`${year}-`))
         .filter((payment) => payment.leaseId && Number(payment.amount || 0) > 0)
+        .filter((payment) => {
+          const linkedUnitId = paymentUnitId(payment);
+          if (!linkedUnitId) return false;
+          if (unitId) return linkedUnitId === unitId;
+          const unit = unitById(linkedUnitId);
+          return shouldBookkeepUnit(unit, year) && (!unit?.taxBookkeepingStartMonth || String(payment.date || "").slice(0, 7) >= unit.taxBookkeepingStartMonth);
+        })
         .map((payment) => ({
           ...payment,
+          unitId: paymentUnitId(payment),
+          unitLabel: unitLabel(paymentUnitId(payment)),
           chargeType: paymentChargeType(payment),
           tenantLabel: tenantName(leaseById(payment.leaseId)?.tenantId),
           leaseLabel: leaseLabel(payment.leaseId),
@@ -1537,18 +1589,19 @@
         .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
     }
 
-    function privateRentalAdjustments(year = selectedTaxYearValue()) {
+    function privateRentalAdjustments(year = selectedTaxYearValue(), unitId = "") {
       return state.taxAdjustments
         .filter((entry) => String(entry.date || "").startsWith(`${year}-`))
+        .filter((entry) => !unitId || entry.unitId === unitId)
         .slice()
         .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
     }
 
-    function privateRentalTaxSummary(year = selectedTaxYearValue()) {
+    function privateRentalTaxSummary(year = selectedTaxYearValue(), unitId = "") {
       const mode = state.settings.privateRentalTaxPeriod || "monthly";
       const threshold = privateRentalTaxThreshold();
-      const revenueRows = privateRentalRevenueRows(year);
-      const adjustments = privateRentalAdjustments(year);
+      const revenueRows = privateRentalRevenueRows(year, unitId);
+      const adjustments = privateRentalAdjustments(year, unitId);
       const periodMap = new Map();
 
       revenueRows.filter((row) => !row.excluded).forEach((row) => {
@@ -1568,6 +1621,7 @@
       const periodKeys = Array.from(periodMap.keys()).sort();
       const paidByPeriod = state.taxPayments
         .filter((entry) => String(entry.periodKey || "").startsWith(String(year)))
+        .filter((entry) => !unitId || entry.unitId === unitId)
         .reduce((map, entry) => {
           map.set(entry.periodKey, (map.get(entry.periodKey) || 0) + Number(entry.amount || 0));
           return map;
@@ -1618,7 +1672,8 @@
         taxRemaining: Math.max(0, taxDue - taxPaid),
         periods,
         revenueRows,
-        adjustments
+        adjustments,
+        unitId
       };
     }
 
@@ -1626,8 +1681,8 @@
       return Math.round(Number(amount || 0));
     }
 
-    function privateRentalPit28Summary(year = selectedTaxYearValue()) {
-      const summary = privateRentalTaxSummary(year);
+    function privateRentalPit28Summary(year = selectedTaxYearValue(), unitId = "") {
+      const summary = privateRentalTaxSummary(year, unitId);
       return {
         ...summary,
         taxableRevenueRounded: taxRoundPLN(summary.taxableRevenue),
@@ -1670,6 +1725,21 @@
           To jest robocze zestawienie do przygotowania deklaracji PIT-28, a nie oficjalny formularz e-Deklaracji. Przed wysyłką sprawdź poprawność wyjątków podatkowych i zaokrągleń rocznych.
         </div>
       `);
+    }
+
+    function taxAnnualClosingsForYear(year = selectedTaxYearValue()) {
+      return state.taxAnnualClosings
+        .filter((entry) => entry.year === Number(year))
+        .slice()
+        .sort((a, b) => String(b.acceptedAt || "").localeCompare(String(a.acceptedAt || "")));
+    }
+
+    function unitTaxAnnualClosing(unitId, year = selectedTaxYearValue()) {
+      return state.taxAnnualClosings.find((entry) => entry.scope === "unit" && entry.unitId === unitId && entry.year === Number(year)) || null;
+    }
+
+    function portfolioTaxAnnualClosing(year = selectedTaxYearValue()) {
+      return state.taxAnnualClosings.find((entry) => entry.scope === "portfolio" && !entry.unitId && entry.year === Number(year)) || null;
     }
 
     function activeLeases() {
@@ -4635,6 +4705,14 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       const year = selectedTaxYearValue();
       const summary = privateRentalTaxSummary(year);
       const pit28 = privateRentalPit28Summary(year);
+      const includedUnits = bookkeptUnits(year);
+      const unitSummaries = includedUnits.map((unit) => ({
+        unit,
+        summary: privateRentalPit28Summary(year, unit.id),
+        closing: unitTaxAnnualClosing(unit.id, year)
+      }));
+      const portfolioClosing = portfolioTaxAnnualClosing(year);
+      const closings = taxAnnualClosingsForYear(year);
       const periods = summary.periods;
       const periodOptions = periods.length
         ? periods.map((period) => `<option value="${period.periodKey}">${period.label} · termin ${period.dueDate}</option>`).join("")
@@ -4659,6 +4737,44 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             Terminy wpłat są liczone do <strong>20. dnia miesiąca następującego po miesiącu lub kwartale</strong>. Ostateczne roczne zamknięcie i PIT-28 nadal warto zweryfikować przed wysyłką, zwłaszcza przy nietypowych sytuacjach jak częściowe zwroty, potrącenia z kaucji albo wspólność majątkowa.
           </div>
         </div>
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Lokale objęte księgowaniem</h3></div>
+            <table>
+              <thead><tr><th>Lokal</th><th>Status</th><th>Start księgowania</th><th></th></tr></thead>
+              <tbody>
+                ${state.units.length ? state.units.map((unit) => `
+                  <tr>
+                    <td><strong>${unitLabel(unit.id)}</strong><br><span class="muted small">${tenantName(activeLeaseByUnit(unit.id)?.tenantId)}</span></td>
+                    <td><span class="badge ${unit.taxBookkeepingEnabled ? "status-active" : "status-closed"}">${unit.taxBookkeepingEnabled ? "księgowany" : "pominięty"}</span></td>
+                    <td><input id="tax_unit_start_${unit.id}" type="month" value="${unit.taxBookkeepingStartMonth || ""}" /></td>
+                    <td class="inline-actions"><button class="btn secondary small" onclick="toggleUnitTaxBookkeeping('${unit.id}')">${unit.taxBookkeepingEnabled ? "Wyłącz" : "Włącz"}</button><button class="btn small" onclick="saveUnitTaxStartMonth('${unit.id}')">Zapisz start</button></td>
+                  </tr>
+                `).join("") : `<tr><td colspan="4">Brak lokali w systemie.</td></tr>`}
+              </tbody>
+            </table>
+            <div class="section notice">Włączasz tylko te lokale, które chcesz prowadzić podatkowo. Dla każdego możesz ustawić osobny miesiąc startowy księgowania.</div>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>Księgowość per lokal</h3></div>
+            <div class="entity-list">
+              ${unitSummaries.length ? unitSummaries.map((entry) => `
+                <div class="entity-item">
+                  <div>
+                    <strong>${unitLabel(entry.unit.id)}</strong>
+                    <div class="meta">Przychód ${fmt(entry.summary.taxableRevenue)} · podatek ${fmt(entry.summary.taxDue)} · wpłaty ${fmt(entry.summary.taxPaid)}</div>
+                    <div class="meta">${entry.closing ? `zamknięte ${formatDateTime(entry.closing.acceptedAt)}` : "otwarte do akceptacji"}</div>
+                  </div>
+                  <div class="inline-actions">
+                    <span class="badge ${entry.closing ? "status-active" : "status-pending"}">${entry.closing ? "zamknięte" : "w toku"}</span>
+                    <button class="btn secondary small" onclick="copyUnitTaxSummary('${entry.unit.id}')">Kopiuj</button>
+                    <button class="btn green small" onclick="acceptUnitTaxClosing('${entry.unit.id}')">${entry.closing ? "Aktualizuj" : "Zamknij rok"}</button>
+                  </div>
+                </div>
+              `).join("") : `<div class="empty-state">Włącz lokale do księgowania, aby prowadzić je oddzielnie.</div>`}
+            </div>
+          </div>
+        </div>
         <div class="card section">
           <div class="panel-title"><h3>Roczne zestawienie do PIT-28</h3></div>
           <div class="grid cards">
@@ -4671,6 +4787,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           <div class="section inline-actions">
             <button class="btn green" onclick="printPit28Summary()">Drukuj zestawienie PIT-28</button>
             <button class="btn secondary" onclick="copyPit28Summary()">Kopiuj podsumowanie</button>
+            <button class="btn secondary" onclick="acceptPortfolioTaxClosing()">${portfolioClosing ? "Aktualizuj zamknięcie portfela" : "Zamknij rok portfela"}</button>
           </div>
         </div>
         <div class="grid two section">
@@ -4697,6 +4814,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             <div class="panel-title"><h3>Korekty i wpłaty do US</h3></div>
             <div class="form-grid">
               <input id="tax_adjustment_date" type="date" value="${today()}" />
+              <select id="tax_adjustment_unit"><option value="">Korekta ogólna</option>${includedUnits.map((unit) => `<option value="${unit.id}">${unitLabel(unit.id)}</option>`).join("")}</select>
               <input id="tax_adjustment_amount" type="number" step="0.01" placeholder="Kwota korekty" />
               <select id="tax_adjustment_mode"><option value="increase">Zwiększa przychód</option><option value="decrease">Zmniejsza przychód</option></select>
               <input id="tax_adjustment_note" placeholder="Powód korekty, np. zwrot części czynszu" />
@@ -4704,6 +4822,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             <div class="section inline-actions"><button class="btn green" onclick="addTaxAdjustment()">Dodaj korektę</button></div>
             <div class="form-grid section">
               <select id="tax_payment_period">${periodOptions}</select>
+              <select id="tax_payment_unit"><option value="">Wpłata ogólna</option>${includedUnits.map((unit) => `<option value="${unit.id}">${unitLabel(unit.id)}</option>`).join("")}</select>
               <input id="tax_payment_date" type="date" value="${today()}" />
               <input id="tax_payment_amount" type="number" step="0.01" placeholder="Wpłata do US" />
               <input id="tax_payment_note" placeholder="Notatka do wpłaty" />
@@ -4714,7 +4833,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                 <div class="entity-item">
                   <div>
                     <strong>${entry.mode === "decrease" ? "Korekta zmniejszająca" : "Korekta zwiększająca"} · ${fmt(entry.amount)}</strong>
-                    <div class="meta">${entry.date} · ${entry.note || "bez opisu"}</div>
+                    <div class="meta">${entry.date}${entry.unitId ? ` · ${unitLabel(entry.unitId)}` : ""} · ${entry.note || "bez opisu"}</div>
                   </div>
                   <div class="inline-actions"><button class="btn secondary small" onclick="removeTaxAdjustment('${entry.id}')">Usuń</button></div>
                 </div>
@@ -4726,17 +4845,18 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           <div class="card">
             <div class="panel-title"><h3>Ewidencja otrzymanych przychodów</h3></div>
             <table>
-              <thead><tr><th>Data</th><th>Najemca / umowa</th><th>Tytuł wpłaty</th><th>Kwota</th><th>Status</th></tr></thead>
+              <thead><tr><th>Data</th><th>Lokal</th><th>Najemca / umowa</th><th>Tytuł wpłaty</th><th>Kwota</th><th>Status</th></tr></thead>
               <tbody>
                 ${summary.revenueRows.length ? summary.revenueRows.map((row) => `
                   <tr>
                     <td>${row.date}</td>
+                    <td>${truncatedText(row.unitLabel, 22)}</td>
                     <td>${truncatedText(`${row.tenantLabel} · ${row.leaseLabel}`, 28)}</td>
                     <td>${truncatedText(row.chargeType, 28)}</td>
                     <td>${fmt(row.amount)}</td>
                     <td><span class="badge ${row.excluded ? "status-closed" : "status-active"}">${row.excluded ? "wyłączone" : "opodatkowane"}</span></td>
                   </tr>
-                `).join("") : `<tr><td colspan="5">Brak zaksięgowanych wpłat w tym roku.</td></tr>`}
+                `).join("") : `<tr><td colspan="6">Brak zaksięgowanych wpłat w tym roku.</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -4750,13 +4870,32 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                     <td>${taxPeriodLabel(entry.periodKey)}</td>
                     <td>${entry.paymentDate}</td>
                     <td>${fmt(entry.amount)}</td>
-                    <td>${truncatedText(entry.note || "—", 28)}</td>
+                    <td>${truncatedText(`${entry.unitId ? `${unitLabel(entry.unitId)} · ` : ""}${entry.note || "—"}`, 28)}</td>
                     <td><button class="btn secondary small" onclick="removeTaxPayment('${entry.id}')">Usuń</button></td>
                   </tr>
                 `).join("") : `<tr><td colspan="5">Nie zapisano jeszcze żadnej wpłaty do urzędu.</td></tr>`}
               </tbody>
             </table>
           </div>
+        </div>
+        <div class="card section">
+          <div class="panel-title"><h3>Archiwum zamknięć rocznych</h3></div>
+          <table>
+            <thead><tr><th>Zakres</th><th>Rok</th><th>Przychód</th><th>Podatek</th><th>Wpłaty</th><th>Akceptacja</th><th></th></tr></thead>
+            <tbody>
+              ${closings.length ? closings.map((entry) => `
+                <tr>
+                  <td>${entry.scope === "portfolio" ? "Cały portfel" : unitLabel(entry.unitId)}</td>
+                  <td>${entry.year}</td>
+                  <td>${fmt(entry.snapshot.taxableRevenue)}</td>
+                  <td>${fmt(entry.snapshot.taxDue)}</td>
+                  <td>${fmt(entry.snapshot.taxPaid)}</td>
+                  <td>${formatDateTime(entry.acceptedAt)}<br><span class="muted small">${entry.acceptedBy || "—"}</span></td>
+                  <td><button class="btn secondary small" onclick="removeTaxAnnualClosing('${entry.id}')">Usuń</button></td>
+                </tr>
+              `).join("") : `<tr><td colspan="7">Brak zamknięć rocznych dla tego roku.</td></tr>`}
+            </tbody>
+          </table>
         </div>`;
     }
 
@@ -4855,7 +4994,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         Object.assign(unit, payload);
         editingUnitId = null;
       } else {
-        state.units.push({ id: uid("u"), ...payload });
+        state.units.push({ id: uid("u"), taxBookkeepingEnabled: false, taxBookkeepingStartMonth: "", ...payload });
       }
       await save();
     }
@@ -5427,11 +5566,12 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
     async function addTaxAdjustment() {
       const date = document.getElementById("tax_adjustment_date")?.value || today();
+      const unitId = document.getElementById("tax_adjustment_unit")?.value || "";
       const amount = Math.abs(Number(document.getElementById("tax_adjustment_amount")?.value || 0));
       const mode = document.getElementById("tax_adjustment_mode")?.value === "decrease" ? "decrease" : "increase";
       const note = document.getElementById("tax_adjustment_note")?.value.trim() || "";
       if (!amount) return alert("Podaj kwotę korekty.");
-      state.taxAdjustments.push({ id: uid("taxadj"), date, amount, mode, note });
+      state.taxAdjustments.push({ id: uid("taxadj"), date, unitId, amount, mode, note });
       await save();
       showPage("taxes");
     }
@@ -5445,12 +5585,13 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
     async function addTaxPayment() {
       const periodKey = document.getElementById("tax_payment_period")?.value || "";
+      const unitId = document.getElementById("tax_payment_unit")?.value || "";
       const paymentDate = document.getElementById("tax_payment_date")?.value || today();
       const amount = Math.abs(Number(document.getElementById("tax_payment_amount")?.value || 0));
       const note = document.getElementById("tax_payment_note")?.value.trim() || "";
       if (!periodKey) return alert("Wybierz okres podatkowy.");
       if (!amount) return alert("Podaj kwotę wpłaty do urzędu.");
-      state.taxPayments.push({ id: uid("taxpay"), periodKey, paymentDate, amount, note });
+      state.taxPayments.push({ id: uid("taxpay"), periodKey, unitId, paymentDate, amount, note });
       await save();
       showPage("taxes");
     }
@@ -5481,6 +5622,104 @@ Pozostało według danych w systemie: ${summary.taxRemainingRounded} zł`;
 
     function copyPit28Summary() {
       copyToClipboard(pit28SummaryText(selectedTaxYearValue()));
+    }
+
+    async function toggleUnitTaxBookkeeping(unitId) {
+      const unit = unitById(unitId);
+      if (!unit) return;
+      unit.taxBookkeepingEnabled = !unit.taxBookkeepingEnabled;
+      if (unit.taxBookkeepingEnabled && !unit.taxBookkeepingStartMonth) {
+        unit.taxBookkeepingStartMonth = `${selectedTaxYearValue()}-01`;
+      }
+      await save();
+      showPage("taxes");
+    }
+
+    async function saveUnitTaxStartMonth(unitId) {
+      const unit = unitById(unitId);
+      if (!unit) return;
+      unit.taxBookkeepingStartMonth = document.getElementById(`tax_unit_start_${unitId}`)?.value || "";
+      await save();
+      showPage("taxes");
+    }
+
+    function unitTaxSummaryText(unitId, year = selectedTaxYearValue()) {
+      const summary = privateRentalPit28Summary(year, unitId);
+      return `Roczne podsumowanie lokalu ${unitLabel(unitId)} za ${year}
+
+Przychód opodatkowany: ${fmt(summary.taxableRevenue)}
+Przychód do deklaracji: ${summary.taxableRevenueRounded} zł
+Ryczałt należny: ${fmt(summary.taxDue)}
+Ryczałt do deklaracji: ${summary.taxDueRounded} zł
+Wpłaty podatku: ${fmt(summary.taxPaid)}
+Pozostało: ${summary.taxRemainingRounded} zł`;
+    }
+
+    function copyUnitTaxSummary(unitId) {
+      copyToClipboard(unitTaxSummaryText(unitId));
+    }
+
+    async function acceptUnitTaxClosing(unitId) {
+      const unit = unitById(unitId);
+      if (!unit) return;
+      const summary = privateRentalPit28Summary(selectedTaxYearValue(), unitId);
+      const note = prompt(`Notatka do zamknięcia rocznego dla ${unitLabel(unitId)} (${selectedTaxYearValue()})`, unitTaxAnnualClosing(unitId, selectedTaxYearValue())?.note || "") ?? "";
+      state.taxAnnualClosings = state.taxAnnualClosings.filter((entry) => !(entry.scope === "unit" && entry.unitId === unitId && entry.year === selectedTaxYearValue()));
+      state.taxAnnualClosings.push({
+        id: uid("taxclose"),
+        scope: "unit",
+        unitId,
+        year: selectedTaxYearValue(),
+        acceptedAt: nowIso(),
+        acceptedBy: currentUser?.name || currentUser?.email || "Użytkownik",
+        note,
+        snapshot: {
+          taxableRevenue: summary.taxableRevenue,
+          taxDue: summary.taxDue,
+          taxPaid: summary.taxPaid,
+          taxRemaining: summary.taxRemaining,
+          taxableRevenueRounded: summary.taxableRevenueRounded,
+          taxDueRounded: summary.taxDueRounded,
+          taxPaidRounded: summary.taxPaidRounded,
+          taxRemainingRounded: summary.taxRemainingRounded
+        }
+      });
+      await save();
+      showPage("taxes");
+    }
+
+    async function acceptPortfolioTaxClosing() {
+      const summary = privateRentalPit28Summary(selectedTaxYearValue());
+      const note = prompt(`Notatka do zamknięcia portfela za ${selectedTaxYearValue()}`, portfolioTaxAnnualClosing(selectedTaxYearValue())?.note || "") ?? "";
+      state.taxAnnualClosings = state.taxAnnualClosings.filter((entry) => !(entry.scope === "portfolio" && entry.year === selectedTaxYearValue()));
+      state.taxAnnualClosings.push({
+        id: uid("taxclose"),
+        scope: "portfolio",
+        unitId: "",
+        year: selectedTaxYearValue(),
+        acceptedAt: nowIso(),
+        acceptedBy: currentUser?.name || currentUser?.email || "Użytkownik",
+        note,
+        snapshot: {
+          taxableRevenue: summary.taxableRevenue,
+          taxDue: summary.taxDue,
+          taxPaid: summary.taxPaid,
+          taxRemaining: summary.taxRemaining,
+          taxableRevenueRounded: summary.taxableRevenueRounded,
+          taxDueRounded: summary.taxDueRounded,
+          taxPaidRounded: summary.taxPaidRounded,
+          taxRemainingRounded: summary.taxRemainingRounded
+        }
+      });
+      await save();
+      showPage("taxes");
+    }
+
+    async function removeTaxAnnualClosing(id) {
+      if (!confirm("Usunąć zapisane zamknięcie roczne?")) return;
+      state.taxAnnualClosings = state.taxAnnualClosings.filter((entry) => entry.id !== id);
+      await save();
+      showPage("taxes");
     }
 
     async function saveSettings() {
@@ -5651,7 +5890,8 @@ Pozostało według danych w systemie: ${summary.taxRemainingRounded} zł`;
         generatedDocuments: csv(state.generatedDocuments),
         messages: csv(state.messages),
         taxAdjustments: csv(state.taxAdjustments),
-        taxPayments: csv(state.taxPayments)
+        taxPayments: csv(state.taxPayments),
+        taxAnnualClosings: csv(state.taxAnnualClosings)
       };
       Object.entries(files).forEach(([name, content], i) => {
         setTimeout(() => downloadFile(`${name}.csv`, content, "text/csv;charset=utf-8;"), i * 250);
