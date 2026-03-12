@@ -1298,6 +1298,24 @@
         taxBookkeepingEnabled: unit?.taxBookkeepingEnabled === true,
         taxBookkeepingStartMonth: unit?.taxBookkeepingStartMonth || ""
       }));
+      state.tenants = state.tenants.map((tenant) => ({
+        ...tenant,
+        householdSize: Number(tenant?.householdSize || 1),
+        monthlyIncome: Number(tenant?.monthlyIncome || 0),
+        moveInTargetDate: tenant?.moveInTargetDate || "",
+        employmentType: tenant?.employmentType || "",
+        petsInfo: tenant?.petsInfo || "",
+        smokingDeclaration: tenant?.smokingDeclaration || "",
+        guarantorName: tenant?.guarantorName || "",
+        guarantorPhone: tenant?.guarantorPhone || "",
+        referencesStatus: tenant?.referencesStatus || "nie rozpoczęto",
+        idVerificationStatus: tenant?.idVerificationStatus || "nie rozpoczęto",
+        incomeVerificationStatus: tenant?.incomeVerificationStatus || "nie rozpoczęto",
+        debtCheckStatus: tenant?.debtCheckStatus || "nie rozpoczęto",
+        screeningStatus: tenant?.screeningStatus || "w toku",
+        screeningDecision: tenant?.screeningDecision || "do decyzji",
+        screeningNotes: tenant?.screeningNotes || ""
+      }));
 
       state.tickets = state.tickets.map(normalizeTicket);
       state.tasks = state.tasks.map((task) => ({
@@ -2855,6 +2873,62 @@
       })[type] || "Wiadomość";
     }
 
+    function screeningStatusBadge(status) {
+      return ({
+        zaakceptowany: "status-active",
+        odrzucony: "status-closed",
+        "do uzupełnienia": "status-pending",
+        "w toku": "status-open"
+      })[status] || "status-pending";
+    }
+
+    function screeningDecisionTone(decision) {
+      return ({
+        akceptuj: "status-active",
+        warunkowo: "status-pending",
+        odrzuć: "status-closed",
+        "do decyzji": "status-open"
+      })[decision] || "status-open";
+    }
+
+    function screeningProgressValue(tenant) {
+      const checks = [
+        tenant?.pesel,
+        tenant?.idCardNumber,
+        tenant?.registrationAddress,
+        tenant?.monthlyIncome > 0,
+        tenant?.referencesStatus === "sprawdzone",
+        tenant?.idVerificationStatus === "zweryfikowany",
+        tenant?.incomeVerificationStatus === "zweryfikowany",
+        tenant?.debtCheckStatus === "czysty"
+      ];
+      const done = checks.filter(Boolean).length;
+      return {
+        done,
+        total: checks.length,
+        percent: Math.round((done / checks.length) * 100)
+      };
+    }
+
+    function screeningRecommendation(tenant) {
+      const progress = screeningProgressValue(tenant);
+      if (tenant?.screeningDecision === "odrzuć") return "odrzuć";
+      if (tenant?.debtCheckStatus === "negatywny") return "odrzuć";
+      if (tenant?.incomeVerificationStatus === "zweryfikowany" && tenant?.referencesStatus === "sprawdzone" && progress.percent >= 75) return "akceptuj";
+      if (progress.percent >= 50) return "warunkowo";
+      return "do decyzji";
+    }
+
+    function onboardingTemplateTasks(tenant, lease) {
+      return [
+        { title: "Potwierdź komplet danych screeningowych", category: "screening", visibility: "owner", dueDate: tenant?.moveInTargetDate || "", description: "Zweryfikuj dokument tożsamości, dochód, referencje i historię płatniczą najemcy." },
+        { title: "Przygotuj i podpisz umowę najmu", category: "onboarding", visibility: "shared", dueDate: lease?.startDate || tenant?.moveInTargetDate || "", description: "Uzyskaj podpisy obu stron oraz zapisz finalną wersję dokumentu." },
+        { title: "Przyjmij kaucję i pierwszy czynsz", category: "onboarding", visibility: "owner", dueDate: lease?.startDate || tenant?.moveInTargetDate || "", description: "Potwierdź wpływ środków i wygeneruj potwierdzenia płatności." },
+        { title: "Przygotuj protokół odbioru i zdjęcia lokalu", category: "onboarding", visibility: "owner", dueDate: lease?.startDate || tenant?.moveInTargetDate || "", description: "Dodaj protokół zdawczo-odbiorczy oraz dokumentację zdjęciową." },
+        { title: "Przekaż klucze i aktywuj portal najemcy", category: "onboarding", visibility: "shared", dueDate: lease?.startDate || tenant?.moveInTargetDate || "", description: "Przekaż dostęp do lokalu i uruchom konto najemcy w portalu." }
+      ];
+    }
+
     function leaseActiveInMonth(lease, month) {
       if (!lease || !month) return false;
       const startMonth = String(lease.startDate || "").slice(0, 7);
@@ -3848,7 +3922,7 @@
             ${state.tenants.map((t) => {
               const ledger = tenantLedger(t.id);
               const verified = t.pesel && t.idCardNumber && t.registrationAddress;
-              return `<tr><td><div class="cell-stack"><strong>${t.name}</strong><span class="muted small">${truncatedText(tenantFormalAddress(t), 20)}</span></div></td><td>${truncatedText(t.phone || "—")}<br><span class="muted small">${truncatedText(t.email || "—", 22)}</span></td><td><span class="badge ${verified ? "status-active" : "status-pending"}">${verified ? "formalnie uzupełniony" : "braki danych"}</span></td><td>${t.unitId ? unitLabel(t.unitId) : "—"}</td><td class="${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}">${fmt(ledger.balance)}</td><td class="inline-actions"><button class="btn secondary small" onclick="openTenantCard('${t.id}')">Karta</button><button class="btn secondary small" onclick="startTenantEdit('${t.id}')">Edytuj</button><button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button></td></tr>`;
+              return `<tr><td><div class="cell-stack"><strong>${t.name}</strong><span class="muted small">${truncatedText(tenantFormalAddress(t), 20)}</span></div></td><td>${truncatedText(t.phone || "—")}<br><span class="muted small">${truncatedText(t.email || "—", 22)}</span></td><td><div class="cell-stack"><span class="badge ${verified ? "status-active" : "status-pending"}">${verified ? "formalnie uzupełniony" : "braki danych"}</span><span class="badge ${screeningStatusBadge(t.screeningStatus || "w toku")}">${t.screeningStatus || "w toku"}</span></div></td><td>${t.unitId ? unitLabel(t.unitId) : "—"}</td><td class="${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}">${fmt(ledger.balance)}</td><td class="inline-actions"><button class="btn secondary small" onclick="openTenantCard('${t.id}')">Karta</button><button class="btn secondary small" onclick="startTenantEdit('${t.id}')">Edytuj</button><button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button></td></tr>`;
             }).join("")}
           </tbody></table>
         </div>
@@ -3870,6 +3944,8 @@
       const generatedDrafts = generatedDraftsForTenant(tenant.id);
       const tenantAccess = tenantAccessByTenantId(tenant.id);
       const selectedDraft = findGeneratedDocument(selectedGeneratedDocumentId) || generatedDrafts[0] || null;
+      const screeningProgress = screeningProgressValue(tenant);
+      const screeningRecommendationValue = screeningRecommendation(tenant);
       if (selectedDraft) selectedGeneratedDocumentId = selectedDraft.id;
       const ownerDocumentButtons = lease ? `
         <button class="btn secondary small" onclick="openGeneratedDocumentDraft('leaseAgreement','${tenant.id}')">Nowy szkic umowy</button>
@@ -3913,6 +3989,33 @@
                 <input id="tenant_formal_emergency_phone" value="${tenant.emergencyPhone || ""}" placeholder="Telefon awaryjny" />
               </div>
               <div class="section"><button class="btn green" onclick="saveTenantFormalData('${tenant.id}')">Zapisz dane formalne</button></div>
+            </div>
+            <div class="card">
+              <div class="panel-title"><h3>Screening i onboarding</h3><span class="badge ${screeningDecisionTone(tenant.screeningDecision || screeningRecommendationValue)}">${tenant.screeningDecision || screeningRecommendationValue}</span></div>
+              <div class="grid cards section">
+                <div class="card"><div class="muted small">Kompletność</div><div class="metric" style="font-size:22px">${screeningProgress.percent}%</div><div class="small muted">${screeningProgress.done}/${screeningProgress.total} punktów</div></div>
+                <div class="card"><div class="muted small">Status</div><div class="metric" style="font-size:22px">${tenant.screeningStatus || "w toku"}</div><div class="small muted">postęp weryfikacji</div></div>
+                <div class="card"><div class="muted small">Rekomendacja</div><div class="metric" style="font-size:22px">${screeningRecommendationValue}</div><div class="small muted">podpowiedź systemu</div></div>
+              </div>
+              <div class="form-grid two">
+                <input id="tenant_screening_income" type="number" step="0.01" value="${tenant.monthlyIncome || ""}" placeholder="Dochód miesięczny netto" />
+                <input id="tenant_screening_move_in" type="date" value="${tenant.moveInTargetDate || ""}" placeholder="Planowana data startu" />
+                <input id="tenant_screening_employment" value="${tenant.employmentType || ""}" placeholder="Forma zatrudnienia / źródło dochodu" />
+                <input id="tenant_screening_household" type="number" min="1" value="${tenant.householdSize || 1}" placeholder="Liczba mieszkańców" />
+                <input id="tenant_screening_pets" value="${tenant.petsInfo || ""}" placeholder="Zwierzęta / informacje" />
+                <input id="tenant_screening_smoking" value="${tenant.smokingDeclaration || ""}" placeholder="Palenie / oświadczenie" />
+                <input id="tenant_screening_guarantor_name" value="${tenant.guarantorName || ""}" placeholder="Poręczyciel / kontakt" />
+                <input id="tenant_screening_guarantor_phone" value="${tenant.guarantorPhone || ""}" placeholder="Telefon poręczyciela" />
+                <select id="tenant_screening_references"><option ${tenant.referencesStatus === "nie rozpoczęto" ? "selected" : ""}>nie rozpoczęto</option><option ${tenant.referencesStatus === "w toku" ? "selected" : ""}>w toku</option><option ${tenant.referencesStatus === "sprawdzone" ? "selected" : ""}>sprawdzone</option><option ${tenant.referencesStatus === "negatywne" ? "selected" : ""}>negatywne</option></select>
+                <select id="tenant_screening_id_check"><option ${tenant.idVerificationStatus === "nie rozpoczęto" ? "selected" : ""}>nie rozpoczęto</option><option ${tenant.idVerificationStatus === "w toku" ? "selected" : ""}>w toku</option><option ${tenant.idVerificationStatus === "zweryfikowany" ? "selected" : ""}>zweryfikowany</option><option ${tenant.idVerificationStatus === "niezgodny" ? "selected" : ""}>niezgodny</option></select>
+                <select id="tenant_screening_income_check"><option ${tenant.incomeVerificationStatus === "nie rozpoczęto" ? "selected" : ""}>nie rozpoczęto</option><option ${tenant.incomeVerificationStatus === "w toku" ? "selected" : ""}>w toku</option><option ${tenant.incomeVerificationStatus === "zweryfikowany" ? "selected" : ""}>zweryfikowany</option><option ${tenant.incomeVerificationStatus === "niepotwierdzony" ? "selected" : ""}>niepotwierdzony</option></select>
+                <select id="tenant_screening_debt_check"><option ${tenant.debtCheckStatus === "nie rozpoczęto" ? "selected" : ""}>nie rozpoczęto</option><option ${tenant.debtCheckStatus === "w toku" ? "selected" : ""}>w toku</option><option ${tenant.debtCheckStatus === "czysty" ? "selected" : ""}>czysty</option><option ${tenant.debtCheckStatus === "negatywny" ? "selected" : ""}>negatywny</option></select>
+                <select id="tenant_screening_status"><option ${tenant.screeningStatus === "w toku" ? "selected" : ""}>w toku</option><option ${tenant.screeningStatus === "do uzupełnienia" ? "selected" : ""}>do uzupełnienia</option><option ${tenant.screeningStatus === "zaakceptowany" ? "selected" : ""}>zaakceptowany</option><option ${tenant.screeningStatus === "odrzucony" ? "selected" : ""}>odrzucony</option></select>
+                <select id="tenant_screening_decision"><option ${tenant.screeningDecision === "do decyzji" ? "selected" : ""}>do decyzji</option><option ${tenant.screeningDecision === "akceptuj" ? "selected" : ""}>akceptuj</option><option ${tenant.screeningDecision === "warunkowo" ? "selected" : ""}>warunkowo</option><option ${tenant.screeningDecision === "odrzuć" ? "selected" : ""}>odrzuć</option></select>
+              </div>
+              <textarea id="tenant_screening_notes" rows="4" placeholder="Notatki z rozmów, referencji, ryzyka i ustaleń">${tenant.screeningNotes || ""}</textarea>
+              <div class="section inline-actions"><button class="btn green" onclick="saveTenantScreening('${tenant.id}')">Zapisz screening</button><button class="btn secondary" onclick="generateTenantOnboardingTasks('${tenant.id}')">Utwórz onboarding</button></div>
+              <div class="section notice">Na podstawie tych danych system podpowiada decyzję oraz może wygenerować checklistę onboardingową dla Ciebie i najemcy.</div>
             </div>
             <div class="card">
               <div class="panel-title"><h3>Generatory dokumentów</h3></div>
@@ -5296,6 +5399,56 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       tenant.emergencyPhone = document.getElementById("tenant_formal_emergency_phone")?.value.trim() || "";
       await save();
       showPage("tenantCard");
+    }
+    async function saveTenantScreening(id) {
+      const tenant = tenantById(id);
+      if (!tenant) return;
+      tenant.monthlyIncome = Number(document.getElementById("tenant_screening_income")?.value || 0);
+      tenant.moveInTargetDate = document.getElementById("tenant_screening_move_in")?.value || "";
+      tenant.employmentType = document.getElementById("tenant_screening_employment")?.value.trim() || "";
+      tenant.householdSize = Math.max(1, Number(document.getElementById("tenant_screening_household")?.value || 1));
+      tenant.petsInfo = document.getElementById("tenant_screening_pets")?.value.trim() || "";
+      tenant.smokingDeclaration = document.getElementById("tenant_screening_smoking")?.value.trim() || "";
+      tenant.guarantorName = document.getElementById("tenant_screening_guarantor_name")?.value.trim() || "";
+      tenant.guarantorPhone = document.getElementById("tenant_screening_guarantor_phone")?.value.trim() || "";
+      tenant.referencesStatus = document.getElementById("tenant_screening_references")?.value || "nie rozpoczęto";
+      tenant.idVerificationStatus = document.getElementById("tenant_screening_id_check")?.value || "nie rozpoczęto";
+      tenant.incomeVerificationStatus = document.getElementById("tenant_screening_income_check")?.value || "nie rozpoczęto";
+      tenant.debtCheckStatus = document.getElementById("tenant_screening_debt_check")?.value || "nie rozpoczęto";
+      tenant.screeningStatus = document.getElementById("tenant_screening_status")?.value || "w toku";
+      tenant.screeningDecision = document.getElementById("tenant_screening_decision")?.value || "do decyzji";
+      tenant.screeningNotes = document.getElementById("tenant_screening_notes")?.value.trim() || "";
+      await save();
+      showPage("tenantCard");
+    }
+    async function generateTenantOnboardingTasks(id) {
+      const tenant = tenantById(id);
+      if (!tenant) return alert("Nie znaleziono najemcy.");
+      const lease = activeLeaseByTenant(id) || state.leases.find((entry) => entry.tenantId === id);
+      const existingKeys = new Set(state.tasks.map((task) => `${task.tenantId}|${task.title}`));
+      let created = 0;
+      onboardingTemplateTasks(tenant, lease).forEach((template) => {
+        const key = `${id}|${template.title}`;
+        if (existingKeys.has(key)) return;
+        state.tasks.push({
+          id: uid("task"),
+          title: template.title,
+          category: template.category,
+          tenantId: id,
+          leaseId: lease?.id || "",
+          unitId: lease?.unitId || tenant.unitId || "",
+          dueDate: template.dueDate || "",
+          visibility: template.visibility,
+          status: "do zrobienia",
+          description: template.description,
+          completedAt: ""
+        });
+        created += 1;
+      });
+      if (!created) return alert("Checklista onboardingowa dla tego najemcy już istnieje.");
+      await save();
+      showPage("tasks");
+      alert(`Dodano ${created} zadań onboardingowych.`);
     }
     async function createTenantAccess(tenantId) {
       const tenant = tenantById(tenantId);
