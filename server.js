@@ -35,17 +35,20 @@ function buildEmptyState(companyName = "RentFlow") {
     payments: [],
     expenses: [],
     tickets: [],
+    settlements: [],
     settings: {
       companyName,
       ownerName: "",
       baseCurrency: "PLN",
       utilityVAT: 23,
-      lateFee: 50
+      lateFee: 50,
+      bankAccount: "",
+      paymentDueDay: 10
     }
   };
 }
 
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "10mb" }));
 
 app.use(
   session({
@@ -127,7 +130,9 @@ app.post("/api/register", async (req, res) => {
 
     res.json({ ok: true });
   } catch (error) {
-    try { await pool.query("ROLLBACK"); } catch {}
+    try {
+      await pool.query("ROLLBACK");
+    } catch (_) {}
     console.error(error);
     res.status(500).json({ error: "Nie udało się utworzyć konta" });
   }
@@ -199,7 +204,29 @@ app.get("/api/state", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "Brak danych organizacji" });
     }
 
-    res.json(result.rows[0].state);
+    const state = result.rows[0].state || {};
+
+    state.buildings ||= [];
+    state.units ||= [];
+    state.tenants ||= [];
+    state.leases ||= [];
+    state.meters ||= [];
+    state.meterReadings ||= [];
+    state.charges ||= [];
+    state.payments ||= [];
+    state.expenses ||= [];
+    state.tickets ||= [];
+    state.settlements ||= [];
+    state.settings ||= {};
+    state.settings.companyName ||= req.session.user.companyName || "RentFlow";
+    state.settings.ownerName ||= "";
+    state.settings.baseCurrency ||= "PLN";
+    state.settings.utilityVAT ||= 23;
+    state.settings.lateFee ||= 50;
+    state.settings.bankAccount ||= "";
+    state.settings.paymentDueDay ||= 10;
+
+    res.json(state);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Nie udało się pobrać danych" });
@@ -208,9 +235,30 @@ app.get("/api/state", requireAuth, async (req, res) => {
 
 app.post("/api/state", requireAuth, async (req, res) => {
   try {
+    const state = req.body || {};
+    state.buildings ||= [];
+    state.units ||= [];
+    state.tenants ||= [];
+    state.leases ||= [];
+    state.meters ||= [];
+    state.meterReadings ||= [];
+    state.charges ||= [];
+    state.payments ||= [];
+    state.expenses ||= [];
+    state.tickets ||= [];
+    state.settlements ||= [];
+    state.settings ||= {};
+    state.settings.companyName ||= req.session.user.companyName || "RentFlow";
+    state.settings.ownerName ||= "";
+    state.settings.baseCurrency ||= "PLN";
+    state.settings.utilityVAT ||= 23;
+    state.settings.lateFee ||= 50;
+    state.settings.bankAccount ||= "";
+    state.settings.paymentDueDay ||= 10;
+
     await pool.query(
       "UPDATE app_states SET state = $1::jsonb, updated_at = NOW() WHERE org_id = $2",
-      [JSON.stringify(req.body), req.session.user.orgId]
+      [JSON.stringify(state), req.session.user.orgId]
     );
     res.json({ ok: true });
   } catch (error) {
@@ -231,7 +279,7 @@ app.get("*", (req, res) => {
   try {
     await initDb();
     app.listen(PORT, () => {
-      console.log(`RentFlow V3 działa na porcie ${PORT}`);
+      console.log(`RentFlow V4 działa na porcie ${PORT}`);
     });
   } catch (error) {
     console.error("Błąd startu aplikacji:", error);

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RentFlow V3</title>
+  <title>RentFlow V4</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -108,6 +108,10 @@
     .btn.yellow {
       background: linear-gradient(135deg, #ffbe55, #ff8a47);
     }
+    .btn.small {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
     .grid {
       display: grid;
       gap: 16px;
@@ -116,7 +120,7 @@
       grid-template-columns: repeat(4, minmax(180px, 1fr));
     }
     .two {
-      grid-template-columns: 1.2fr 0.8fr;
+      grid-template-columns: 1.15fr 0.85fr;
     }
     .card {
       background: rgba(19,26,46,.95);
@@ -145,13 +149,17 @@
     .panel-title h3 {
       margin: 0;
     }
-    input, select {
+    input, select, textarea {
       width: 100%;
       padding: 11px 12px;
       border-radius: 12px;
       border: 1px solid var(--border);
       background: #0d1428;
       color: var(--text);
+    }
+    textarea {
+      min-height: 120px;
+      resize: vertical;
     }
     .form-grid {
       display: grid;
@@ -160,6 +168,9 @@
     }
     .form-grid.three {
       grid-template-columns: repeat(3, 1fr);
+    }
+    .form-grid.two {
+      grid-template-columns: repeat(2, 1fr);
     }
     table {
       width: 100%;
@@ -199,14 +210,29 @@
       background: rgba(255,114,114,.1);
       border-color: rgba(255,114,114,.2);
     }
+    .warning-box {
+      background: rgba(255,209,102,.1);
+      border-color: rgba(255,209,102,.2);
+    }
     canvas {
       width: 100%;
       height: 230px;
       background: #0d1428;
       border-radius: 14px;
     }
+    .details-box {
+      white-space: pre-wrap;
+      background: #0d1428;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      min-height: 200px;
+    }
+    .right {
+      text-align: right;
+    }
     @media (max-width: 1200px) {
-      .cards, .two, .form-grid, .form-grid.three {
+      .cards, .two, .form-grid, .form-grid.three, .form-grid.two {
         grid-template-columns: 1fr 1fr;
       }
     }
@@ -214,7 +240,7 @@
       .app {
         grid-template-columns: 1fr;
       }
-      .cards, .two, .form-grid, .form-grid.three {
+      .cards, .two, .form-grid, .form-grid.three, .form-grid.two {
         grid-template-columns: 1fr;
       }
     }
@@ -223,8 +249,8 @@
 <body>
   <div class="app">
     <aside>
-      <div class="brand">RentFlow V3</div>
-      <div class="sub">System zarządzania najmem online</div>
+      <div class="brand">RentFlow V4</div>
+      <div class="sub">Rozliczenia Pro</div>
       <div class="nav" id="nav"></div>
     </aside>
 
@@ -247,6 +273,7 @@
       <section id="tenants" class="page hidden"></section>
       <section id="leases" class="page hidden"></section>
       <section id="meters" class="page hidden"></section>
+      <section id="settlements" class="page hidden"></section>
       <section id="payments" class="page hidden"></section>
       <section id="expenses" class="page hidden"></section>
       <section id="maintenance" class="page hidden"></section>
@@ -269,14 +296,19 @@
       payments: [],
       expenses: [],
       tickets: [],
+      settlements: [],
       settings: {
-        companyName: "RentFlow V3",
+        companyName: "RentFlow V4",
         ownerName: "Zarządca",
         baseCurrency: "PLN",
         utilityVAT: 23,
-        lateFee: 50
+        lateFee: 50,
+        bankAccount: "",
+        paymentDueDay: 10
       }
     };
+
+    let selectedSettlementId = null;
 
     const pages = [
       ["dashboard", "Dashboard", "Podgląd portfela najmu, płatności i mediów."],
@@ -284,6 +316,7 @@
       ["tenants", "Najemcy", "Baza najemców i kontaktów."],
       ["leases", "Umowy", "Umowy najmu, czynsz i kaucje."],
       ["meters", "Media", "Liczniki, odczyty i rozliczenia zużycia."],
+      ["settlements", "Rozliczenia", "Zamknięcie miesiąca, historia, wiadomości dla najemców."],
       ["payments", "Opłaty i płatności", "Należności, wpłaty i zaległości."],
       ["expenses", "Koszty", "Koszty budynków i lokali."],
       ["maintenance", "Usterki", "Zgłoszenia, priorytety i statusy."],
@@ -301,11 +334,41 @@
       return new Date().toISOString().slice(0, 10);
     }
 
+    function currentMonth() {
+      return new Date().toISOString().slice(0, 7);
+    }
+
+    function monthStart(month) {
+      return `${month}-01`;
+    }
+
+    function monthEnd(month) {
+      const [y, m] = month.split("-").map(Number);
+      return new Date(y, m, 0).toISOString().slice(0, 10);
+    }
+
+    function prevDay(dateStr) {
+      const d = new Date(dateStr);
+      d.setDate(d.getDate() - 1);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function dueDateForMonth(month) {
+      const [y, m] = month.split("-").map(Number);
+      const day = Math.max(1, Math.min(28, Number(state.settings.paymentDueDay || 10)));
+      return new Date(y, m - 1, day).toISOString().slice(0, 10);
+    }
+
     function fmt(n = 0) {
       return new Intl.NumberFormat("pl-PL", {
         style: "currency",
         currency: state.settings.baseCurrency || "PLN"
       }).format(Number(n || 0));
+    }
+
+    function fmtMonth(month) {
+      const [y, m] = month.split("-");
+      return `${m}.${y}`;
     }
 
     async function apiGet(url) {
@@ -324,13 +387,37 @@
       return r.json();
     }
 
+    function normalizeState() {
+      state.buildings ||= [];
+      state.units ||= [];
+      state.tenants ||= [];
+      state.leases ||= [];
+      state.meters ||= [];
+      state.meterReadings ||= [];
+      state.charges ||= [];
+      state.payments ||= [];
+      state.expenses ||= [];
+      state.tickets ||= [];
+      state.settlements ||= [];
+      state.settings ||= {};
+      state.settings.companyName ||= "RentFlow V4";
+      state.settings.ownerName ||= "";
+      state.settings.baseCurrency ||= "PLN";
+      state.settings.utilityVAT ||= 23;
+      state.settings.lateFee ||= 50;
+      state.settings.bankAccount ||= "";
+      state.settings.paymentDueDay ||= 10;
+    }
+
     async function save() {
+      normalizeState();
       await apiPost("/api/state", state);
       renderAll();
     }
 
     async function load() {
       state = await apiGet("/api/state");
+      normalizeState();
     }
 
     async function logout() {
@@ -349,6 +436,10 @@
 
     function tenantName(id) {
       return state.tenants.find((t) => t.id === id)?.name || "—";
+    }
+
+    function tenantById(id) {
+      return state.tenants.find((t) => t.id === id);
     }
 
     function leaseLabel(id) {
@@ -373,23 +464,6 @@
       return "oczekujące";
     }
 
-    function lastTwoReadings(meterId) {
-      return state.meterReadings
-        .filter((r) => r.meterId === meterId)
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-2);
-    }
-
-    function meterConsumption(meterId) {
-      const pair = lastTwoReadings(meterId);
-      if (pair.length < 2) return { usage: 0, amount: 0 };
-      const prev = pair[0];
-      const curr = pair[1];
-      const meter = state.meters.find((m) => m.id === meterId);
-      const usage = Math.max(0, Number(curr.value) - Number(prev.value));
-      return { usage, amount: usage * Number(meter?.rate || 0) };
-    }
-
     function occupancyRate() {
       if (!state.units.length) return 0;
       return Math.round((state.units.filter((u) => u.status === "wynajęte").length / state.units.length) * 100);
@@ -403,6 +477,170 @@
         .reduce((a, c) => a + Math.max(0, Number(c.amount) - chargePaidAmount(c.id)), 0);
       const expenses = state.expenses.reduce((a, e) => a + Number(e.amount || 0), 0);
       return { due, paid, overdue, expenses, net: paid - expenses };
+    }
+
+    function meterUnitDefault(type) {
+      if (type === "prąd") return "kWh";
+      return "m³";
+    }
+
+    function readingsForMeter(meterId) {
+      return state.meterReadings
+        .filter((r) => r.meterId === meterId)
+        .sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    function latestReadingOnOrBefore(meterId, date) {
+      const all = readingsForMeter(meterId).filter((r) => r.date <= date);
+      return all.length ? all[all.length - 1] : null;
+    }
+
+    function readingBefore(meterId, date) {
+      const all = readingsForMeter(meterId).filter((r) => r.date < date);
+      return all.length ? all[all.length - 1] : null;
+    }
+
+    function meterConsumptionForMonth(meterId, month) {
+      const meter = state.meters.find((m) => m.id === meterId);
+      if (!meter) return null;
+
+      const start = monthStart(month);
+      const end = monthEnd(month);
+
+      const startReading = readingBefore(meterId, start);
+      const endReading = latestReadingOnOrBefore(meterId, end);
+
+      if (!startReading || !endReading) {
+        return {
+          meter,
+          usage: 0,
+          amount: 0,
+          startValue: startReading?.value ?? null,
+          endValue: endReading?.value ?? null,
+          ready: false
+        };
+      }
+
+      const usage = Math.max(0, Number(endReading.value) - Number(startReading.value));
+      const amount = usage * Number(meter.rate || 0);
+
+      return {
+        meter,
+        usage,
+        amount,
+        startValue: startReading.value,
+        endValue: endReading.value,
+        ready: true
+      };
+    }
+
+    function utilityBreakdownForUnit(unitId, month) {
+      const meters = state.meters.filter((m) => m.unitId === unitId);
+      return meters.map((m) => meterConsumptionForMonth(m.id, month));
+    }
+
+    function findSettlement(id) {
+      return state.settlements.find((s) => s.id === id);
+    }
+
+    function settlementMessage(settlement) {
+      const tenant = tenantById(settlement.tenantId);
+      const name = tenant?.name || "Najemca";
+      const lines = settlement.lines
+        .map((l) => `- ${l.label}: ${fmt(l.amount)}`)
+        .join("\n");
+
+      return `Dzień dobry ${name},
+
+przesyłam rozliczenie za ${fmtMonth(settlement.month)} dla lokalu:
+${settlement.unitLabel}
+
+Pozycje rozliczenia:
+${lines}
+
+Razem do zapłaty: ${fmt(settlement.total)}
+Termin płatności: ${settlement.dueDate}
+${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
+
+Pozdrawiam
+${state.settings.ownerName || state.settings.companyName}`;
+    }
+
+    function settlementPrintableHtml(settlement) {
+      return `
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<title>Rozliczenie ${settlement.month}</title>
+<style>
+body{font-family:Arial,sans-serif;padding:32px;color:#111}
+h1{margin-bottom:4px}
+table{width:100%;border-collapse:collapse;margin-top:20px}
+th,td{border:1px solid #ccc;padding:10px;text-align:left}
+th{background:#f2f2f2}
+.right{text-align:right}
+.box{margin-top:20px;padding:14px;border:1px solid #ddd}
+</style>
+</head>
+<body>
+<h1>Rozliczenie najmu</h1>
+<div>${state.settings.companyName}</div>
+<div>${state.settings.ownerName || ""}</div>
+
+<div class="box">
+<div><strong>Miesiąc:</strong> ${fmtMonth(settlement.month)}</div>
+<div><strong>Najemca:</strong> ${settlement.tenantName}</div>
+<div><strong>Lokal:</strong> ${settlement.unitLabel}</div>
+<div><strong>Termin płatności:</strong> ${settlement.dueDate}</div>
+${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}
+</div>
+
+<table>
+<thead>
+<tr><th>Pozycja</th><th>Ilość</th><th>Jednostka</th><th>Stawka</th><th class="right">Kwota</th></tr>
+</thead>
+<tbody>
+${settlement.lines.map(line => `
+<tr>
+<td>${line.label}</td>
+<td>${line.qty ?? ""}</td>
+<td>${line.unit ?? ""}</td>
+<td>${line.rate ? fmt(line.rate) : ""}</td>
+<td class="right">${fmt(line.amount)}</td>
+</tr>
+`).join("")}
+<tr>
+<td colspan="4" class="right"><strong>Razem</strong></td>
+<td class="right"><strong>${fmt(settlement.total)}</strong></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>`;
+    }
+
+    function openPrintWindow(html) {
+      const w = window.open("", "_blank", "width=900,height=700");
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+      setTimeout(() => w.print(), 400);
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text)
+        .then(() => alert("Skopiowano wiadomość."))
+        .catch(() => alert("Nie udało się skopiować."));
+    }
+
+    function mailtoForSettlement(settlement) {
+      const tenant = tenantById(settlement.tenantId);
+      const subject = encodeURIComponent(`Rozliczenie najmu za ${fmtMonth(settlement.month)}`);
+      const body = encodeURIComponent(settlementMessage(settlement));
+      const email = encodeURIComponent(tenant?.email || "");
+      window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
     }
 
     function renderNav() {
@@ -426,7 +664,13 @@
     function renderDashboard() {
       const { due, paid, overdue, expenses, net } = totals();
       const openTickets = state.tickets.filter((t) => t.status !== "zamknięte").length;
-      const utilityNow = state.meters.reduce((a, m) => a + meterConsumption(m.id).amount, 0);
+      const utilityNow = state.meters.reduce((a, m) => {
+        const latest = readingsForMeter(m.id);
+        if (latest.length < 2) return a;
+        const prev = latest[latest.length - 2];
+        const curr = latest[latest.length - 1];
+        return a + Math.max(0, Number(curr.value) - Number(prev.value)) * Number(m.rate || 0);
+      }, 0);
 
       document.getElementById("dashboard").innerHTML = `
         <div class="grid cards">
@@ -455,6 +699,7 @@
             <div class="section">
               <div class="card">Wolne lokale: <strong>${state.units.filter((u) => u.status === "wolne").length}</strong></div>
               <div class="card section">Otwarte usterki: <strong>${openTickets}</strong></div>
+              <div class="card section">Rozliczenia zapisane: <strong>${state.settlements.length}</strong></div>
             </div>
           </div>
         </div>
@@ -509,7 +754,7 @@
                   <td>${b.name}</td>
                   <td>${b.address || "—"}</td>
                   <td>${state.units.filter((u) => u.buildingId === b.id).length}</td>
-                  <td><button class="btn secondary" onclick="removeBuilding('${b.id}')">Usuń</button></td>
+                  <td><button class="btn secondary small" onclick="removeBuilding('${b.id}')">Usuń</button></td>
                 </tr>
               `).join("")}
             </tbody>
@@ -527,7 +772,7 @@
                   <td>${u.type}, ${u.area} m²</td>
                   <td><span class="badge ${u.status === "wynajęte" ? "status-active" : "status-pending"}">${u.status}</span></td>
                   <td>${fmt(u.rentDefault)}</td>
-                  <td><button class="btn secondary" onclick="removeUnit('${u.id}')">Usuń</button></td>
+                  <td><button class="btn secondary small" onclick="removeUnit('${u.id}')">Usuń</button></td>
                 </tr>
               `).join("")}
             </tbody>
@@ -563,7 +808,7 @@
                   <td>${t.phone || "—"}<br><span class="muted small">${t.email || "—"}</span></td>
                   <td>${t.unitId ? unitLabel(t.unitId) : "—"}</td>
                   <td><span class="badge ${t.status === "aktywny" ? "status-active" : "status-closed"}">${t.status}</span></td>
-                  <td><button class="btn secondary" onclick="removeTenant('${t.id}')">Usuń</button></td>
+                  <td><button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button></td>
                 </tr>
               `).join("")}
             </tbody>
@@ -609,7 +854,7 @@
                   <td>${fmt(l.rent)}</td>
                   <td>${fmt(l.deposit)}</td>
                   <td><span class="badge ${l.status === "aktywna" ? "status-active" : "status-closed"}">${l.status}</span></td>
-                  <td><button class="btn secondary" onclick="removeLease('${l.id}')">Usuń</button></td>
+                  <td><button class="btn secondary small" onclick="removeLease('${l.id}')">Usuń</button></td>
                 </tr>
               `).join("")}
             </tbody>
@@ -624,7 +869,7 @@
           <div class="panel-title"><h3>Dodaj licznik</h3></div>
           <div class="form-grid three">
             <select id="m_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
-            <select id="m_type">
+            <select id="m_type" onchange="onMeterTypeChange()">
               <option>prąd</option>
               <option>zimna woda</option>
               <option>ciepła woda</option>
@@ -633,7 +878,7 @@
             </select>
             <input id="m_serial" placeholder="Nr seryjny" />
             <input id="m_rate" type="number" step="0.01" placeholder="Stawka za jednostkę" />
-            <input id="m_unit_name" placeholder="Jednostka np. kWh / m³" />
+            <input id="m_unit_name" placeholder="Jednostka np. kWh / m³" value="kWh" />
             <div><button class="btn green" onclick="addMeter()">Dodaj licznik</button></div>
           </div>
         </div>
@@ -644,36 +889,173 @@
             <button class="btn secondary" onclick="generateUtilityCharges()">Wygeneruj opłaty za media</button>
           </div>
           <div class="form-grid three">
-            <select id="r_meter">${state.meters.map((m) => `<option value="${m.id}">${unitLabel(m.unitId)} — ${m.type} (${m.serial})</option>`).join("")}</select>
+            <select id="r_meter" onchange="showMeterHint()">${state.meters.map((m) => `<option value="${m.id}">${unitLabel(m.unitId)} — ${m.type} (${m.serial})</option>`).join("")}</select>
             <input id="r_date" type="date" value="${today()}" />
             <input id="r_value" type="number" step="0.01" placeholder="Stan licznika" />
           </div>
+          <div id="meterHint" class="notice section">Wybierz licznik.</div>
           <div class="section"><button class="btn green" onclick="addReading()">Dodaj odczyt</button></div>
         </div>
 
         <div class="card section">
-          <div class="panel-title"><h3>Liczniki i rozliczenie</h3></div>
+          <div class="panel-title"><h3>Liczniki i ostatnie zużycie</h3></div>
           <table>
-            <thead><tr><th>Lokal</th><th>Typ</th><th>Nr</th><th>Stawka</th><th>Zużycie</th><th>Kwota</th><th></th></tr></thead>
+            <thead><tr><th>Lokal</th><th>Typ</th><th>Nr</th><th>Stawka</th><th>Poprzedni</th><th>Aktualny</th><th>Zużycie</th><th></th></tr></thead>
             <tbody>
               ${state.meters.map((m) => {
-                const cons = meterConsumption(m.id);
+                const arr = readingsForMeter(m.id);
+                const prev = arr.length >= 2 ? arr[arr.length - 2] : null;
+                const curr = arr.length >= 1 ? arr[arr.length - 1] : null;
+                const usage = prev && curr ? Math.max(0, Number(curr.value) - Number(prev.value)) : 0;
                 return `
                   <tr>
                     <td>${unitLabel(m.unitId)}</td>
                     <td>${m.type}</td>
                     <td>${m.serial}</td>
                     <td>${Number(m.rate).toFixed(2)} / ${m.unit}</td>
-                    <td>${cons.usage} ${m.unit}</td>
-                    <td>${fmt(cons.amount)}</td>
-                    <td><button class="btn secondary" onclick="prefillReading('${m.id}')">Dodaj odczyt</button></td>
+                    <td>${prev ? prev.value : "—"}</td>
+                    <td>${curr ? curr.value : "—"}</td>
+                    <td>${usage} ${m.unit}</td>
+                    <td><button class="btn secondary small" onclick="prefillReading('${m.id}')">Dodaj odczyt</button></td>
                   </tr>
                 `;
               }).join("")}
             </tbody>
           </table>
         </div>
+
+        <div class="card section">
+          <div class="panel-title"><h3>Historia odczytów</h3></div>
+          <table>
+            <thead><tr><th>Data</th><th>Licznik</th><th>Stan</th></tr></thead>
+            <tbody>
+              ${state.meterReadings
+                .slice()
+                .sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id))
+                .map((r) => {
+                  const meter = state.meters.find((m) => m.id === r.meterId);
+                  return `
+                    <tr>
+                      <td>${r.date}</td>
+                      <td>${meter ? `${unitLabel(meter.unitId)} — ${meter.type}` : "—"}</td>
+                      <td>${r.value}</td>
+                    </tr>
+                  `;
+                }).join("")}
+            </tbody>
+          </table>
+        </div>
       `;
+      onMeterTypeChange();
+      showMeterHint();
+    }
+
+    function renderSettlements() {
+      const monthDefault = currentMonth();
+      const selected = selectedSettlementId ? findSettlement(selectedSettlementId) : null;
+
+      document.getElementById("settlements").innerHTML = `
+        <div class="card">
+          <div class="panel-title"><h3>Zamknięcie miesiąca</h3></div>
+          <div class="form-grid two">
+            <input id="settlement_month" type="month" value="${monthDefault}" />
+            <div class="notice">
+              System zapisze snapshot rozliczeń za wybrany miesiąc. Późniejsze zmiany liczników nie zmienią już zamkniętego rozliczenia.
+            </div>
+          </div>
+          <div class="section">
+            <button class="btn green" onclick="closeMonth()">Zamknij miesiąc i wygeneruj rozliczenia</button>
+          </div>
+        </div>
+
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Historia rozliczeń</h3></div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Miesiąc</th>
+                  <th>Najemca</th>
+                  <th>Lokal</th>
+                  <th>Razem</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.settlements
+                  .slice()
+                  .sort((a, b) => (b.month + b.createdAt).localeCompare(a.month + a.createdAt))
+                  .map((s) => `
+                    <tr>
+                      <td>${fmtMonth(s.month)}</td>
+                      <td>${s.tenantName}</td>
+                      <td>${s.unitLabel}</td>
+                      <td>${fmt(s.total)}</td>
+                      <td>
+                        <button class="btn secondary small" onclick="selectSettlement('${s.id}')">Podgląd</button>
+                      </td>
+                    </tr>
+                  `).join("") || `<tr><td colspan="5">Brak rozliczeń</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="panel-title">
+              <h3>Podgląd rozliczenia</h3>
+              ${selected ? `
+                <div>
+                  <button class="btn secondary small" onclick="copySettlementMessage()">Kopiuj wiadomość</button>
+                  <button class="btn secondary small" onclick="sendSettlementMail()">Mail</button>
+                  <button class="btn secondary small" onclick="printSettlement()">Drukuj</button>
+                </div>
+              ` : ""}
+            </div>
+            ${
+              selected
+                ? `
+                  <div class="details-box" id="settlement_details">${buildSettlementDetails(selected)}</div>
+                `
+                : `
+                  <div class="notice warning-box">Wybierz rozliczenie z listy po lewej.</div>
+                `
+            }
+          </div>
+        </div>
+
+        ${
+          selected
+            ? `
+              <div class="card section">
+                <div class="panel-title"><h3>Wiadomość dla najemcy</h3></div>
+                <textarea id="settlement_message">${settlementMessage(selected)}</textarea>
+              </div>
+            `
+            : ""
+        }
+      `;
+    }
+
+    function buildSettlementDetails(settlement) {
+      const lines = settlement.lines
+        .map((line) => {
+          const qty = line.qty !== undefined && line.qty !== null ? ` | ilość: ${line.qty}` : "";
+          const unit = line.unit ? ` ${line.unit}` : "";
+          const rate = line.rate ? ` | stawka: ${fmt(line.rate)}` : "";
+          return `${line.label}${qty}${unit}${rate} | kwota: ${fmt(line.amount)}`;
+        })
+        .join("\n");
+
+      return `Miesiąc: ${fmtMonth(settlement.month)}
+Najemca: ${settlement.tenantName}
+Lokal: ${settlement.unitLabel}
+Termin płatności: ${settlement.dueDate}
+${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
+
+Pozycje:
+${lines}
+
+Razem: ${fmt(settlement.total)}`;
     }
 
     function renderPayments() {
@@ -722,7 +1104,7 @@
                     <td>${fmt(c.amount)}</td>
                     <td>${fmt(paid)}</td>
                     <td><span class="badge ${cls}">${status}</span></td>
-                    <td><button class="btn secondary" onclick="removeCharge('${c.id}')">Usuń</button></td>
+                    <td><button class="btn secondary small" onclick="removeCharge('${c.id}')">Usuń</button></td>
                   </tr>
                 `;
               }).join("")}
@@ -766,7 +1148,7 @@
                   <td>${e.category}</td>
                   <td>${e.vendor || "—"}</td>
                   <td>${fmt(e.amount)}</td>
-                  <td><button class="btn secondary" onclick="removeExpense('${e.id}')">Usuń</button></td>
+                  <td><button class="btn secondary small" onclick="removeExpense('${e.id}')">Usuń</button></td>
                 </tr>
               `).join("")}
             </tbody>
@@ -818,7 +1200,7 @@
                     <td><span class="badge ${prCls}">${t.priority}</span></td>
                     <td><span class="badge ${stCls}">${t.status}</span></td>
                     <td>${t.assignee || "—"}</td>
-                    <td><button class="btn secondary" onclick="removeTicket('${t.id}')">Usuń</button></td>
+                    <td><button class="btn secondary small" onclick="removeTicket('${t.id}')">Usuń</button></td>
                   </tr>
                 `;
               }).join("")}
@@ -877,6 +1259,8 @@
             <input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" />
             <input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" />
             <input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" />
+            <input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" />
+            <input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Dzień płatności" />
           </div>
           <div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div>
         </div>
@@ -889,11 +1273,35 @@
       renderTenants();
       renderLeases();
       renderMeters();
+      renderSettlements();
       renderPayments();
       renderExpenses();
       renderMaintenance();
       renderReports();
       renderSettings();
+    }
+
+    function onMeterTypeChange() {
+      const type = document.getElementById("m_type")?.value;
+      const unitInput = document.getElementById("m_unit_name");
+      if (!type || !unitInput) return;
+      unitInput.value = meterUnitDefault(type);
+    }
+
+    function showMeterHint() {
+      const meterId = document.getElementById("r_meter")?.value;
+      const hint = document.getElementById("meterHint");
+      if (!hint) return;
+      if (!meterId) {
+        hint.textContent = "Wybierz licznik.";
+        return;
+      }
+
+      const arr = readingsForMeter(meterId);
+      const last = arr.length ? arr[arr.length - 1] : null;
+      hint.textContent = last
+        ? `Ostatni zapisany stan: ${last.value} z dnia ${last.date}`
+        : "To będzie pierwszy odczyt tego licznika.";
     }
 
     async function addBuilding() {
@@ -941,6 +1349,7 @@
       state.tenants.forEach((t) => { if (t.unitId === id) t.unitId = ""; });
       state.leases = state.leases.filter((l) => l.unitId !== id);
       state.meters = state.meters.filter((m) => m.unitId !== id);
+      state.meterReadings = state.meterReadings.filter((r) => state.meters.some((m) => m.id === r.meterId));
       await save();
     }
 
@@ -997,14 +1406,15 @@
 
     async function addMeter() {
       const unitId = document.getElementById("m_unit").value;
+      const type = document.getElementById("m_type").value;
       if (!unitId) return alert("Wybierz lokal.");
       state.meters.push({
         id: uid("m"),
         unitId,
-        type: document.getElementById("m_type").value,
+        type,
         serial: document.getElementById("m_serial").value.trim(),
         rate: Number(document.getElementById("m_rate").value || 0),
-        unit: document.getElementById("m_unit_name").value.trim() || "szt."
+        unit: document.getElementById("m_unit_name").value.trim() || meterUnitDefault(type)
       });
       await save();
     }
@@ -1012,19 +1422,129 @@
     function prefillReading(id) {
       showPage("meters");
       document.getElementById("r_meter").value = id;
+      showMeterHint();
     }
 
     async function addReading() {
       const meterId = document.getElementById("r_meter").value;
-      if (!meterId) return alert("Wybierz licznik.");
+      const date = document.getElementById("r_date").value;
+      const value = Number(document.getElementById("r_value").value || 0);
+
+      if (!meterId || !date) return alert("Wybierz licznik i datę.");
+
+      const last = latestReadingOnOrBefore(meterId, "9999-12-31");
+      if (last && value < Number(last.value)) {
+        return alert(`Nowy stan (${value}) nie może być mniejszy od ostatniego stanu (${last.value}).`);
+      }
+
       state.meterReadings.push({
         id: uid("r"),
         meterId,
-        date: document.getElementById("r_date").value,
-        value: Number(document.getElementById("r_value").value || 0),
-        notes: ""
+        date,
+        value
       });
+
       await save();
+    }
+
+    function settlementExists(month, leaseId) {
+      return state.settlements.some((s) => s.month === month && s.leaseId === leaseId);
+    }
+
+    async function closeMonth() {
+      const month = document.getElementById("settlement_month").value;
+      if (!month) return alert("Wybierz miesiąc.");
+
+      const activeLeases = state.leases.filter((l) => l.status === "aktywna");
+      if (!activeLeases.length) return alert("Brak aktywnych umów.");
+
+      let created = 0;
+
+      for (const lease of activeLeases) {
+        if (settlementExists(month, lease.id)) continue;
+
+        const unit = state.units.find((u) => u.id === lease.unitId);
+        const tenant = state.tenants.find((t) => t.id === lease.tenantId);
+        if (!unit || !tenant) continue;
+
+        const lines = [];
+        lines.push({
+          label: "Czynsz",
+          qty: 1,
+          unit: "mies.",
+          rate: Number(lease.rent || 0),
+          amount: Number(lease.rent || 0)
+        });
+
+        if (Number(unit.serviceCharge || 0) > 0) {
+          lines.push({
+            label: "Opłata administracyjna",
+            qty: 1,
+            unit: "mies.",
+            rate: Number(unit.serviceCharge || 0),
+            amount: Number(unit.serviceCharge || 0)
+          });
+        }
+
+        const utilityLines = utilityBreakdownForUnit(unit.id, month);
+        utilityLines.forEach((u) => {
+          if (!u || !u.meter) return;
+          lines.push({
+            label: u.meter.type,
+            qty: u.usage,
+            unit: u.meter.unit,
+            rate: Number(u.meter.rate || 0),
+            amount: Number((u.amount || 0).toFixed(2))
+          });
+        });
+
+        const total = lines.reduce((a, b) => a + Number(b.amount || 0), 0);
+
+        state.settlements.push({
+          id: uid("st"),
+          month,
+          leaseId: lease.id,
+          tenantId: tenant.id,
+          tenantName: tenant.name,
+          unitId: unit.id,
+          unitLabel: unitLabel(unit.id),
+          dueDate: dueDateForMonth(month),
+          bankAccount: state.settings.bankAccount || "",
+          lines,
+          total: Number(total.toFixed(2)),
+          createdAt: new Date().toISOString()
+        });
+
+        created++;
+      }
+
+      selectedSettlementId = state.settlements.length ? state.settlements[state.settlements.length - 1].id : null;
+      await save();
+      alert(`Zapisano ${created} rozliczeń za ${fmtMonth(month)}.`);
+      showPage("settlements");
+    }
+
+    function selectSettlement(id) {
+      selectedSettlementId = id;
+      renderSettlements();
+    }
+
+    function copySettlementMessage() {
+      const settlement = findSettlement(selectedSettlementId);
+      if (!settlement) return;
+      copyToClipboard(settlementMessage(settlement));
+    }
+
+    function sendSettlementMail() {
+      const settlement = findSettlement(selectedSettlementId);
+      if (!settlement) return;
+      mailtoForSettlement(settlement);
+    }
+
+    function printSettlement() {
+      const settlement = findSettlement(selectedSettlementId);
+      if (!settlement) return;
+      openPrintWindow(settlementPrintableHtml(settlement));
     }
 
     async function addCharge() {
@@ -1107,7 +1627,7 @@
     }
 
     async function generateMonthlyCharges() {
-      const month = new Date().toISOString().slice(0, 7);
+      const month = currentMonth();
       let created = 0;
 
       state.leases
@@ -1140,8 +1660,16 @@
       let created = 0;
 
       state.meters.forEach((m) => {
-        const cons = meterConsumption(m.id);
-        if (cons.amount <= 0) return;
+        const arr = readingsForMeter(m.id);
+        if (arr.length < 2) return;
+
+        const prev = arr[arr.length - 2];
+        const curr = arr[arr.length - 1];
+        const usage = Math.max(0, Number(curr.value) - Number(prev.value));
+        const amount = usage * Number(m.rate || 0);
+
+        if (amount <= 0) return;
+
         const lease = activeLeaseByUnit(m.unitId);
         if (!lease) return;
 
@@ -1149,10 +1677,10 @@
           id: uid("c"),
           leaseId: lease.id,
           type: `Media: ${m.type}`,
-          amount: Number(cons.amount.toFixed(2)),
+          amount: Number(amount.toFixed(2)),
           dueDate: today(),
           status: "oczekujące",
-          notes: `Zużycie ${cons.usage} ${m.unit} × ${m.rate}`
+          notes: `Zużycie ${usage} ${m.unit} × ${m.rate}`
         });
         created++;
       });
@@ -1167,6 +1695,8 @@
       state.settings.baseCurrency = document.getElementById("s_currency").value.trim() || "PLN";
       state.settings.utilityVAT = Number(document.getElementById("s_vat").value || 23);
       state.settings.lateFee = Number(document.getElementById("s_late").value || 50);
+      state.settings.bankAccount = document.getElementById("s_bank").value.trim();
+      state.settings.paymentDueDay = Number(document.getElementById("s_due").value || 10);
       await save();
       alert("Zapisano ustawienia.");
     }
@@ -1200,6 +1730,7 @@
         leases: csv(state.leases),
         meters: csv(state.meters),
         readings: csv(state.meterReadings),
+        settlements: csv(state.settlements),
         charges: csv(state.charges),
         payments: csv(state.payments),
         expenses: csv(state.expenses),
@@ -1217,6 +1748,7 @@
       const text = await file.text();
       try {
         state = JSON.parse(text);
+        normalizeState();
         await save();
         alert("Import zakończony.");
       } catch {
