@@ -2005,7 +2005,7 @@
         })),
         ...state.leases.map((lease) => ({
           id: lease.id,
-          action: () => showPage(currentUser?.role === "tenant" ? "tenantCard" : "tenants"),
+          action: () => showPage(currentUser?.role === "tenant" ? "tenantCard" : "properties"),
           title: leaseLabel(lease.id),
           subtitle: `Umowa · ${lease.startDate || "brak daty"} · ${lease.status}`
         }))
@@ -2556,7 +2556,7 @@
           amount: 0,
           date: lease.endDate,
           tenantId: tenant?.id || "",
-          openAction: () => showPage(currentUser?.role === "tenant" ? "tenantCard" : "tenants"),
+          openAction: () => showPage(currentUser?.role === "tenant" ? "tenantCard" : "properties"),
           message: leaseReminderMessage(lease, tenant)
         };
       });
@@ -3679,6 +3679,9 @@
     function renderProperties() {
       const building = editingBuildingId ? state.buildings.find((entry) => entry.id === editingBuildingId) : null;
       const unit = editingUnitId ? state.units.find((entry) => entry.id === editingUnitId) : null;
+      const leaseWorkspace = currentUser?.role !== "tenant"
+        ? `<div class="section">${document.getElementById("leases")?.innerHTML || `<div class="empty-state">Dodaj pierwszą umowę najmu.</div>`}</div>`
+        : "";
       document.getElementById("properties").innerHTML = `
         <div class="card">
           <div class="panel-title"><h3>${building ? "Edytuj budynek" : "Dodaj budynek"}</h3></div>
@@ -3714,7 +3717,8 @@
           <table><thead><tr><th>Lokal</th><th>Typ</th><th>Status</th><th>Czynsz</th><th></th></tr></thead><tbody>
             ${state.units.map((u) => `<tr><td><div class="cell-stack"><strong>${unitLabel(u.id)}</strong>${u.notes ? `<span class="muted small">${truncatedText(u.notes)}</span>` : ""}</div></td><td>${truncatedText(`${u.type}, ${u.area} m²`, 18)}</td><td><span class="badge ${u.status === "wynajęte" ? "status-active" : "status-pending"}">${u.status}</span></td><td>${fmt(u.rentDefault)}</td><td class="inline-actions"><button class="btn secondary small" onclick="startUnitEdit('${u.id}')">Edytuj</button><button class="btn secondary small" onclick="removeUnit('${u.id}')">Usuń</button></td></tr>`).join("")}
           </tbody></table>
-        </div>`;
+        </div>
+        ${leaseWorkspace}`;
     }
 
     function renderTenants() {
@@ -3723,9 +3727,6 @@
         ? `
           <div class="section">
             ${document.getElementById("tenantCard")?.innerHTML || `<div class="empty-state">Wybierz najemcę z listy, aby zobaczyć szczegóły.</div>`}
-          </div>
-          <div class="section">
-            ${document.getElementById("leases")?.innerHTML || `<div class="empty-state">Dodaj pierwszą umowę najmu.</div>`}
           </div>
         `
         : "";
@@ -5012,9 +5013,9 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
     function renderAll() {
       renderDashboard();
+      renderLeases();
       renderProperties();
       renderTenantCard();
-      renderLeases();
       renderTenants();
       renderMeters();
       renderSettlements();
@@ -5300,18 +5301,20 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       if (tenant) tenant.unitId = unitId;
       syncLeaseAssignments();
       await save();
-      showPage(currentUser?.role === "tenant" ? "tenantCard" : "tenants");
+      showPage(currentUser?.role === "tenant" ? "tenantCard" : "properties");
     }
     function startLeaseEdit(id) {
       editingLeaseId = id;
       renderLeases();
+      renderProperties();
       renderTenantCard();
       renderTenants();
-      showPage(currentUser?.role === "tenant" ? "tenantCard" : "tenants");
+      showPage(currentUser?.role === "tenant" ? "tenantCard" : "properties");
     }
     function cancelLeaseEdit() {
       editingLeaseId = null;
       renderLeases();
+      renderProperties();
       renderTenantCard();
       renderTenants();
     }
