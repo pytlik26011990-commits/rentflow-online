@@ -848,6 +848,96 @@ app.post("/api/tenant/tickets", requireAuth, requireTenant, async (req, res) => 
   }
 });
 
+app.post("/api/tenant/messages", requireAuth, requireTenant, async (req, res) => {
+  try {
+    const subjectResult = ensureRequiredText(req.body.subject, "Temat wiadomości");
+    const bodyResult = ensureRequiredText(req.body.body, "Treść wiadomości");
+    const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
+    if (subjectResult.error || bodyResult.error) {
+      return res.status(400).json({ error: "Uzupełnij temat i treść wiadomości." });
+    }
+
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state) {
+      return res.status(404).json({ error: "Brak danych organizacji." });
+    }
+
+    const tenantState = buildTenantState(state, req.session.user.tenantId);
+    const tenant = tenantState.tenants[0];
+    const lease = tenantState.leases.find((entry) => entry.status === "aktywna") || tenantState.leases[0];
+    const unit = lease ? tenantState.units.find((entry) => entry.id === lease.unitId) : tenantState.units[0];
+    const now = new Date().toISOString();
+
+    state.messages.push({
+      id: uid("msg"),
+      tenantId: req.session.user.tenantId,
+      leaseId: lease?.id || "",
+      unitId: unit?.id || "",
+      subject: subjectResult.value,
+      priority: ["normalna", "pilna"].includes(req.body.priority) ? req.body.priority : "normalna",
+      status: "otwarta",
+      createdAt: now,
+      updatedAt: now,
+      thread: [{
+        id: uid("msgline"),
+        authorRole: "tenant",
+        authorName: tenant?.name || req.session.user.name,
+        body: bodyResult.value,
+        createdAt: now,
+        attachments
+      }]
+    });
+
+    await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się wysłać wiadomości." });
+  }
+});
+
+app.post("/api/tenant/messages/reply", requireAuth, requireTenant, async (req, res) => {
+  try {
+    const conversationId = sanitizeText(req.body.conversationId || "");
+    const bodyResult = ensureRequiredText(req.body.body, "Treść wiadomości");
+    const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
+    if (!conversationId || bodyResult.error) {
+      return res.status(400).json({ error: "Brakuje rozmowy lub treści wiadomości." });
+    }
+
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state) {
+      return res.status(404).json({ error: "Brak danych organizacji." });
+    }
+
+    const conversation = state.messages.find((entry) => entry.id === conversationId && entry.tenantId === req.session.user.tenantId);
+    if (!conversation) {
+      return res.status(404).json({ error: "Nie znaleziono rozmowy." });
+    }
+
+    const tenantState = buildTenantState(state, req.session.user.tenantId);
+    const tenant = tenantState.tenants[0];
+    const now = new Date().toISOString();
+    conversation.thread = Array.isArray(conversation.thread) ? conversation.thread : [];
+    conversation.thread.push({
+      id: uid("msgline"),
+      authorRole: "tenant",
+      authorName: tenant?.name || req.session.user.name,
+      body: bodyResult.value,
+      createdAt: now,
+      attachments
+    });
+    conversation.updatedAt = now;
+    conversation.status = "otwarta";
+
+    await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się odpowiedzieć w rozmowie." });
+  }
+});
+
 app.post("/api/tickets/comment", requireAuth, async (req, res) => {
   try {
     const ticketId = sanitizeText(req.body.ticketId || "");

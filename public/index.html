@@ -2757,6 +2757,24 @@
         : (document.getElementById("conversation_priority")?.value || "normalna");
       if (!tenantId) return alert("Wybierz najemcę.");
       if (!subject || !body) return alert("Uzupełnij temat i treść wiadomości.");
+      if (currentUser?.role === "tenant") {
+        try {
+          await apiPost("/api/tenant/messages", {
+            subject,
+            body,
+            priority,
+            attachments: pendingConversationFiles.map((file) => ({ ...file }))
+          });
+          clearPendingConversationFiles();
+          await load();
+          renderAll();
+          showPage("communications");
+          return;
+        } catch (error) {
+          alert(error.message || "Nie udało się wysłać wiadomości.");
+          return;
+        }
+      }
       const context = leaseDocumentContext(tenantId);
       const now = nowIso();
       const conversation = {
@@ -2793,6 +2811,23 @@
         ? (document.getElementById("new_message_body")?.value.trim() || "")
         : (document.getElementById("conversation_reply")?.value.trim() || "");
       if (!body) return alert("Wpisz treść wiadomości.");
+      if (currentUser?.role === "tenant") {
+        try {
+          await apiPost("/api/tenant/messages/reply", {
+            conversationId: conversation.id,
+            body,
+            attachments: pendingConversationFiles.map((file) => ({ ...file }))
+          });
+          clearPendingConversationFiles();
+          await load();
+          renderAll();
+          showPage("communications");
+          return;
+        } catch (error) {
+          alert(error.message || "Nie udało się wysłać odpowiedzi.");
+          return;
+        }
+      }
       const now = nowIso();
       conversation.thread ||= [];
       conversation.thread.push({
