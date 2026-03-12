@@ -751,6 +751,7 @@
       <section id="documents" class="page hidden"></section>
       <section id="tasks" class="page hidden"></section>
       <section id="communications" class="page hidden"></section>
+      <section id="taxes" class="page hidden"></section>
       <section id="reports" class="page hidden"></section>
       <section id="settings" class="page hidden"></section>
     </main>
@@ -774,6 +775,8 @@
       tasks: [],
       generatedDocuments: [],
       messages: [],
+      taxAdjustments: [],
+      taxPayments: [],
       settlements: [],
       periodSettlements: [],
       settings: {
@@ -812,7 +815,10 @@
         tenantPortalDocumentsEnabled: true,
         tenantPortalTasksEnabled: true,
         tenantPortalMessagesEnabled: true,
-        tenantPortalMaintenanceEnabled: true
+        tenantPortalMaintenanceEnabled: true,
+        privateRentalTaxPeriod: "monthly",
+        privateRentalTaxThresholdMode: "single",
+        privateRentalTaxExcludedKeywords: "kaucja, depozyt"
       }
     };
 
@@ -839,6 +845,7 @@
     let editingUnitId = null;
     let editingTenantId = null;
     let editingLeaseId = null;
+    let selectedTaxYear = new Date().getFullYear();
 
     function defaultDocumentTemplates() {
       return {
@@ -866,6 +873,7 @@
       ["documents", "Dokumenty", "Rejestr umów, polis, protokołów i terminów ważności."],
       ["tasks", "Zadania", "Checklisty operacyjne, onboarding i terminy."],
       ["communications", "Komunikacja", "Przypomnienia, kolejka kontaktu i gotowe wiadomości."],
+      ["taxes", "Podatki najmu", "Ewidencja przychodów i ryczałt dla najmu prywatnego."],
       ["reports", "Raporty", "Obłożenie, wynik i zestawienia."],
       ["settings", "Ustawienia", "Dane firmy i eksporty."]
     ];
@@ -904,6 +912,7 @@
       documents: "documents",
       tasks: "tasks",
       communications: "communications",
+      taxes: "taxes",
       reports: "reports",
       settings: "settings"
     };
@@ -969,6 +978,7 @@
         documents: "Dokumenty",
         tasks: "Zadania",
         communications: "Komunikacja",
+        taxes: "Podatki najmu",
         reports: "Raporty",
         settings: "Ustawienia"
       })[key] || key;
@@ -987,16 +997,16 @@
     function defaultPermissionsForRole(role) {
       return ({
         owner: {
-          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, reports: true, settings: true
+          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, taxes: true, reports: true, settings: true
         },
         manager: {
-          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, reports: true, settings: false
+          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, taxes: true, reports: true, settings: false
         },
         accountant: {
-          dashboard: true, properties: false, tenants: true, tenantCard: true, leases: true, meters: false, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: false, documents: true, tasks: false, communications: true, reports: true, settings: false
+          dashboard: true, properties: false, tenants: true, tenantCard: true, leases: true, meters: false, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: false, documents: true, tasks: false, communications: true, taxes: true, reports: true, settings: false
         },
         technician: {
-          dashboard: true, properties: false, tenants: false, tenantCard: false, leases: false, meters: false, settlements: false, periodSettlements: false, payments: false, expenses: false, maintenance: true, documents: true, tasks: true, communications: true, reports: true, settings: false
+          dashboard: true, properties: false, tenants: false, tenantCard: false, leases: false, meters: false, settlements: false, periodSettlements: false, payments: false, expenses: false, maintenance: true, documents: true, tasks: true, communications: true, taxes: false, reports: true, settings: false
         },
         tenant: {}
       })[role] || {};
@@ -1194,6 +1204,8 @@
       state.tasks = state.tasks.filter((task) => (!task.tenantId || tenantIds.has(task.tenantId)) && (!task.leaseId || leaseIds.has(task.leaseId)) && (!task.unitId || unitIds.has(task.unitId)));
       state.generatedDocuments = state.generatedDocuments.filter((document) => (!document.tenantId || tenantIds.has(document.tenantId)) && (!document.leaseId || leaseIds.has(document.leaseId)) && (!document.unitId || unitIds.has(document.unitId)));
       state.messages = state.messages.filter((message) => (!message.tenantId || tenantIds.has(message.tenantId)) && (!message.leaseId || leaseIds.has(message.leaseId)) && (!message.unitId || unitIds.has(message.unitId)));
+      state.taxAdjustments = state.taxAdjustments.filter((entry) => entry.date);
+      state.taxPayments = state.taxPayments.filter((entry) => entry.periodKey);
       state.settlements = state.settlements.filter((settlement) => (!settlement.leaseId || leaseIds.has(settlement.leaseId)) && (!settlement.tenantId || tenantIds.has(settlement.tenantId)) && (!settlement.unitId || unitIds.has(settlement.unitId)));
       state.periodSettlements = state.periodSettlements.filter((settlement) => !settlement.tenantId || tenantIds.has(settlement.tenantId));
     }
@@ -1214,6 +1226,8 @@
       state.tasks ||= [];
       state.generatedDocuments ||= [];
       state.messages ||= [];
+      state.taxAdjustments ||= [];
+      state.taxPayments ||= [];
       state.settlements ||= [];
       state.periodSettlements ||= [];
       state.settings ||= {};
@@ -1253,6 +1267,9 @@
       state.settings.tenantPortalTasksEnabled = state.settings.tenantPortalTasksEnabled !== false;
       state.settings.tenantPortalMessagesEnabled = state.settings.tenantPortalMessagesEnabled !== false;
       state.settings.tenantPortalMaintenanceEnabled = state.settings.tenantPortalMaintenanceEnabled !== false;
+      state.settings.privateRentalTaxPeriod = ["monthly", "quarterly"].includes(state.settings.privateRentalTaxPeriod) ? state.settings.privateRentalTaxPeriod : "monthly";
+      state.settings.privateRentalTaxThresholdMode = ["single", "spouse_single_settlement"].includes(state.settings.privateRentalTaxThresholdMode) ? state.settings.privateRentalTaxThresholdMode : "single";
+      state.settings.privateRentalTaxExcludedKeywords ||= "kaucja, depozyt";
       state.settings.documentTemplates = {
         ...defaultDocumentTemplates(),
         ...(state.settings.documentTemplates || {})
@@ -1321,6 +1338,20 @@
             }))
           : []
       }));
+      state.taxAdjustments = state.taxAdjustments.map((entry) => ({
+        ...entry,
+        date: entry?.date || today(),
+        amount: Number(entry?.amount || 0),
+        mode: ["increase", "decrease"].includes(entry?.mode) ? entry.mode : "increase",
+        note: sanitizeText(entry?.note || "")
+      })).filter((entry) => entry.amount > 0);
+      state.taxPayments = state.taxPayments.map((entry) => ({
+        ...entry,
+        periodKey: sanitizeText(entry?.periodKey || ""),
+        paymentDate: entry?.paymentDate || today(),
+        amount: Number(entry?.amount || 0),
+        note: sanitizeText(entry?.note || "")
+      })).filter((entry) => entry.amount > 0);
       state.documents = state.documents.map((document) => ({
         ...document,
         attachments: Array.isArray(document?.attachments)
@@ -1409,6 +1440,185 @@
       const overdue = state.charges.filter((c) => calcChargeStatus(c) === "zaległe").reduce((a, c) => a + Math.max(0, Number(c.amount) - chargePaidAmount(c.id)), 0);
       const expenses = state.expenses.reduce((a, e) => a + Number(e.amount || 0), 0);
       return { due, paid, overdue, expenses, net: paid - expenses };
+    }
+
+    function selectedTaxYearValue() {
+      const years = taxAvailableYears();
+      if (!years.includes(Number(selectedTaxYear))) {
+        selectedTaxYear = years[0];
+      }
+      return Number(selectedTaxYear);
+    }
+
+    function taxAvailableYears() {
+      const years = new Set([new Date().getFullYear()]);
+      state.payments.forEach((payment) => {
+        const year = Number(String(payment.date || "").slice(0, 4));
+        if (year) years.add(year);
+      });
+      state.taxAdjustments.forEach((entry) => {
+        const year = Number(String(entry.date || "").slice(0, 4));
+        if (year) years.add(year);
+      });
+      state.taxPayments.forEach((entry) => {
+        const year = Number(String(entry.paymentDate || entry.periodKey || "").slice(0, 4));
+        if (year) years.add(year);
+      });
+      return Array.from(years).sort((a, b) => b - a);
+    }
+
+    function privateRentalTaxThreshold() {
+      return state.settings.privateRentalTaxThresholdMode === "spouse_single_settlement" ? 200000 : 100000;
+    }
+
+    function privateRentalTaxExcludedKeywords() {
+      return String(state.settings.privateRentalTaxExcludedKeywords || "kaucja, depozyt")
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+    }
+
+    function paymentChargeType(payment) {
+      return state.charges.find((charge) => charge.id === payment.chargeId)?.type || "Wpłata bez przypisanej opłaty";
+    }
+
+    function paymentExcludedFromPrivateRentalTax(payment) {
+      const label = `${paymentChargeType(payment)} ${payment.method || ""}`.toLowerCase();
+      return privateRentalTaxExcludedKeywords().some((keyword) => label.includes(keyword));
+    }
+
+    function taxPeriodKey(dateValue, mode = state.settings.privateRentalTaxPeriod) {
+      const year = Number(String(dateValue || "").slice(0, 4));
+      const month = Number(String(dateValue || "").slice(5, 7));
+      if (!year || !month) return "";
+      if (mode === "quarterly") {
+        return `${year}-Q${Math.ceil(month / 3)}`;
+      }
+      return `${year}-${String(month).padStart(2, "0")}`;
+    }
+
+    function taxPeriodLabel(periodKey) {
+      if (periodKey.includes("-Q")) {
+        const [year, quarter] = periodKey.split("-Q");
+        return `${quarter}. kwartał ${year}`;
+      }
+      return fmtMonth(periodKey);
+    }
+
+    function taxPeriodDueDate(periodKey) {
+      if (periodKey.includes("-Q")) {
+        const [yearText, quarterText] = periodKey.split("-Q");
+        const year = Number(yearText);
+        const quarter = Number(quarterText);
+        const dueMonth = quarter === 4 ? 1 : quarter * 3 + 1;
+        const dueYear = quarter === 4 ? year + 1 : year;
+        return new Date(dueYear, dueMonth - 1, 20).toISOString().slice(0, 10);
+      }
+      const [yearText, monthText] = periodKey.split("-");
+      const year = Number(yearText);
+      const month = Number(monthText);
+      const dueMonth = month === 12 ? 1 : month + 1;
+      const dueYear = month === 12 ? year + 1 : year;
+      return new Date(dueYear, dueMonth - 1, 20).toISOString().slice(0, 10);
+    }
+
+    function privateRentalRevenueRows(year = selectedTaxYearValue()) {
+      return state.payments
+        .filter((payment) => String(payment.date || "").startsWith(`${year}-`))
+        .filter((payment) => payment.leaseId && Number(payment.amount || 0) > 0)
+        .map((payment) => ({
+          ...payment,
+          chargeType: paymentChargeType(payment),
+          tenantLabel: tenantName(leaseById(payment.leaseId)?.tenantId),
+          leaseLabel: leaseLabel(payment.leaseId),
+          excluded: paymentExcludedFromPrivateRentalTax(payment)
+        }))
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    }
+
+    function privateRentalAdjustments(year = selectedTaxYearValue()) {
+      return state.taxAdjustments
+        .filter((entry) => String(entry.date || "").startsWith(`${year}-`))
+        .slice()
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    }
+
+    function privateRentalTaxSummary(year = selectedTaxYearValue()) {
+      const mode = state.settings.privateRentalTaxPeriod || "monthly";
+      const threshold = privateRentalTaxThreshold();
+      const revenueRows = privateRentalRevenueRows(year);
+      const adjustments = privateRentalAdjustments(year);
+      const periodMap = new Map();
+
+      revenueRows.filter((row) => !row.excluded).forEach((row) => {
+        const key = taxPeriodKey(row.date, mode);
+        const current = periodMap.get(key) || { revenue: 0, adjustments: 0 };
+        current.revenue += Number(row.amount || 0);
+        periodMap.set(key, current);
+      });
+
+      adjustments.forEach((entry) => {
+        const key = taxPeriodKey(entry.date, mode);
+        const current = periodMap.get(key) || { revenue: 0, adjustments: 0 };
+        current.adjustments += entry.mode === "decrease" ? -Math.abs(Number(entry.amount || 0)) : Math.abs(Number(entry.amount || 0));
+        periodMap.set(key, current);
+      });
+
+      const periodKeys = Array.from(periodMap.keys()).sort();
+      const paidByPeriod = state.taxPayments
+        .filter((entry) => String(entry.periodKey || "").startsWith(String(year)))
+        .reduce((map, entry) => {
+          map.set(entry.periodKey, (map.get(entry.periodKey) || 0) + Number(entry.amount || 0));
+          return map;
+        }, new Map());
+
+      let cumulativeTaxable = 0;
+      let cumulativeTax = 0;
+      const periods = periodKeys.map((periodKey) => {
+        const row = periodMap.get(periodKey) || { revenue: 0, adjustments: 0 };
+        const taxableRevenue = row.revenue + row.adjustments;
+        const nextCumulativeTaxable = Math.max(0, cumulativeTaxable + taxableRevenue);
+        const nextCumulativeTax = Math.min(nextCumulativeTaxable, threshold) * 0.085 + Math.max(0, nextCumulativeTaxable - threshold) * 0.125;
+        const taxDue = nextCumulativeTax - cumulativeTax;
+        cumulativeTaxable = nextCumulativeTaxable;
+        cumulativeTax = nextCumulativeTax;
+        const paid = paidByPeriod.get(periodKey) || 0;
+        return {
+          periodKey,
+          label: taxPeriodLabel(periodKey),
+          dueDate: taxPeriodDueDate(periodKey),
+          revenue: row.revenue,
+          adjustments: row.adjustments,
+          taxableRevenue,
+          cumulativeTaxable,
+          taxDue,
+          paid,
+          remaining: taxDue - paid
+        };
+      });
+
+      const grossRevenue = revenueRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+      const excludedRevenue = revenueRows.filter((row) => row.excluded).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+      const adjustmentsTotal = adjustments.reduce((sum, entry) => sum + (entry.mode === "decrease" ? -Math.abs(Number(entry.amount || 0)) : Math.abs(Number(entry.amount || 0))), 0);
+      const taxableRevenue = Math.max(0, periods.length ? periods[periods.length - 1].cumulativeTaxable : 0);
+      const taxDue = cumulativeTax;
+      const taxPaid = periods.reduce((sum, period) => sum + Number(period.paid || 0), 0);
+
+      return {
+        year,
+        mode,
+        threshold,
+        grossRevenue,
+        excludedRevenue,
+        adjustmentsTotal,
+        taxableRevenue,
+        taxDue,
+        taxPaid,
+        taxRemaining: Math.max(0, taxDue - taxPaid),
+        periods,
+        revenueRows,
+        adjustments
+      };
     }
 
     function activeLeases() {
@@ -3091,6 +3301,8 @@
       const collection = collectionRate();
       const unreadConversations = conversationsForCurrentUser().filter(conversationUnreadForCurrentUser);
       const latestUnreadConversation = unreadConversations[0] || null;
+      const taxSummary = privateRentalTaxSummary();
+      const nextTaxPeriod = taxSummary.periods.find((period) => period.remaining > 0) || null;
 
       document.getElementById("dashboard").innerHTML = `
         ${latestUnreadConversation ? `
@@ -3104,6 +3316,19 @@
             <div class="section inline-actions">
               <button class="btn green" onclick="selectConversation('${latestUnreadConversation.id}')">Otwórz wiadomość</button>
               <button class="btn secondary" onclick="showPage('communications')">Przejdź do komunikacji</button>
+            </div>
+          </div>
+        ` : ""}
+        ${nextTaxPeriod ? `
+          <div class="card section">
+            <div class="panel-title"><h3>Podatek najmu do rozliczenia</h3><span class="badge status-pending">${state.settings.privateRentalTaxPeriod === "quarterly" ? "kwartalnie" : "miesięcznie"}</span></div>
+            <div class="notice">
+              Okres: <strong>${nextTaxPeriod.label}</strong><br>
+              Termin wpłaty: <strong>${nextTaxPeriod.dueDate}</strong><br>
+              Do zapłaty: <strong>${fmt(nextTaxPeriod.remaining)}</strong>
+            </div>
+            <div class="section inline-actions">
+              <button class="btn green" onclick="showPage('taxes')">Otwórz moduł podatków</button>
             </div>
           </div>
         ` : ""}
@@ -3196,6 +3421,10 @@
           <div class="card">
             <div class="metric-card-top"><div><small>Wynik netto</small><div class="metric">${fmt(net)}</div></div><div class="delta ${net < 0 ? "down" : ""}">${fmt(expenses)} kosztów</div></div>
             <div class="muted">Wpłaty minus koszty operacyjne</div>
+          </div>
+          <div class="card">
+            <div class="metric-card-top"><div><small>Ryczałt najmu</small><div class="metric">${fmt(taxSummary.taxDue)}</div></div><div class="delta ${taxSummary.taxRemaining > 0 ? "down" : ""}">${fmt(taxSummary.taxRemaining)} do zapłaty</div></div>
+            <div class="muted">Najem prywatny liczony od przychodu otrzymanego</div>
           </div>
         </div>
 
@@ -4079,6 +4308,21 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           </div>
         </div>
         <div class="card section">
+          <div class="panel-title"><h3>Podatki najmu prywatnego</h3></div>
+          <div class="form-grid">
+            <select id="s_tax_period">
+              <option value="monthly" ${state.settings.privateRentalTaxPeriod !== "quarterly" ? "selected" : ""}>Ryczałt miesięczny</option>
+              <option value="quarterly" ${state.settings.privateRentalTaxPeriod === "quarterly" ? "selected" : ""}>Ryczałt kwartalny</option>
+            </select>
+            <select id="s_tax_threshold_mode">
+              <option value="single" ${state.settings.privateRentalTaxThresholdMode !== "spouse_single_settlement" ? "selected" : ""}>Próg 100 000 zł</option>
+              <option value="spouse_single_settlement" ${state.settings.privateRentalTaxThresholdMode === "spouse_single_settlement" ? "selected" : ""}>Próg 200 000 zł dla małżonków</option>
+            </select>
+            <input id="s_tax_excluded_keywords" value="${state.settings.privateRentalTaxExcludedKeywords || "kaucja, depozyt"}" placeholder="Słowa wykluczające z podatku, np. kaucja, depozyt" />
+          </div>
+          <div class="section notice">System traktuje wpłaty zawierające te słowa w tytule opłaty jako wyłączone z ryczałtu. Dla nietypowych przypadków możesz dodać ręczną korektę w module podatków.</div>
+        </div>
+        <div class="card section">
           <div class="panel-title"><h3>SLA zgłoszeń</h3></div>
           <div class="form-grid">
             <input id="s_sla_low_response" type="number" value="${state.settings.ticketResponseLowHours || 24}" placeholder="Niski: reakcja (h)" />
@@ -4325,6 +4569,129 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       renderPendingConversationFiles();
     }
 
+    function renderTaxes() {
+      if (currentUser?.role === "tenant" || !hasCapability("stateWrite")) {
+        document.getElementById("taxes").innerHTML = `
+          <div class="card">
+            <div class="panel-title"><h3>Moduł podatkowy</h3></div>
+            <div class="notice">Ten moduł jest dostępny tylko dla właściciela, managera lub księgowości.</div>
+          </div>`;
+        return;
+      }
+
+      const year = selectedTaxYearValue();
+      const summary = privateRentalTaxSummary(year);
+      const periods = summary.periods;
+      const periodOptions = periods.length
+        ? periods.map((period) => `<option value="${period.periodKey}">${period.label} · termin ${period.dueDate}</option>`).join("")
+        : `<option value="">Brak okresów do wyboru</option>`;
+
+      document.getElementById("taxes").innerHTML = `
+        <div class="grid cards">
+          <div class="card"><div class="muted">Wpłaty brutto</div><div class="metric">${fmt(summary.grossRevenue)}</div><div class="small muted">wszystkie zaksięgowane wpływy w ${year}</div></div>
+          <div class="card"><div class="muted">Wyłączone z ryczałtu</div><div class="metric">${fmt(summary.excludedRevenue)}</div><div class="small muted">np. kaucja lub depozyt według ustawień</div></div>
+          <div class="card"><div class="muted">Przychód opodatkowany</div><div class="metric">${fmt(summary.taxableRevenue)}</div><div class="small muted">podstawa ryczałtu, nie zysk</div></div>
+          <div class="card"><div class="muted">Podatek należny</div><div class="metric">${fmt(summary.taxDue)}</div><div class="small muted">${fmt(summary.taxPaid)} wpłacono</div></div>
+          <div class="card"><div class="muted">Pozostało do wpłaty</div><div class="metric">${fmt(summary.taxRemaining)}</div><div class="small muted">próg ${fmt(summary.threshold)}</div></div>
+        </div>
+        <div class="card section">
+          <div class="panel-title"><h3>Ewidencja przychodów dla najmu prywatnego</h3></div>
+          <div class="form-grid three">
+            <select onchange="setSelectedTaxYear(this.value)">${taxAvailableYears().map((entryYear) => `<option value="${entryYear}" ${entryYear === year ? "selected" : ""}>Rok ${entryYear}</option>`).join("")}</select>
+            <div class="notice">Tryb: <strong>${summary.mode === "quarterly" ? "kwartalny" : "miesięczny"}</strong><br>Próg: <strong>${summary.threshold === 200000 ? "200 000 zł (małżonkowie z jednym rozliczającym)" : "100 000 zł"}</strong></div>
+            <div class="notice">Moduł liczy ryczałt od przychodu otrzymanego. Koszty nie obniżają podatku w najmie prywatnym opodatkowanym ryczałtem.</div>
+          </div>
+          <div class="section notice">
+            Terminy wpłat są liczone do <strong>20. dnia miesiąca następującego po miesiącu lub kwartale</strong>. Ostateczne roczne zamknięcie i PIT-28 nadal warto zweryfikować przed wysyłką, zwłaszcza przy nietypowych sytuacjach jak częściowe zwroty, potrącenia z kaucji albo wspólność majątkowa.
+          </div>
+        </div>
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Okresy podatkowe</h3></div>
+            <table>
+              <thead><tr><th>Okres</th><th>Przychód</th><th>Korekty</th><th>Podstawa</th><th>Podatek</th><th>Wpłacono</th><th>Termin</th></tr></thead>
+              <tbody>
+                ${periods.length ? periods.map((period) => `
+                  <tr>
+                    <td>${period.label}</td>
+                    <td>${fmt(period.revenue)}</td>
+                    <td>${period.adjustments ? fmt(period.adjustments) : "—"}</td>
+                    <td>${fmt(period.taxableRevenue)}</td>
+                    <td>${fmt(period.taxDue)}</td>
+                    <td>${fmt(period.paid)}</td>
+                    <td><span class="badge ${period.remaining > 0 ? "status-pending" : "status-active"}">${period.dueDate}</span></td>
+                  </tr>
+                `).join("") : `<tr><td colspan="7">Brak wpłat w tym roku. Gdy zaksięgujesz wpływy, okresy pojawią się tutaj automatycznie.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>Korekty i wpłaty do US</h3></div>
+            <div class="form-grid">
+              <input id="tax_adjustment_date" type="date" value="${today()}" />
+              <input id="tax_adjustment_amount" type="number" step="0.01" placeholder="Kwota korekty" />
+              <select id="tax_adjustment_mode"><option value="increase">Zwiększa przychód</option><option value="decrease">Zmniejsza przychód</option></select>
+              <input id="tax_adjustment_note" placeholder="Powód korekty, np. zwrot części czynszu" />
+            </div>
+            <div class="section inline-actions"><button class="btn green" onclick="addTaxAdjustment()">Dodaj korektę</button></div>
+            <div class="form-grid section">
+              <select id="tax_payment_period">${periodOptions}</select>
+              <input id="tax_payment_date" type="date" value="${today()}" />
+              <input id="tax_payment_amount" type="number" step="0.01" placeholder="Wpłata do US" />
+              <input id="tax_payment_note" placeholder="Notatka do wpłaty" />
+            </div>
+            <div class="section inline-actions"><button class="btn green" onclick="addTaxPayment()">Zapisz wpłatę do US</button></div>
+            <div class="entity-list section">
+              ${summary.adjustments.length ? summary.adjustments.map((entry) => `
+                <div class="entity-item">
+                  <div>
+                    <strong>${entry.mode === "decrease" ? "Korekta zmniejszająca" : "Korekta zwiększająca"} · ${fmt(entry.amount)}</strong>
+                    <div class="meta">${entry.date} · ${entry.note || "bez opisu"}</div>
+                  </div>
+                  <div class="inline-actions"><button class="btn secondary small" onclick="removeTaxAdjustment('${entry.id}')">Usuń</button></div>
+                </div>
+              `).join("") : `<div class="empty-state">Brak ręcznych korekt przychodów.</div>`}
+            </div>
+          </div>
+        </div>
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Ewidencja otrzymanych przychodów</h3></div>
+            <table>
+              <thead><tr><th>Data</th><th>Najemca / umowa</th><th>Tytuł wpłaty</th><th>Kwota</th><th>Status</th></tr></thead>
+              <tbody>
+                ${summary.revenueRows.length ? summary.revenueRows.map((row) => `
+                  <tr>
+                    <td>${row.date}</td>
+                    <td>${truncatedText(`${row.tenantLabel} · ${row.leaseLabel}`, 28)}</td>
+                    <td>${truncatedText(row.chargeType, 28)}</td>
+                    <td>${fmt(row.amount)}</td>
+                    <td><span class="badge ${row.excluded ? "status-closed" : "status-active"}">${row.excluded ? "wyłączone" : "opodatkowane"}</span></td>
+                  </tr>
+                `).join("") : `<tr><td colspan="5">Brak zaksięgowanych wpłat w tym roku.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>Historia wpłat podatku</h3></div>
+            <table>
+              <thead><tr><th>Okres</th><th>Data wpłaty</th><th>Kwota</th><th>Notatka</th><th></th></tr></thead>
+              <tbody>
+                ${state.taxPayments.filter((entry) => String(entry.periodKey || "").startsWith(String(year))).length ? state.taxPayments.filter((entry) => String(entry.periodKey || "").startsWith(String(year))).sort((a, b) => String(b.paymentDate || "").localeCompare(String(a.paymentDate || ""))).map((entry) => `
+                  <tr>
+                    <td>${taxPeriodLabel(entry.periodKey)}</td>
+                    <td>${entry.paymentDate}</td>
+                    <td>${fmt(entry.amount)}</td>
+                    <td>${truncatedText(entry.note || "—", 28)}</td>
+                    <td><button class="btn secondary small" onclick="removeTaxPayment('${entry.id}')">Usuń</button></td>
+                  </tr>
+                `).join("") : `<tr><td colspan="5">Nie zapisano jeszcze żadnej wpłaty do urzędu.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
     function renderAll() {
       renderDashboard();
       renderProperties();
@@ -4340,6 +4707,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       renderDocuments();
       renderTasks();
       renderCommunications();
+      renderTaxes();
       renderReports();
       renderSettings();
       updateWorkspaceChrome();
@@ -4984,6 +5352,48 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       alert(`Wygenerowano ${created} opłat.`);
     }
 
+    function setSelectedTaxYear(year) {
+      selectedTaxYear = Number(year) || new Date().getFullYear();
+      renderTaxes();
+    }
+
+    async function addTaxAdjustment() {
+      const date = document.getElementById("tax_adjustment_date")?.value || today();
+      const amount = Math.abs(Number(document.getElementById("tax_adjustment_amount")?.value || 0));
+      const mode = document.getElementById("tax_adjustment_mode")?.value === "decrease" ? "decrease" : "increase";
+      const note = document.getElementById("tax_adjustment_note")?.value.trim() || "";
+      if (!amount) return alert("Podaj kwotę korekty.");
+      state.taxAdjustments.push({ id: uid("taxadj"), date, amount, mode, note });
+      await save();
+      showPage("taxes");
+    }
+
+    async function removeTaxAdjustment(id) {
+      if (!confirm("Usunąć korektę podatkową?")) return;
+      state.taxAdjustments = state.taxAdjustments.filter((entry) => entry.id !== id);
+      await save();
+      showPage("taxes");
+    }
+
+    async function addTaxPayment() {
+      const periodKey = document.getElementById("tax_payment_period")?.value || "";
+      const paymentDate = document.getElementById("tax_payment_date")?.value || today();
+      const amount = Math.abs(Number(document.getElementById("tax_payment_amount")?.value || 0));
+      const note = document.getElementById("tax_payment_note")?.value.trim() || "";
+      if (!periodKey) return alert("Wybierz okres podatkowy.");
+      if (!amount) return alert("Podaj kwotę wpłaty do urzędu.");
+      state.taxPayments.push({ id: uid("taxpay"), periodKey, paymentDate, amount, note });
+      await save();
+      showPage("taxes");
+    }
+
+    async function removeTaxPayment(id) {
+      if (!confirm("Usunąć wpis wpłaty do urzędu skarbowego?")) return;
+      state.taxPayments = state.taxPayments.filter((entry) => entry.id !== id);
+      await save();
+      showPage("taxes");
+    }
+
     async function saveSettings() {
       state.settings.companyName = document.getElementById("s_company").value.trim() || "RentFlow";
       state.settings.ownerName = document.getElementById("s_owner").value.trim();
@@ -5010,6 +5420,9 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.settings.reminderDaysBeforeDocumentExpiry = Math.min(180, Math.max(1, Number(document.getElementById("s_reminder_doc").value || 30)));
       state.settings.paymentDemandDays = Math.min(60, Math.max(1, Number(document.getElementById("s_payment_demand_days")?.value || 7)));
       state.settings.noticePeriodDays = Math.min(365, Math.max(1, Number(document.getElementById("s_notice_period_days")?.value || 30)));
+      state.settings.privateRentalTaxPeriod = document.getElementById("s_tax_period")?.value === "quarterly" ? "quarterly" : "monthly";
+      state.settings.privateRentalTaxThresholdMode = document.getElementById("s_tax_threshold_mode")?.value === "spouse_single_settlement" ? "spouse_single_settlement" : "single";
+      state.settings.privateRentalTaxExcludedKeywords = document.getElementById("s_tax_excluded_keywords")?.value.trim() || "kaucja, depozyt";
       state.settings.ticketResponseLowHours = Math.min(720, Math.max(1, Number(document.getElementById("s_sla_low_response")?.value || 24)));
       state.settings.ticketResolutionLowHours = Math.min(1440, Math.max(1, Number(document.getElementById("s_sla_low_resolution")?.value || 120)));
       state.settings.ticketResponseMediumHours = Math.min(720, Math.max(1, Number(document.getElementById("s_sla_medium_response")?.value || 8)));
@@ -5147,7 +5560,9 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         documents: csv(state.documents),
         tasks: csv(state.tasks),
         generatedDocuments: csv(state.generatedDocuments),
-        messages: csv(state.messages)
+        messages: csv(state.messages),
+        taxAdjustments: csv(state.taxAdjustments),
+        taxPayments: csv(state.taxPayments)
       };
       Object.entries(files).forEach(([name, content], i) => {
         setTimeout(() => downloadFile(`${name}.csv`, content, "text/csv;charset=utf-8;"), i * 250);
