@@ -768,6 +768,17 @@
         ownerName: "Zarządca",
         ownerAddress: "",
         ownerDocument: "",
+        companyEmail: "",
+        companyPhone: "",
+        website: "",
+        supportEmail: "",
+        supportPhone: "",
+        supportHours: "",
+        platformTagline: "",
+        documentCity: "",
+        documentSignerName: "",
+        documentSignerRole: "",
+        defaultMessageSignature: "",
         baseCurrency: "PLN",
         utilityVAT: 23,
         lateFee: 50,
@@ -775,7 +786,20 @@
         paymentDueDay: 10,
         reminderDaysBeforeDue: 3,
         reminderDaysBeforeLeaseEnd: 45,
-        reminderDaysBeforeDocumentExpiry: 30
+        reminderDaysBeforeDocumentExpiry: 30,
+        paymentDemandDays: 7,
+        noticePeriodDays: 30,
+        ticketResponseLowHours: 24,
+        ticketResolutionLowHours: 120,
+        ticketResponseMediumHours: 8,
+        ticketResolutionMediumHours: 72,
+        ticketResponseHighHours: 2,
+        ticketResolutionHighHours: 24,
+        tenantPortalPaymentsEnabled: true,
+        tenantPortalDocumentsEnabled: true,
+        tenantPortalTasksEnabled: true,
+        tenantPortalMessagesEnabled: true,
+        tenantPortalMaintenanceEnabled: true
       }
     };
 
@@ -837,7 +861,15 @@
     ];
 
     function activePages() {
-      return currentUser?.role === "tenant" ? tenantPages : ownerPages;
+      if (currentUser?.role !== "tenant") return ownerPages;
+      return tenantPages.filter(([id]) => {
+        if (id === "payments") return state.settings.tenantPortalPaymentsEnabled !== false;
+        if (id === "documents") return state.settings.tenantPortalDocumentsEnabled !== false;
+        if (id === "tasks") return state.settings.tenantPortalTasksEnabled !== false;
+        if (id === "communications") return state.settings.tenantPortalMessagesEnabled !== false;
+        if (id === "maintenance") return state.settings.tenantPortalMaintenanceEnabled !== false;
+        return true;
+      });
     }
 
     const importFile = document.getElementById("importFile");
@@ -947,9 +979,18 @@
 
     function ticketSlaTargets(priority, createdAt) {
       const matrix = {
-        niski: { responseHours: 24, resolutionHours: 120 },
-        "średni": { responseHours: 8, resolutionHours: 72 },
-        wysoki: { responseHours: 2, resolutionHours: 24 }
+        niski: {
+          responseHours: Number(state.settings.ticketResponseLowHours || 24),
+          resolutionHours: Number(state.settings.ticketResolutionLowHours || 120)
+        },
+        "średni": {
+          responseHours: Number(state.settings.ticketResponseMediumHours || 8),
+          resolutionHours: Number(state.settings.ticketResolutionMediumHours || 72)
+        },
+        wysoki: {
+          responseHours: Number(state.settings.ticketResponseHighHours || 2),
+          resolutionHours: Number(state.settings.ticketResolutionHighHours || 24)
+        }
       };
       const selected = matrix[priority] || matrix["średni"];
       return {
@@ -1046,6 +1087,17 @@
       state.settings.ownerName ||= "";
       state.settings.ownerAddress ||= "";
       state.settings.ownerDocument ||= "";
+      state.settings.companyEmail ||= "";
+      state.settings.companyPhone ||= "";
+      state.settings.website ||= "";
+      state.settings.supportEmail ||= "";
+      state.settings.supportPhone ||= "";
+      state.settings.supportHours ||= "";
+      state.settings.platformTagline ||= "";
+      state.settings.documentCity ||= "";
+      state.settings.documentSignerName ||= "";
+      state.settings.documentSignerRole ||= "";
+      state.settings.defaultMessageSignature ||= "";
       state.settings.baseCurrency ||= "PLN";
       state.settings.utilityVAT = Number(state.settings.utilityVAT || 23);
       state.settings.lateFee = Number(state.settings.lateFee || 50);
@@ -1054,6 +1106,19 @@
       state.settings.reminderDaysBeforeDue = Number(state.settings.reminderDaysBeforeDue || 3);
       state.settings.reminderDaysBeforeLeaseEnd = Number(state.settings.reminderDaysBeforeLeaseEnd || 45);
       state.settings.reminderDaysBeforeDocumentExpiry = Number(state.settings.reminderDaysBeforeDocumentExpiry || 30);
+      state.settings.paymentDemandDays = Number(state.settings.paymentDemandDays || 7);
+      state.settings.noticePeriodDays = Number(state.settings.noticePeriodDays || 30);
+      state.settings.ticketResponseLowHours = Number(state.settings.ticketResponseLowHours || 24);
+      state.settings.ticketResolutionLowHours = Number(state.settings.ticketResolutionLowHours || 120);
+      state.settings.ticketResponseMediumHours = Number(state.settings.ticketResponseMediumHours || 8);
+      state.settings.ticketResolutionMediumHours = Number(state.settings.ticketResolutionMediumHours || 72);
+      state.settings.ticketResponseHighHours = Number(state.settings.ticketResponseHighHours || 2);
+      state.settings.ticketResolutionHighHours = Number(state.settings.ticketResolutionHighHours || 24);
+      state.settings.tenantPortalPaymentsEnabled = state.settings.tenantPortalPaymentsEnabled !== false;
+      state.settings.tenantPortalDocumentsEnabled = state.settings.tenantPortalDocumentsEnabled !== false;
+      state.settings.tenantPortalTasksEnabled = state.settings.tenantPortalTasksEnabled !== false;
+      state.settings.tenantPortalMessagesEnabled = state.settings.tenantPortalMessagesEnabled !== false;
+      state.settings.tenantPortalMaintenanceEnabled = state.settings.tenantPortalMaintenanceEnabled !== false;
       state.settings.documentTemplates = {
         ...defaultDocumentTemplates(),
         ...(state.settings.documentTemplates || {})
@@ -1543,9 +1608,29 @@
 
     function landlordIdentityBlock() {
       return [
-        state.settings.ownerName || state.settings.companyName || "Wynajmujący",
+        state.settings.documentSignerName || state.settings.ownerName || state.settings.companyName || "Wynajmujący",
+        state.settings.documentSignerRole || "Wynajmujący",
         state.settings.ownerAddress || "adres wynajmującego do uzupełnienia",
-        state.settings.ownerDocument ? `Dokument / PESEL / NIP: ${state.settings.ownerDocument}` : "dokument identyfikacyjny do uzupełnienia"
+        state.settings.ownerDocument ? `Dokument / PESEL / NIP: ${state.settings.ownerDocument}` : "dokument identyfikacyjny do uzupełnienia",
+        state.settings.companyEmail ? `E-mail: ${state.settings.companyEmail}` : "",
+        state.settings.companyPhone ? `Telefon: ${state.settings.companyPhone}` : ""
+      ].filter(Boolean).join("<br>");
+    }
+
+    function documentDateLabel() {
+      return `${state.settings.documentCity ? `${state.settings.documentCity}, ` : ""}${today()}`;
+    }
+
+    function defaultMessageSignature() {
+      return state.settings.defaultMessageSignature
+        || `${state.settings.ownerName || state.settings.companyName || "RentFlow"}${state.settings.companyPhone ? `\nTel: ${state.settings.companyPhone}` : ""}${state.settings.companyEmail ? `\nE-mail: ${state.settings.companyEmail}` : ""}`;
+    }
+
+    function supportContactLine() {
+      return [
+        state.settings.supportEmail || state.settings.companyEmail || "",
+        state.settings.supportPhone || state.settings.companyPhone || "",
+        state.settings.supportHours || ""
       ].join("<br>");
     }
 
@@ -2197,7 +2282,7 @@
         title: "Umowa najmu",
         subject: `Umowa najmu · ${tenant.name}`,
         bodyHtml: applyDocumentTemplate("leaseAgreement", tenantId, `
-        <p class="muted">Data wygenerowania: ${today()}</p>
+        <p class="muted">Data wygenerowania: ${documentDateLabel()}</p>
         <div class="box"><strong>Wynajmujący</strong><br>${landlordIdentityBlock()}</div>
         <div class="box"><strong>Najemca</strong><br>${tenantIdentityMarkup(tenant)}</div>
         <h2>Przedmiot najmu</h2>
@@ -2240,7 +2325,7 @@
         : "";
 
       return {
-        "{{today}}": templateValue(today()),
+        "{{today}}": templateValue(documentDateLabel()),
         "{{company_name}}": templateValue(state.settings.companyName || "RentFlow"),
         "{{owner_name}}": templateValue(state.settings.ownerName || state.settings.companyName || "—"),
         "{{owner_address}}": templateValue(state.settings.ownerAddress || "—"),
@@ -2300,7 +2385,7 @@
         title: "Protokół zdawczo-odbiorczy",
         subject: `Protokół odbioru · ${tenant.name}`,
         bodyHtml: applyDocumentTemplate("handoverProtocol", tenantId, `
-        <p class="muted">Data wygenerowania: ${today()}</p>
+        <p class="muted">Data wygenerowania: ${documentDateLabel()}</p>
         <div class="box"><strong>Lokal</strong><br>${unitLabel(unit.id)}<br>Adres: ${building?.address || "—"}</div>
         <div class="box"><strong>Strony</strong><br>Wynajmujący: ${state.settings.ownerName || state.settings.companyName || "—"}<br>Najemca: ${tenant.name || "—"}</div>
         <h2>Stan lokalu przy wydaniu</h2>
@@ -2323,12 +2408,12 @@
         title: "Przedsądowe wezwanie do zapłaty",
         subject: `Wezwanie do zapłaty · ${tenant.name}`,
         bodyHtml: applyDocumentTemplate("paymentDemand", tenantId, `
-        <p class="muted">Data wygenerowania: ${today()}</p>
+        <p class="muted">Data wygenerowania: ${documentDateLabel()}</p>
         <div class="box"><strong>Adresat</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <div class="box"><strong>Nadawca</strong><br>${landlordIdentityBlock()}</div>
         <p>Wzywam do zapłaty zaległości wynikających z umowy najmu dla lokalu ${unit ? unitLabel(unit.id) : "—"}.</p>
         <table><thead><tr><th>Pozycja</th><th>Termin</th><th>Kwota pozostała</th></tr></thead><tbody>${overdueItems.length ? overdueItems.map((item) => `<tr><td>${item.type}</td><td>${item.dueDate}</td><td>${fmt(chargeOutstandingAmount(item))}</td></tr>`).join("") : `<tr><td colspan="3">Brak zaległości na dzień wygenerowania.</td></tr>`}<tr><td colspan="2"><strong>Łącznie</strong></td><td><strong>${fmt(total)}</strong></td></tr></tbody></table>
-        <p class="section">Prosimy o uregulowanie należności w terminie 7 dni od doręczenia niniejszego wezwania pod rygorem skierowania sprawy na drogę postępowania sądowego.</p>
+        <p class="section">Prosimy o uregulowanie należności w terminie ${state.settings.paymentDemandDays || 7} dni od doręczenia niniejszego wezwania pod rygorem skierowania sprawy na drogę postępowania sądowego.</p>
         <div class="signature" style="margin-top:36px">Wynajmujący</div>
       `)
       };
@@ -2341,10 +2426,10 @@
         title: "Wypowiedzenie umowy najmu",
         subject: `Wypowiedzenie umowy · ${tenant.name}`,
         bodyHtml: applyDocumentTemplate("leaseTermination", tenantId, `
-        <p class="muted">Data wygenerowania: ${today()}</p>
+        <p class="muted">Data wygenerowania: ${documentDateLabel()}</p>
         <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <div class="box"><strong>Umowa</strong><br>Lokal: ${unit ? unitLabel(unit.id) : "—"}<br>Data rozpoczęcia: ${lease.startDate || "—"}<br>Data zakończenia wskazana w umowie: ${lease.endDate || "—"}</div>
-        <p>Wypowiadam umowę najmu z zachowaniem okresu wypowiedzenia wynikającego z umowy / przepisów prawa. Proszę o opuszczenie lokalu, rozliczenie wszystkich należności oraz uzgodnienie terminu zdania lokalu i podpisania protokołu końcowego.</p>
+        <p>Wypowiadam umowę najmu z zachowaniem okresu wypowiedzenia wynoszącego ${state.settings.noticePeriodDays || 30} dni, o ile umowa lub przepisy nie stanowią inaczej. Proszę o opuszczenie lokalu, rozliczenie wszystkich należności oraz uzgodnienie terminu zdania lokalu i podpisania protokołu końcowego.</p>
         <p>Przyczynę wypowiedzenia oraz datę ustania stosunku najmu należy uzupełnić zgodnie z konkretnym stanem faktycznym.</p>
         <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Potwierdzenie odbioru</div></div>
       `)
@@ -2358,7 +2443,7 @@
         title: "Potwierdzenie przyjęcia kaucji",
         subject: `Przyjęcie kaucji · ${tenant.name}`,
         bodyHtml: applyDocumentTemplate("depositReceipt", tenantId, `
-        <p class="muted">Data wygenerowania: ${today()}</p>
+        <p class="muted">Data wygenerowania: ${documentDateLabel()}</p>
         <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <p>Potwierdzam przyjęcie kaucji zabezpieczającej z tytułu umowy najmu dotyczącej lokalu ${unit ? unitLabel(unit.id) : "—"}.</p>
         <p>Kwota kaucji: <strong>${fmt(lease.deposit)}</strong></p>
@@ -2376,7 +2461,7 @@
         title: "Potwierdzenie przyjęcia płatności",
         subject: `Przyjęcie płatności · ${tenant.name}`,
         bodyHtml: applyDocumentTemplate("paymentReceipt", tenantId, `
-        <p class="muted">Data wygenerowania: ${today()}</p>
+        <p class="muted">Data wygenerowania: ${documentDateLabel()}</p>
         <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
         <div class="box"><strong>Płatność</strong><br>Data wpłaty: ${payment.date || "—"}<br>Kwota: ${fmt(payment.amount)}<br>Metoda: ${payment.method || "—"}<br>Lokal: ${unit ? unitLabel(unit.id) : "—"}</div>
         <p>Potwierdzam przyjęcie płatności z tytułu czynszu / pozostałych opłat wynikających z umowy najmu.</p>
@@ -2517,20 +2602,20 @@
     function paymentReminderMessage(charge, tenant, lease) {
       const outstanding = chargeOutstandingAmount(charge);
       const status = calcChargeStatus(charge) === "zaległe" ? "zaległa" : "zbliżająca się";
-      return `Dzień dobry ${tenant?.name || ""},\n\nTo ${status} płatność dotycząca ${charge.type} w kwocie ${fmt(outstanding)}.\nTermin płatności: ${charge.dueDate || "—"}.\n${lease ? `Umowa: ${leaseLabel(lease.id)}.\n` : ""}\nProsimy o uregulowanie należności lub kontakt, jeśli potrzebujesz wyjaśnień.\n\nPozdrawiamy,\n${state.settings.ownerName || state.settings.companyName || "RentFlow"}`;
+      return `Dzień dobry ${tenant?.name || ""},\n\nTo ${status} płatność dotycząca ${charge.type} w kwocie ${fmt(outstanding)}.\nTermin płatności: ${charge.dueDate || "—"}.\n${lease ? `Umowa: ${leaseLabel(lease.id)}.\n` : ""}\nProsimy o uregulowanie należności lub kontakt, jeśli potrzebujesz wyjaśnień.\n\nPozdrawiamy,\n${defaultMessageSignature()}`;
     }
 
     function leaseReminderMessage(lease, tenant) {
-      return `Dzień dobry ${tenant?.name || ""},\n\nPrzypominamy, że umowa najmu dla ${unitLabel(lease.unitId)} kończy się ${lease.endDate || "wkrótce"}.\nJeśli chcesz przedłużyć najem lub omówić dalsze warunki, prosimy o kontakt.\n\nPozdrawiamy,\n${state.settings.ownerName || state.settings.companyName || "RentFlow"}`;
+      return `Dzień dobry ${tenant?.name || ""},\n\nPrzypominamy, że umowa najmu dla ${unitLabel(lease.unitId)} kończy się ${lease.endDate || "wkrótce"}.\nJeśli chcesz przedłużyć najem lub omówić dalsze warunki, prosimy o kontakt.\n\nPozdrawiamy,\n${defaultMessageSignature()}`;
     }
 
     function documentReminderMessage(document, tenant) {
       const intro = tenant ? `Dzień dobry ${tenant.name},` : "Dzień dobry,";
-      return `${intro}\n\nDokument "${document.title}" ${document.expiresAt ? `traci ważność ${document.expiresAt}` : "wymaga weryfikacji"}.\nProsimy o przygotowanie aktualizacji lub kontakt w celu uzupełnienia formalności.\n\nPozdrawiamy,\n${state.settings.ownerName || state.settings.companyName || "RentFlow"}`;
+      return `${intro}\n\nDokument "${document.title}" ${document.expiresAt ? `traci ważność ${document.expiresAt}` : "wymaga weryfikacji"}.\nProsimy o przygotowanie aktualizacji lub kontakt w celu uzupełnienia formalności.\n\nPozdrawiamy,\n${defaultMessageSignature()}`;
     }
 
     function ticketReminderMessage(ticket, tenant, slaLabel) {
-      return `Dzień dobry ${tenant?.name || ""},\n\nSprawa serwisowa "${ticket?.title || "zgłoszenie"}" jest obecnie w statusie "${ticket?.status || "otwarte"}".\nAktualny priorytet/SLA: ${slaLabel}.\nJeśli chcesz doprecyzować problem lub potwierdzić dostęp do lokalu, odpowiedz na tę wiadomość.\n\nPozdrawiamy,\n${state.settings.ownerName || state.settings.companyName || "RentFlow"}`;
+      return `Dzień dobry ${tenant?.name || ""},\n\nSprawa serwisowa "${ticket?.title || "zgłoszenie"}" jest obecnie w statusie "${ticket?.status || "otwarte"}".\nAktualny priorytet/SLA: ${slaLabel}.\nJeśli chcesz doprecyzować problem lub potwierdzić dostęp do lokalu, odpowiedz na tę wiadomość.\n\nPozdrawiamy,\n${defaultMessageSignature()}`;
     }
 
     function communicationItemById(id) {
@@ -3694,7 +3779,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             <div class="panel-title"><h3>Profil użytkownika</h3></div>
             <div class="form-grid two">
               <div class="notice">Imię i nazwisko: <strong>${tenant?.name || currentUser?.name || "—"}</strong><br>E-mail: <strong>${tenant?.email || currentUser?.email || "—"}</strong><br>Telefon: <strong>${tenant?.phone || "—"}</strong><br>Adres: <strong>${tenantFormalAddress(tenant)}</strong></div>
-              <div class="notice">Firma / właściciel: <strong>${state.settings.companyName || "RentFlow"}</strong><br>Kontakt operacyjny: <strong>${state.settings.ownerName || "Biuro obsługi"}</strong><br>Adres właściciela: <strong>${state.settings.ownerAddress || "—"}</strong><br>Numer konta: <strong>${state.settings.bankAccount || "—"}</strong></div>
+              <div class="notice">Firma / właściciel: <strong>${state.settings.companyName || "RentFlow"}</strong><br>Kontakt operacyjny: <strong>${state.settings.ownerName || "Biuro obsługi"}</strong><br>Adres właściciela: <strong>${state.settings.ownerAddress || "—"}</strong><br>Numer konta: <strong>${state.settings.bankAccount || "—"}</strong><br>Wsparcie: <strong>${[state.settings.supportEmail || state.settings.companyEmail, state.settings.supportPhone || state.settings.companyPhone, state.settings.supportHours].filter(Boolean).join(" · ") || "—"}</strong></div>
             </div>
           </div>`;
         return;
@@ -3702,21 +3787,63 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
       document.getElementById("settings").innerHTML = `
         <div class="card">
-          <div class="panel-title"><h3>Ustawienia</h3></div>
+          <div class="panel-title"><h3>Dane firmy i komunikacja</h3></div>
           <div class="form-grid">
             <input id="s_company" value="${state.settings.companyName || ""}" placeholder="Nazwa firmy" />
             <input id="s_owner" value="${state.settings.ownerName || ""}" placeholder="Właściciel / zarządca" />
             <input id="s_owner_address" value="${state.settings.ownerAddress || ""}" placeholder="Adres właściciela / siedziby" />
             <input id="s_owner_document" value="${state.settings.ownerDocument || ""}" placeholder="Dokument / PESEL / NIP właściciela" />
+            <input id="s_company_email" value="${state.settings.companyEmail || ""}" placeholder="E-mail firmowy" />
+            <input id="s_company_phone" value="${state.settings.companyPhone || ""}" placeholder="Telefon firmowy" />
+            <input id="s_support_email" value="${state.settings.supportEmail || ""}" placeholder="E-mail wsparcia" />
+            <input id="s_support_phone" value="${state.settings.supportPhone || ""}" placeholder="Telefon wsparcia" />
+            <input id="s_support_hours" value="${state.settings.supportHours || ""}" placeholder="Godziny pracy / wsparcia" />
+            <input id="s_website" value="${state.settings.website || ""}" placeholder="Strona internetowa" />
+            <input id="s_tagline" value="${state.settings.platformTagline || ""}" placeholder="Claim / podtytuł platformy" />
+            <input id="s_doc_city" value="${state.settings.documentCity || ""}" placeholder="Miejscowość na dokumentach" />
+            <input id="s_doc_signer_name" value="${state.settings.documentSignerName || ""}" placeholder="Podpisujący dokumenty" />
+            <input id="s_doc_signer_role" value="${state.settings.documentSignerRole || ""}" placeholder="Rola podpisującego" />
             <input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" />
+            <input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" />
+          </div>
+          <div class="section">
+            <textarea id="s_message_signature" rows="4" placeholder="Domyślna stopka wiadomości">${state.settings.defaultMessageSignature || ""}</textarea>
+          </div>
+        </div>
+        <div class="card section">
+          <div class="panel-title"><h3>Finanse i formalności</h3></div>
+          <div class="form-grid">
             <input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" />
             <input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" />
-            <input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" />
             <input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Domyślny dzień płatności" />
             <input id="s_reminder_due" type="number" value="${state.settings.reminderDaysBeforeDue || 3}" placeholder="Ile dni przed płatnością przypominać" />
             <input id="s_reminder_lease" type="number" value="${state.settings.reminderDaysBeforeLeaseEnd || 45}" placeholder="Ile dni przed końcem umowy przypominać" />
             <input id="s_reminder_doc" type="number" value="${state.settings.reminderDaysBeforeDocumentExpiry || 30}" placeholder="Ile dni przed końcem dokumentu przypominać" />
+            <input id="s_payment_demand_days" type="number" value="${state.settings.paymentDemandDays || 7}" placeholder="Termin z wezwania do zapłaty" />
+            <input id="s_notice_period_days" type="number" value="${state.settings.noticePeriodDays || 30}" placeholder="Domyślny okres wypowiedzenia" />
           </div>
+        </div>
+        <div class="card section">
+          <div class="panel-title"><h3>SLA zgłoszeń</h3></div>
+          <div class="form-grid">
+            <input id="s_sla_low_response" type="number" value="${state.settings.ticketResponseLowHours || 24}" placeholder="Niski: reakcja (h)" />
+            <input id="s_sla_low_resolution" type="number" value="${state.settings.ticketResolutionLowHours || 120}" placeholder="Niski: rozwiązanie (h)" />
+            <input id="s_sla_medium_response" type="number" value="${state.settings.ticketResponseMediumHours || 8}" placeholder="Średni: reakcja (h)" />
+            <input id="s_sla_medium_resolution" type="number" value="${state.settings.ticketResolutionMediumHours || 72}" placeholder="Średni: rozwiązanie (h)" />
+            <input id="s_sla_high_response" type="number" value="${state.settings.ticketResponseHighHours || 2}" placeholder="Wysoki: reakcja (h)" />
+            <input id="s_sla_high_resolution" type="number" value="${state.settings.ticketResolutionHighHours || 24}" placeholder="Wysoki: rozwiązanie (h)" />
+          </div>
+        </div>
+        <div class="card section">
+          <div class="panel-title"><h3>Portal najemcy</h3></div>
+          <div class="form-grid two">
+            <label><input id="s_portal_payments" type="checkbox" ${state.settings.tenantPortalPaymentsEnabled !== false ? "checked" : ""} /> Płatności</label>
+            <label><input id="s_portal_documents" type="checkbox" ${state.settings.tenantPortalDocumentsEnabled !== false ? "checked" : ""} /> Dokumenty</label>
+            <label><input id="s_portal_tasks" type="checkbox" ${state.settings.tenantPortalTasksEnabled !== false ? "checked" : ""} /> Zadania</label>
+            <label><input id="s_portal_messages" type="checkbox" ${state.settings.tenantPortalMessagesEnabled !== false ? "checked" : ""} /> Wiadomości</label>
+            <label><input id="s_portal_maintenance" type="checkbox" ${state.settings.tenantPortalMaintenanceEnabled !== false ? "checked" : ""} /> Zgłoszenia serwisowe</label>
+          </div>
+          <div class="section notice">Tutaj decydujesz, które moduły są widoczne dla najemcy po zalogowaniu.</div>
           <div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div>
         </div>
         <div class="card section">
@@ -4537,6 +4664,17 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.settings.ownerName = document.getElementById("s_owner").value.trim();
       state.settings.ownerAddress = document.getElementById("s_owner_address").value.trim();
       state.settings.ownerDocument = document.getElementById("s_owner_document").value.trim();
+      state.settings.companyEmail = document.getElementById("s_company_email")?.value.trim() || "";
+      state.settings.companyPhone = document.getElementById("s_company_phone")?.value.trim() || "";
+      state.settings.supportEmail = document.getElementById("s_support_email")?.value.trim() || "";
+      state.settings.supportPhone = document.getElementById("s_support_phone")?.value.trim() || "";
+      state.settings.supportHours = document.getElementById("s_support_hours")?.value.trim() || "";
+      state.settings.website = document.getElementById("s_website")?.value.trim() || "";
+      state.settings.platformTagline = document.getElementById("s_tagline")?.value.trim() || "";
+      state.settings.documentCity = document.getElementById("s_doc_city")?.value.trim() || "";
+      state.settings.documentSignerName = document.getElementById("s_doc_signer_name")?.value.trim() || "";
+      state.settings.documentSignerRole = document.getElementById("s_doc_signer_role")?.value.trim() || "";
+      state.settings.defaultMessageSignature = document.getElementById("s_message_signature")?.value.trim() || "";
       state.settings.baseCurrency = document.getElementById("s_currency").value.trim() || "PLN";
       state.settings.utilityVAT = Math.max(0, Number(document.getElementById("s_vat").value || 23));
       state.settings.lateFee = Math.max(0, Number(document.getElementById("s_late").value || 50));
@@ -4545,6 +4683,19 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.settings.reminderDaysBeforeDue = Math.min(30, Math.max(1, Number(document.getElementById("s_reminder_due").value || 3)));
       state.settings.reminderDaysBeforeLeaseEnd = Math.min(180, Math.max(1, Number(document.getElementById("s_reminder_lease").value || 45)));
       state.settings.reminderDaysBeforeDocumentExpiry = Math.min(180, Math.max(1, Number(document.getElementById("s_reminder_doc").value || 30)));
+      state.settings.paymentDemandDays = Math.min(60, Math.max(1, Number(document.getElementById("s_payment_demand_days")?.value || 7)));
+      state.settings.noticePeriodDays = Math.min(365, Math.max(1, Number(document.getElementById("s_notice_period_days")?.value || 30)));
+      state.settings.ticketResponseLowHours = Math.min(720, Math.max(1, Number(document.getElementById("s_sla_low_response")?.value || 24)));
+      state.settings.ticketResolutionLowHours = Math.min(1440, Math.max(1, Number(document.getElementById("s_sla_low_resolution")?.value || 120)));
+      state.settings.ticketResponseMediumHours = Math.min(720, Math.max(1, Number(document.getElementById("s_sla_medium_response")?.value || 8)));
+      state.settings.ticketResolutionMediumHours = Math.min(1440, Math.max(1, Number(document.getElementById("s_sla_medium_resolution")?.value || 72)));
+      state.settings.ticketResponseHighHours = Math.min(720, Math.max(1, Number(document.getElementById("s_sla_high_response")?.value || 2)));
+      state.settings.ticketResolutionHighHours = Math.min(1440, Math.max(1, Number(document.getElementById("s_sla_high_resolution")?.value || 24)));
+      state.settings.tenantPortalPaymentsEnabled = !!document.getElementById("s_portal_payments")?.checked;
+      state.settings.tenantPortalDocumentsEnabled = !!document.getElementById("s_portal_documents")?.checked;
+      state.settings.tenantPortalTasksEnabled = !!document.getElementById("s_portal_tasks")?.checked;
+      state.settings.tenantPortalMessagesEnabled = !!document.getElementById("s_portal_messages")?.checked;
+      state.settings.tenantPortalMaintenanceEnabled = !!document.getElementById("s_portal_maintenance")?.checked;
       state.settings.documentTemplates = {
         ...defaultDocumentTemplates(),
         ...Object.fromEntries(adminTemplateKinds().map((kind) => [kind, document.getElementById(`tpl_${kind}`)?.value || ""]))
