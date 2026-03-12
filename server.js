@@ -70,6 +70,7 @@ function setAuthenticatedUser(req, user) {
     email: user.email,
     name: user.name,
     role: user.role,
+    capabilities: capabilitiesForRole(user.role),
     companyName: user.companyName,
     tenantId: user.tenantId || null
   };
@@ -99,11 +100,48 @@ async function saveOrganizationState(orgId, companyName, state) {
 
 function canAccessTicket(user, ticket, state) {
   if (!user || !ticket) return false;
-  if (user.role === "owner") return true;
+  if (["owner", "manager", "accountant", "technician"].includes(user.role)) return true;
   if (user.role !== "tenant" || !user.tenantId) return false;
   if (ticket.tenantId === user.tenantId) return true;
   const tenantState = buildTenantState(state, user.tenantId);
   return tenantState.tickets.some((entry) => entry.id === ticket.id);
+}
+
+function capabilitiesForRole(role) {
+  const matrix = {
+    owner: {
+      manageUsers: true,
+      stateWrite: true,
+      ticketWorkflow: true,
+      fullWorkspace: true
+    },
+    manager: {
+      manageUsers: false,
+      stateWrite: true,
+      ticketWorkflow: true,
+      fullWorkspace: true
+    },
+    accountant: {
+      manageUsers: false,
+      stateWrite: true,
+      ticketWorkflow: false,
+      fullWorkspace: true
+    },
+    technician: {
+      manageUsers: false,
+      stateWrite: false,
+      ticketWorkflow: true,
+      fullWorkspace: false
+    },
+    tenant: {
+      manageUsers: false,
+      stateWrite: false,
+      ticketWorkflow: false,
+      fullWorkspace: false
+    }
+  };
+
+  return matrix[role] || matrix.tenant;
 }
 
 function requireOwner(req, res, next) {
@@ -112,6 +150,27 @@ function requireOwner(req, res, next) {
   }
 
   return next();
+}
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.session.user || !roles.includes(req.session.user.role)) {
+      return res.status(403).json({ error: "Brak uprawnień do wykonania tej operacji." });
+    }
+
+    return next();
+  };
+}
+
+function requireCapability(capability) {
+  return (req, res, next) => {
+    const capabilities = req.session.user ? (req.session.user.capabilities || capabilitiesForRole(req.session.user.role)) : null;
+    if (!req.session.user || !capabilities?.[capability]) {
+      return res.status(403).json({ error: "Twoje konto nie ma wymaganych uprawnień." });
+    }
+
+    return next();
+  };
 }
 
 function requireTenant(req, res, next) {
@@ -326,7 +385,111 @@ app.get("/api/me", (req, res) => {
     return res.status(401).json({ error: "Brak sesji." });
   }
 
+  req.session.user.capabilities ||= capabilitiesForRole(req.session.user.role);
   return res.json(req.session.user);
+});
+
+app.get("/api/team-users", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, name, email, role, created_at
+      FROM users
+      WHERE org_id = $1 AND role <> 'tenant'
+      ORDER BY created_at ASC
+      `,
+      [req.session.user.orgId]
+    );
+
+    return res.json(result.rows.map((row) => ({
+      id: row.id,
+      name: sanitizeText(row.name),
+      email: row.email,
+      role: row.role,
+      createdAt: row.created_at
+    })));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się pobrać zespołu." });
+  }
+});
+
+app.post("/api/team-users", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const role = ["manager", "accountant", "technician"].includes(req.body.role) ? req.body.role : "";
+    const nameResult = ensureRequiredText(req.body.name, "Imię i nazwisko");
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const password = String(req.body.password || "");
+
+    if (!role || nameResult.error || !email || password.length < 8) {
+      return res.status(400).json({ error: "Uzupełnij dane członka zespołu i ustaw hasło min. 8 znaków." });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: "Podaj poprawny adres e-mail." });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const existing = await client.query(
+        "SELECT id, org_id, role FROM users WHERE email = $1 LIMIT 1",
+        [email]
+      );
+
+      if (existing.rows.length) {
+        const row = existing.rows[0];
+        if (row.org_id !== req.session.user.orgId || row.role === "tenant" || row.role === "owner") {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: "Ten e-mail jest już zajęty przez konto, którego nie można zamienić na konto zespołu." });
+        }
+
+        await client.query(
+          "UPDATE users SET name = $1, password_hash = $2, role = $3, tenant_id = NULL WHERE id = $4",
+          [nameResult.value, await bcrypt.hash(password, 12), role, row.id]
+        );
+      } else {
+        await client.query(
+          "INSERT INTO users (id, org_id, name, email, password_hash, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, NULL)",
+          [uid("usr"), req.session.user.orgId, nameResult.value, email, await bcrypt.hash(password, 12), role]
+        );
+      }
+
+      await client.query("COMMIT");
+      return res.json({ ok: true });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się zapisać konta zespołu." });
+  }
+});
+
+app.post("/api/team-users/delete", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const userId = sanitizeText(req.body.userId || "");
+    if (!userId) {
+      return res.status(400).json({ error: "Brakuje identyfikatora użytkownika." });
+    }
+
+    const result = await pool.query(
+      "DELETE FROM users WHERE org_id = $1 AND id = $2 AND role IN ('manager', 'accountant', 'technician') RETURNING id",
+      [req.session.user.orgId, userId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Nie znaleziono konta zespołu." });
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się usunąć konta zespołu." });
+  }
 });
 
 app.post("/api/tenant-access", requireAuth, requireOwner, async (req, res) => {
@@ -443,12 +606,8 @@ app.get("/api/state", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/state", requireAuth, async (req, res) => {
+app.post("/api/state", requireAuth, requireCapability("stateWrite"), async (req, res) => {
   try {
-    if (req.session.user.role !== "owner") {
-      return res.status(403).json({ error: "Najemca nie może modyfikować pełnego stanu aplikacji." });
-    }
-
     await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, req.body);
 
     return res.json({ ok: true, savedAt: new Date().toISOString() });
@@ -543,7 +702,7 @@ app.post("/api/tickets/comment", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/tickets/status", requireAuth, requireOwner, async (req, res) => {
+app.post("/api/tickets/status", requireAuth, requireCapability("ticketWorkflow"), async (req, res) => {
   try {
     const ticketId = sanitizeText(req.body.ticketId || "");
     const status = ["otwarte", "w trakcie", "zamknięte"].includes(req.body.status) ? req.body.status : "";

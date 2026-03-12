@@ -812,6 +812,7 @@
     let currentUser = null;
     let pendingDocumentFiles = [];
     let pendingConversationFiles = [];
+    let teamUsers = [];
     let selectedGeneratedDocumentId = null;
     let selectedConversationId = null;
     let editingBuildingId = null;
@@ -860,16 +861,55 @@
       ["settings", "Profil", "Dane kontaktowe i informacje rozliczeniowe."]
     ];
 
+    const technicianPages = [
+      ["dashboard", "Dashboard techniczny", "Przegląd spraw, priorytetów i kontaktu."],
+      ["maintenance", "Usterki", "Obsługa zgłoszeń, statusów i komentarzy."],
+      ["communications", "Komunikacja", "Kontakt z najemcami i historią rozmów."],
+      ["reports", "Raporty", "Skrót KPI i bieżącej sytuacji."],
+      ["settings", "Profil", "Dane konta i konfiguracja widoku."]
+    ];
+
     function activePages() {
-      if (currentUser?.role !== "tenant") return ownerPages;
-      return tenantPages.filter(([id]) => {
-        if (id === "payments") return state.settings.tenantPortalPaymentsEnabled !== false;
-        if (id === "documents") return state.settings.tenantPortalDocumentsEnabled !== false;
-        if (id === "tasks") return state.settings.tenantPortalTasksEnabled !== false;
-        if (id === "communications") return state.settings.tenantPortalMessagesEnabled !== false;
-        if (id === "maintenance") return state.settings.tenantPortalMaintenanceEnabled !== false;
-        return true;
-      });
+      if (currentUser?.role === "tenant") {
+        return tenantPages.filter(([id]) => {
+          if (id === "payments") return state.settings.tenantPortalPaymentsEnabled !== false;
+          if (id === "documents") return state.settings.tenantPortalDocumentsEnabled !== false;
+          if (id === "tasks") return state.settings.tenantPortalTasksEnabled !== false;
+          if (id === "communications") return state.settings.tenantPortalMessagesEnabled !== false;
+          if (id === "maintenance") return state.settings.tenantPortalMaintenanceEnabled !== false;
+          return true;
+        });
+      }
+
+      if (currentUser?.role === "technician") {
+        return technicianPages;
+      }
+
+      return ownerPages;
+    }
+
+    function roleLabel(role) {
+      return ({
+        owner: "Właściciel",
+        manager: "Manager",
+        accountant: "Księgowość",
+        technician: "Techniczny",
+        tenant: "Najemca"
+      })[role] || role;
+    }
+
+    function defaultCapabilitiesForRole(role) {
+      return ({
+        owner: { manageUsers: true, stateWrite: true, ticketWorkflow: true, fullWorkspace: true },
+        manager: { manageUsers: false, stateWrite: true, ticketWorkflow: true, fullWorkspace: true },
+        accountant: { manageUsers: false, stateWrite: true, ticketWorkflow: false, fullWorkspace: true },
+        technician: { manageUsers: false, stateWrite: false, ticketWorkflow: true, fullWorkspace: false },
+        tenant: { manageUsers: false, stateWrite: false, ticketWorkflow: false, fullWorkspace: false }
+      })[role] || { manageUsers: false, stateWrite: false, ticketWorkflow: false, fullWorkspace: false };
+    }
+
+    function hasCapability(capability) {
+      return !!(currentUser?.capabilities || defaultCapabilitiesForRole(currentUser?.role))?.[capability];
     }
 
     const importFile = document.getElementById("importFile");
@@ -2761,10 +2801,10 @@
       document.getElementById("sidebarCompany").textContent = state.settings.companyName || "RentFlow";
       document.getElementById("sidebarSummary").textContent = isTenant
         ? `${totalUnits || 1} lokal · saldo ${fmt(totals().due - totals().paid)}`
-        : `${totalUnits} lokali · ${occupancy}% obłożenia · ${fmt(overdue)} zaległości`;
+        : `${roleLabel(currentUser?.role || "owner")} · ${totalUnits} lokali · ${occupancy}% obłożenia`;
       document.getElementById("workspaceStatus").textContent = isTenant
         ? "Portal najemcy"
-        : (overdue > 0 ? "Wymaga uwagi" : "Tryb operacyjny");
+        : `${roleLabel(currentUser?.role || "owner")} · ${overdue > 0 ? "wymaga uwagi" : "tryb operacyjny"}`;
       document.getElementById("workspacePortfolio").textContent = isTenant
         ? `${state.tenants[0]?.name || currentUser?.name || "Najemca"}`
         : `${totalUnits} lokali · ${vacantUnits} wolnych`;
@@ -3785,6 +3825,18 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         return;
       }
 
+      if (!hasCapability("stateWrite")) {
+        document.getElementById("settings").innerHTML = `
+          <div class="card">
+            <div class="panel-title"><h3>Profil członka zespołu</h3></div>
+            <div class="form-grid two">
+              <div class="notice">Imię i nazwisko: <strong>${currentUser?.name || "—"}</strong><br>E-mail: <strong>${currentUser?.email || "—"}</strong><br>Rola: <strong>${roleLabel(currentUser?.role || "")}</strong></div>
+              <div class="notice">Firma: <strong>${state.settings.companyName || "RentFlow"}</strong><br>Kontakt operacyjny: <strong>${state.settings.ownerName || "Biuro obsługi"}</strong><br>Wsparcie: <strong>${[state.settings.supportEmail || state.settings.companyEmail, state.settings.supportPhone || state.settings.companyPhone, state.settings.supportHours].filter(Boolean).join(" · ") || "—"}</strong></div>
+            </div>
+          </div>`;
+        return;
+      }
+
       document.getElementById("settings").innerHTML = `
         <div class="card">
           <div class="panel-title"><h3>Dane firmy i komunikacja</h3></div>
@@ -3869,7 +3921,41 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             <button class="btn green" onclick="saveSettings()">Zapisz ustawienia i wzory</button>
             <button class="btn secondary" onclick="clearAdminTemplates()">Wyczyść wzory</button>
           </div>
-        </div>`;
+        </div>
+        ${hasCapability("manageUsers") ? `
+          <div class="card section">
+            <div class="panel-title"><h3>Zespół i dostępy</h3></div>
+            <div class="form-grid">
+              <input id="team_name" placeholder="Imię i nazwisko" />
+              <input id="team_email" type="email" placeholder="E-mail do logowania" />
+              <input id="team_password" type="password" placeholder="Hasło tymczasowe" />
+              <select id="team_role">
+                <option value="manager">Manager</option>
+                <option value="accountant">Księgowość</option>
+                <option value="technician">Techniczny</option>
+              </select>
+            </div>
+            <div class="section inline-actions">
+              <button class="btn green" onclick="saveTeamUser()">Dodaj / zaktualizuj konto</button>
+              <button class="btn secondary" onclick="loadTeamUsers(true)">Odśwież listę</button>
+            </div>
+            <div class="entity-list section">
+              ${teamUsers.length ? teamUsers.map((user) => `
+                <div class="entity-item">
+                  <div>
+                    <strong>${user.name}</strong>
+                    <div class="meta">${user.email} · ${roleLabel(user.role)}${user.role === "owner" ? " · konto główne" : ""}</div>
+                  </div>
+                  <div class="inline-actions">
+                    <span class="badge ${user.role === "owner" ? "status-active" : user.role === "technician" ? "status-open" : "status-pending"}">${roleLabel(user.role)}</span>
+                    ${user.role !== "owner" ? `<button class="btn secondary small" onclick="deleteTeamUser('${user.id}')">Usuń</button>` : ""}
+                  </div>
+                </div>
+              `).join("") : `<div class="empty-state">Nie ma jeszcze dodatkowych kont zespołu.</div>`}
+            </div>
+            <div class="section notice">Manager i księgowość mają pełny dostęp operacyjny. Technik widzi tylko dashboard techniczny, komunikację i zgłoszenia.</div>
+          </div>
+        ` : ""}`;
     }
 
     function renderCommunications() {
@@ -4711,6 +4797,48 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       });
     }
 
+    async function loadTeamUsers(silent = false) {
+      if (!hasCapability("manageUsers")) {
+        teamUsers = [];
+        return;
+      }
+      try {
+        teamUsers = await apiGet("/api/team-users");
+        if (!silent) renderSettings();
+      } catch (error) {
+        if (!silent) alert(error.message || "Nie udało się pobrać listy zespołu.");
+      }
+    }
+
+    async function saveTeamUser() {
+      const name = document.getElementById("team_name")?.value.trim() || "";
+      const email = document.getElementById("team_email")?.value.trim().toLowerCase() || "";
+      const password = document.getElementById("team_password")?.value || "";
+      const role = document.getElementById("team_role")?.value || "manager";
+      if (!name || !email || password.length < 8) {
+        return alert("Podaj imię i nazwisko, e-mail oraz hasło min. 8 znaków.");
+      }
+      try {
+        await apiPost("/api/team-users", { name, email, password, role });
+        await loadTeamUsers(true);
+        renderSettings();
+        alert("Konto zespołu zostało zapisane.");
+      } catch (error) {
+        alert(error.message || "Nie udało się zapisać konta zespołu.");
+      }
+    }
+
+    async function deleteTeamUser(userId) {
+      if (!confirm("Usunąć konto zespołu?")) return;
+      try {
+        await apiPost("/api/team-users/delete", { userId });
+        await loadTeamUsers(true);
+        renderSettings();
+      } catch (error) {
+        alert(error.message || "Nie udało się usunąć konta zespołu.");
+      }
+    }
+
     function downloadFile(filename, content, mime) {
       const blob = new Blob([content], { type: mime });
       const url = URL.createObjectURL(blob);
@@ -4849,10 +4977,12 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           return;
         }
         currentUser = await me.json();
+        currentUser.capabilities ||= defaultCapabilitiesForRole(currentUser.role);
         if (currentUser.role === "tenant") {
           selectedTenantCardId = currentUser.tenantId || null;
         }
         renderNav();
+        await loadTeamUsers(true);
         await load();
         renderAll();
         showPage(currentUser.role === "tenant" ? "dashboard" : "dashboard");
