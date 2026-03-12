@@ -5,7 +5,7 @@ const session = require("express-session");
 const pgSession = require("connect-pg-simple")(session);
 const bcrypt = require("bcryptjs");
 const { pool, initDb } = require("./db");
-const { buildEmptyState, normalizeState, sanitizeText } = require("./lib/state");
+const { buildEmptyState, buildTenantState, normalizeState, sanitizeText } = require("./lib/state");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -70,8 +70,38 @@ function setAuthenticatedUser(req, user) {
     email: user.email,
     name: user.name,
     role: user.role,
-    companyName: user.companyName
+    companyName: user.companyName,
+    tenantId: user.tenantId || null
   };
+}
+
+async function getOrganizationState(orgId, companyName) {
+  const result = await pool.query(
+    "SELECT state FROM app_states WHERE org_id = $1 LIMIT 1",
+    [orgId]
+  );
+
+  if (!result.rows.length) {
+    return null;
+  }
+
+  return normalizeState(result.rows[0].state, companyName);
+}
+
+function requireOwner(req, res, next) {
+  if (!req.session.user || req.session.user.role !== "owner") {
+    return res.status(403).json({ error: "Ta operacja jest dostępna tylko dla właściciela." });
+  }
+
+  return next();
+}
+
+function requireTenant(req, res, next) {
+  if (!req.session.user || req.session.user.role !== "tenant" || !req.session.user.tenantId) {
+    return res.status(403).json({ error: "Ta operacja jest dostępna tylko dla najemcy." });
+  }
+
+  return next();
 }
 
 async function createOrganizationWithOwner({ companyName, name, email, password }) {
@@ -224,7 +254,7 @@ app.post("/api/login", async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT u.id, u.org_id, u.name, u.email, u.password_hash, u.role, o.name AS company_name
+      SELECT u.id, u.org_id, u.name, u.email, u.password_hash, u.role, u.tenant_id, o.name AS company_name
       FROM users u
       JOIN organizations o ON o.id = u.org_id
       WHERE u.email = $1
@@ -251,7 +281,8 @@ app.post("/api/login", async (req, res) => {
       email: user.email,
       name: sanitizeText(user.name),
       role: user.role,
-      companyName: sanitizeText(user.company_name)
+      companyName: sanitizeText(user.company_name),
+      tenantId: user.tenant_id || null
     });
 
     return res.json({ ok: true });
@@ -280,18 +311,90 @@ app.get("/api/me", (req, res) => {
   return res.json(req.session.user);
 });
 
+app.post("/api/tenant-access", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const tenantId = sanitizeText(req.body.tenantId || "");
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const password = String(req.body.password || "");
+    const tenantNameResult = ensureRequiredText(req.body.name, "Imię i nazwisko najemcy");
+
+    if (!tenantId || !email || !password || tenantNameResult.error) {
+      return res.status(400).json({ error: "Uzupełnij dane dostępu najemcy." });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: "Podaj poprawny e-mail najemcy." });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Hasło dla najemcy musi mieć co najmniej 8 znaków." });
+    }
+
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state) {
+      return res.status(404).json({ error: "Nie znaleziono danych organizacji." });
+    }
+
+    const tenant = state.tenants.find((entry) => entry.id === tenantId);
+    if (!tenant) {
+      return res.status(404).json({ error: "Nie znaleziono najemcy o podanym identyfikatorze." });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const existing = await client.query(
+        "SELECT id, role, tenant_id FROM users WHERE email = $1 LIMIT 1",
+        [email]
+      );
+
+      if (existing.rows.length && existing.rows[0].role !== "tenant") {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Ten e-mail jest już używany przez konto właściciela lub administratora." });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      const tenantUserId = existing.rows[0]?.id || uid("usr");
+
+      if (existing.rows.length) {
+        await client.query(
+          "UPDATE users SET org_id = $1, name = $2, password_hash = $3, role = $4, tenant_id = $5 WHERE id = $6",
+          [req.session.user.orgId, tenantNameResult.value, passwordHash, "tenant", tenantId, tenantUserId]
+        );
+      } else {
+        await client.query(
+          "INSERT INTO users (id, org_id, name, email, password_hash, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+          [tenantUserId, req.session.user.orgId, tenantNameResult.value, email, passwordHash, "tenant", tenantId]
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    return res.json({ ok: true, tenantId, email });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się utworzyć dostępu dla najemcy." });
+  }
+});
+
 app.get("/api/state", requireAuth, async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT state FROM app_states WHERE org_id = $1 LIMIT 1",
-      [req.session.user.orgId]
-    );
-
-    if (!result.rows.length) {
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state) {
       return res.status(404).json({ error: "Brak danych organizacji." });
     }
 
-    const state = normalizeState(result.rows[0].state, req.session.user.companyName);
+    if (req.session.user.role === "tenant") {
+      return res.json(buildTenantState(state, req.session.user.tenantId));
+    }
+
     return res.json(state);
   } catch (error) {
     console.error(error);
@@ -301,6 +404,10 @@ app.get("/api/state", requireAuth, async (req, res) => {
 
 app.post("/api/state", requireAuth, async (req, res) => {
   try {
+    if (req.session.user.role !== "owner") {
+      return res.status(403).json({ error: "Najemca nie może modyfikować pełnego stanu aplikacji." });
+    }
+
     const state = normalizeState(req.body, req.session.user.companyName);
 
     await pool.query(
@@ -312,6 +419,50 @@ app.post("/api/state", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Nie udało się zapisać danych." });
+  }
+});
+
+app.post("/api/tenant/tickets", requireAuth, requireTenant, async (req, res) => {
+  try {
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state) {
+      return res.status(404).json({ error: "Brak danych organizacji." });
+    }
+
+    const tenantState = buildTenantState(state, req.session.user.tenantId);
+    const tenant = tenantState.tenants[0];
+    const lease = tenantState.leases.find((entry) => entry.status === "aktywna") || tenantState.leases[0];
+    const unitId = lease?.unitId || tenant?.unitId;
+    const titleResult = ensureRequiredText(req.body.title, "Tytuł zgłoszenia");
+    const notes = sanitizeText(req.body.notes || "");
+    const priority = ["niski", "średni", "wysoki"].includes(req.body.priority) ? req.body.priority : "średni";
+
+    if (!unitId || titleResult.error) {
+      return res.status(400).json({ error: "Nie udało się utworzyć zgłoszenia. Brakuje lokalu lub tytułu." });
+    }
+
+    state.tickets.push({
+      id: uid("tk"),
+      createdAt: new Date().toISOString().slice(0, 10),
+      unitId,
+      tenantId: req.session.user.tenantId,
+      title: titleResult.value,
+      priority,
+      status: "otwarte",
+      assignee: "",
+      notes
+    });
+
+    const nextState = normalizeState(state, req.session.user.companyName);
+    await pool.query(
+      "UPDATE app_states SET state = $1::jsonb, updated_at = NOW() WHERE org_id = $2",
+      [JSON.stringify(nextState), req.session.user.orgId]
+    );
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się dodać zgłoszenia." });
   }
 });
 

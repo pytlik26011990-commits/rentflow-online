@@ -23,8 +23,14 @@ async function initDb() {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'owner',
+      tenant_id TEXT,
       created_at TIMESTAMP DEFAULT NOW()
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS tenant_id TEXT;
   `);
 
   await pool.query(`
