@@ -257,7 +257,10 @@
     const importFile = document.getElementById("importFile");
 
     function uid(prefix = "id") {
-      return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+      if (window.crypto?.randomUUID) {
+        return `${prefix}_${window.crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+      }
+      return `${prefix}_${Math.random().toString(36).slice(2, 12)}`;
     }
 
     function today() { return new Date().toISOString().slice(0, 10); }
@@ -292,22 +295,84 @@
       return `${m}.${y}`;
     }
 
-    async function apiGet(url) {
-      const r = await fetch(url);
-      if (!r.ok) throw new Error("Błąd pobierania");
-      return r.json();
+    async function readResponsePayload(response) {
+      const text = await response.text();
+      if (!text) return {};
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return { error: text };
+      }
     }
+
+    async function apiGet(url) {
+      const response = await fetch(url, { credentials: "same-origin" });
+      const payload = await readResponsePayload(response);
+      if (!response.ok) throw new Error(payload.error || "Błąd pobierania");
+      return payload;
+    }
+
     async function apiPost(url, data) {
-      const r = await fetch(url, {
+      const response = await fetch(url, {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data)
       });
-      if (!r.ok) throw new Error("Błąd zapisu");
-      return r.json();
+      const payload = await readResponsePayload(response);
+      if (!response.ok) throw new Error(payload.error || "Błąd zapisu");
+      return payload;
+    }
+
+    function sanitizeText(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+        .trim();
+    }
+
+    function sanitizeDeep(value) {
+      if (Array.isArray(value)) return value.map(sanitizeDeep);
+      if (value && typeof value === "object") {
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, sanitizeDeep(entry)]));
+      }
+      return typeof value === "string" ? sanitizeText(value) : value;
+    }
+
+    function cleanupRelationships() {
+      const buildingIds = new Set(state.buildings.map((building) => building.id));
+      state.units = state.units.filter((unit) => buildingIds.has(unit.buildingId));
+
+      const unitIds = new Set(state.units.map((unit) => unit.id));
+      state.tenants = state.tenants.map((tenant) => ({
+        ...tenant,
+        unitId: unitIds.has(tenant.unitId) ? tenant.unitId : ""
+      }));
+
+      const tenantIds = new Set(state.tenants.map((tenant) => tenant.id));
+      state.leases = state.leases.filter((lease) => unitIds.has(lease.unitId) && tenantIds.has(lease.tenantId));
+
+      const leaseIds = new Set(state.leases.map((lease) => lease.id));
+      state.meters = state.meters.filter((meter) => unitIds.has(meter.unitId));
+
+      const meterIds = new Set(state.meters.map((meter) => meter.id));
+      state.meterReadings = state.meterReadings.filter((reading) => meterIds.has(reading.meterId));
+
+      state.charges = state.charges.filter((charge) => leaseIds.has(charge.leaseId));
+      const chargeIds = new Set(state.charges.map((charge) => charge.id));
+
+      state.payments = state.payments.filter((payment) => chargeIds.has(payment.chargeId) && leaseIds.has(payment.leaseId));
+      state.expenses = state.expenses.filter((expense) => (!expense.buildingId || buildingIds.has(expense.buildingId)) && (!expense.unitId || unitIds.has(expense.unitId)));
+      state.tickets = state.tickets.filter((ticket) => unitIds.has(ticket.unitId) && (!ticket.tenantId || tenantIds.has(ticket.tenantId)));
+      state.settlements = state.settlements.filter((settlement) => (!settlement.leaseId || leaseIds.has(settlement.leaseId)) && (!settlement.tenantId || tenantIds.has(settlement.tenantId)) && (!settlement.unitId || unitIds.has(settlement.unitId)));
+      state.periodSettlements = state.periodSettlements.filter((settlement) => !settlement.tenantId || tenantIds.has(settlement.tenantId));
     }
 
     function normalizeState() {
+      state = sanitizeDeep(state || {});
       state.buildings ||= [];
       state.units ||= [];
       state.tenants ||= [];
@@ -324,36 +389,49 @@
       state.settings.companyName ||= "RentFlow V9";
       state.settings.ownerName ||= "";
       state.settings.baseCurrency ||= "PLN";
-      state.settings.utilityVAT ||= 23;
-      state.settings.lateFee ||= 50;
+      state.settings.utilityVAT = Number(state.settings.utilityVAT || 23);
+      state.settings.lateFee = Number(state.settings.lateFee || 50);
       state.settings.bankAccount ||= "";
-      state.settings.paymentDueDay ||= 10;
+      state.settings.paymentDueDay = Number(state.settings.paymentDueDay || 10);
 
-      state.leases.forEach(l => {
-        l.advanceColdWater ||= 0;
-        l.advanceHotWater ||= 0;
-        l.advanceElectricity ||= 0;
-        l.advanceGas ||= 0;
-        l.advanceHeat ||= 0;
-        l.feeWaste ||= 0;
-        l.feeInternet ||= 0;
-        l.rentDueDay ||= 5;
-        l.otherDueDay ||= 10;
-      });
+      state.leases = state.leases.map((lease) => ({
+        ...lease,
+        advanceColdWater: Number(lease.advanceColdWater || 0),
+        advanceHotWater: Number(lease.advanceHotWater || 0),
+        advanceElectricity: Number(lease.advanceElectricity || 0),
+        advanceGas: Number(lease.advanceGas || 0),
+        advanceHeat: Number(lease.advanceHeat || 0),
+        feeWaste: Number(lease.feeWaste || 0),
+        feeInternet: Number(lease.feeInternet || 0),
+        rentDueDay: Number(lease.rentDueDay || 5),
+        otherDueDay: Number(lease.otherDueDay || 10),
+        rent: Number(lease.rent || 0),
+        deposit: Number(lease.deposit || 0)
+      }));
+
+      cleanupRelationships();
     }
 
     async function save() {
       normalizeState();
-      await apiPost("/api/state", state);
-      renderAll();
+      try {
+        await apiPost("/api/state", state);
+        renderAll();
+      } catch (error) {
+        alert(error.message || "Nie udało się zapisać danych.");
+      }
     }
+
     async function load() {
-      state = await apiGet("/api/state");
+      state = sanitizeDeep(await apiGet("/api/state"));
       normalizeState();
     }
     async function logout() {
-      await fetch("/api/logout", { method: "POST" });
-      location.href = "/login";
+      try {
+        await apiPost("/api/logout", {});
+      } finally {
+        location.href = "/login";
+      }
     }
 
     function buildingName(id) { return state.buildings.find((b) => b.id === id)?.name || "—"; }
@@ -1024,8 +1102,10 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     }
     async function addTenant() {
       const name = document.getElementById("t_name").value.trim();
+      const email = document.getElementById("t_email").value.trim();
       if (!name) return alert("Podaj imię i nazwisko.");
-      state.tenants.push({ id: uid("t"), name, phone: document.getElementById("t_phone").value.trim(), email: document.getElementById("t_email").value.trim(), unitId: document.getElementById("t_unit").value, status: "aktywny", notes: "" });
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return alert("Podaj poprawny e-mail.");
+      state.tenants.push({ id: uid("t"), name, phone: document.getElementById("t_phone").value.trim(), email, unitId: document.getElementById("t_unit").value, status: "aktywny", notes: "" });
       await save();
     }
     async function removeTenant(id) {
@@ -1042,11 +1122,18 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     async function addLease() {
       const tenantId = document.getElementById("l_tenant").value;
       const unitId = document.getElementById("l_unit").value;
+      const startDate = document.getElementById("l_start").value;
+      const endDate = document.getElementById("l_end").value;
       if (!tenantId || !unitId) return alert("Wybierz najemcę i lokal.");
+      if (!startDate) return alert("Podaj datę rozpoczęcia umowy.");
+      if (endDate && endDate < startDate) return alert("Data zakończenia nie może być wcześniejsza niż start.");
+      if (state.leases.some((lease) => lease.status === "aktywna" && (lease.unitId === unitId || lease.tenantId === tenantId))) {
+        return alert("Ta aktywna umowa koliduje z istniejącym najemcą albo lokalem.");
+      }
       state.leases.push({
         id: uid("l"), tenantId, unitId,
-        startDate: document.getElementById("l_start").value,
-        endDate: document.getElementById("l_end").value,
+        startDate,
+        endDate,
         rent: Number(document.getElementById("l_rent").value || 0),
         deposit: Number(document.getElementById("l_deposit").value || 0),
         status: document.getElementById("l_status").value,
@@ -1183,8 +1270,14 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     function printPeriodSettlement() { const settlement = findPeriodSettlement(selectedPeriodSettlementId); if (!settlement) return; openPrintWindow(periodSettlementPrintableHtml(settlement)); }
     async function addCharge() {
       const leaseId = document.getElementById("c_lease").value;
+      const type = document.getElementById("c_type").value.trim();
+      const amount = Number(document.getElementById("c_amount").value || 0);
+      const dueDate = document.getElementById("c_due").value;
       if (!leaseId) return alert("Wybierz umowę.");
-      state.charges.push({ id: uid("c"), leaseId, type: document.getElementById("c_type").value.trim(), amount: Number(document.getElementById("c_amount").value || 0), dueDate: document.getElementById("c_due").value, status: "oczekujące", notes: "" });
+      if (!type) return alert("Podaj typ opłaty.");
+      if (!dueDate) return alert("Podaj termin płatności.");
+      if (amount <= 0) return alert("Kwota opłaty musi być większa od zera.");
+      state.charges.push({ id: uid("c"), leaseId, type, amount, dueDate, status: "oczekujące", notes: "" });
       await save();
     }
     async function removeCharge(id) {
@@ -1196,12 +1289,22 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     async function addPayment() {
       const chargeId = document.getElementById("p_charge").value;
       const charge = state.charges.find((c) => c.id === chargeId);
+      const amount = Number(document.getElementById("p_amount").value || 0);
+      const date = document.getElementById("p_date").value;
       if (!charge) return alert("Wybierz opłatę.");
-      state.payments.push({ id: uid("p"), leaseId: charge.leaseId, chargeId, date: document.getElementById("p_date").value, amount: Number(document.getElementById("p_amount").value || 0), method: document.getElementById("p_method").value, notes: "" });
+      if (!date) return alert("Podaj datę wpłaty.");
+      if (amount <= 0) return alert("Kwota wpłaty musi być większa od zera.");
+      state.payments.push({ id: uid("p"), leaseId: charge.leaseId, chargeId, date, amount, method: document.getElementById("p_method").value, notes: "" });
       await save();
     }
     async function addExpense() {
-      state.expenses.push({ id: uid("e"), date: document.getElementById("e_date").value, buildingId: document.getElementById("e_building").value, unitId: document.getElementById("e_unit").value, category: document.getElementById("e_category").value.trim(), amount: Number(document.getElementById("e_amount").value || 0), vendor: document.getElementById("e_vendor").value.trim(), notes: document.getElementById("e_notes").value.trim() });
+      const date = document.getElementById("e_date").value;
+      const category = document.getElementById("e_category").value.trim();
+      const amount = Number(document.getElementById("e_amount").value || 0);
+      if (!date) return alert("Podaj datę kosztu.");
+      if (!category) return alert("Podaj kategorię kosztu.");
+      if (amount <= 0) return alert("Kwota kosztu musi być większa od zera.");
+      state.expenses.push({ id: uid("e"), date, buildingId: document.getElementById("e_building").value, unitId: document.getElementById("e_unit").value, category, amount, vendor: document.getElementById("e_vendor").value.trim(), notes: document.getElementById("e_notes").value.trim() });
       await save();
     }
     async function removeExpense(id) {
@@ -1210,7 +1313,11 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       await save();
     }
     async function addTicket() {
-      state.tickets.push({ id: uid("tk"), createdAt: today(), unitId: document.getElementById("tk_unit").value, tenantId: document.getElementById("tk_tenant").value, title: document.getElementById("tk_title").value.trim(), priority: document.getElementById("tk_priority").value, status: document.getElementById("tk_status").value, assignee: document.getElementById("tk_assignee").value.trim(), notes: document.getElementById("tk_notes").value.trim() });
+      const unitId = document.getElementById("tk_unit").value;
+      const title = document.getElementById("tk_title").value.trim();
+      if (!unitId) return alert("Wybierz lokal.");
+      if (!title) return alert("Podaj tytuł zgłoszenia.");
+      state.tickets.push({ id: uid("tk"), createdAt: today(), unitId, tenantId: document.getElementById("tk_tenant").value, title, priority: document.getElementById("tk_priority").value, status: document.getElementById("tk_status").value, assignee: document.getElementById("tk_assignee").value.trim(), notes: document.getElementById("tk_notes").value.trim() });
       await save();
     }
     async function removeTicket(id) {
@@ -1246,13 +1353,13 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     }
 
     async function saveSettings() {
-      state.settings.companyName = document.getElementById("s_company").value.trim();
+      state.settings.companyName = document.getElementById("s_company").value.trim() || "RentFlow";
       state.settings.ownerName = document.getElementById("s_owner").value.trim();
       state.settings.baseCurrency = document.getElementById("s_currency").value.trim() || "PLN";
-      state.settings.utilityVAT = Number(document.getElementById("s_vat").value || 23);
-      state.settings.lateFee = Number(document.getElementById("s_late").value || 50);
+      state.settings.utilityVAT = Math.max(0, Number(document.getElementById("s_vat").value || 23));
+      state.settings.lateFee = Math.max(0, Number(document.getElementById("s_late").value || 50));
       state.settings.bankAccount = document.getElementById("s_bank").value.trim();
-      state.settings.paymentDueDay = Number(document.getElementById("s_due").value || 10);
+      state.settings.paymentDueDay = Math.min(31, Math.max(1, Number(document.getElementById("s_due").value || 10)));
       await save();
       alert("Zapisano ustawienia.");
     }
@@ -1296,9 +1403,14 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     importFile.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
+      if (file.size > 2 * 1024 * 1024) {
+        alert("Plik jest zbyt duży. Limit importu to 2 MB.");
+        e.target.value = "";
+        return;
+      }
       const text = await file.text();
       try {
-        state = JSON.parse(text);
+        state = sanitizeDeep(JSON.parse(text));
         normalizeState();
         await save();
         alert("Import zakończony.");

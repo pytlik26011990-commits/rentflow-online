@@ -21,58 +21,75 @@
       <h1>RentFlow V3</h1>
       <p>Wersja z logowaniem i PostgreSQL.</p>
       <h2>Logowanie</h2>
-      <input id="loginEmail" type="email" placeholder="E-mail" />
-      <input id="loginPassword" type="password" placeholder="Hasło" />
+      <input id="loginEmail" type="email" placeholder="E-mail" autocomplete="email" />
+      <input id="loginPassword" type="password" placeholder="Hasło" autocomplete="current-password" />
       <button onclick="login()">Zaloguj</button>
       <div id="loginMsg" class="msg"></div>
     </div>
 
     <div class="card">
       <h2>Załóż konto właściciela</h2>
-      <input id="regCompany" placeholder="Nazwa firmy / marki" />
-      <input id="regName" placeholder="Imię i nazwisko" />
-      <input id="regEmail" type="email" placeholder="E-mail" />
-      <input id="regPassword" type="password" placeholder="Hasło" />
+      <input id="regCompany" placeholder="Nazwa firmy / marki" autocomplete="organization" />
+      <input id="regName" placeholder="Imię i nazwisko" autocomplete="name" />
+      <input id="regEmail" type="email" placeholder="E-mail" autocomplete="email" />
+      <input id="regPassword" type="password" placeholder="Hasło (min. 8 znaków)" autocomplete="new-password" />
       <button onclick="registerUser()">Utwórz konto</button>
       <div id="regMsg" class="msg"></div>
     </div>
   </div>
 
   <script>
-    async function login() {
-      const r = await fetch("/api/login", {
+    async function postJson(url, payload) {
+      const response = await fetch(url, {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: document.getElementById("loginEmail").value,
-          password: document.getElementById("loginPassword").value
-        })
+        body: JSON.stringify(payload)
       });
-      const data = await r.json();
-      if (!r.ok) {
-        document.getElementById("loginMsg").textContent = data.error || "Błąd logowania";
-        return;
+      const text = await response.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (_) {
+        data = { error: text || "Nieznany błąd" };
       }
-      location.href = "/";
+      if (!response.ok) throw new Error(data.error || "Wystąpił błąd.");
+      return data;
+    }
+
+    async function login() {
+      const loginMsg = document.getElementById("loginMsg");
+      loginMsg.textContent = "";
+      try {
+        await postJson("/api/login", {
+          email: document.getElementById("loginEmail").value.trim(),
+          password: document.getElementById("loginPassword").value
+        });
+        location.href = "/";
+      } catch (error) {
+        loginMsg.textContent = error.message || "Błąd logowania";
+      }
     }
 
     async function registerUser() {
-      const r = await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyName: document.getElementById("regCompany").value,
-          name: document.getElementById("regName").value,
-          email: document.getElementById("regEmail").value,
-          password: document.getElementById("regPassword").value
-        })
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        document.getElementById("regMsg").textContent = data.error || "Błąd rejestracji";
+      const regMsg = document.getElementById("regMsg");
+      regMsg.textContent = "";
+      const password = document.getElementById("regPassword").value;
+      if (password.length < 8) {
+        regMsg.textContent = "Hasło musi mieć co najmniej 8 znaków.";
         return;
       }
-      location.href = "/";
+      try {
+        await postJson("/api/register", {
+          companyName: document.getElementById("regCompany").value.trim(),
+          name: document.getElementById("regName").value.trim(),
+          email: document.getElementById("regEmail").value.trim(),
+          password
+        });
+        location.href = "/";
+      } catch (error) {
+        regMsg.textContent = error.message || "Błąd rejestracji";
+      }
     }
   </script>
 </body>
