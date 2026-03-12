@@ -21,6 +21,14 @@ function uid(prefix = "id") {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
 
+function logServerError(context, error, extra = {}) {
+  console.error(`[${new Date().toISOString()}] ${context}`, {
+    message: error?.message || String(error),
+    stack: error?.stack || null,
+    ...extra
+  });
+}
+
 function slugify(text = "") {
   return text
     .toLowerCase()
@@ -320,6 +328,11 @@ if (IS_PRODUCTION) {
 
 app.disable("x-powered-by");
 app.use((req, res, next) => {
+  req.requestId = uid("req");
+  res.setHeader("X-Request-Id", req.requestId);
+  next();
+});
+app.use((req, res, next) => {
   res.setHeader("Referrer-Policy", "same-origin");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -352,6 +365,16 @@ app.use(
 );
 
 app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/health", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    return res.json({ ok: true, status: "healthy", time: new Date().toISOString() });
+  } catch (error) {
+    logServerError("Healthcheck failed", error);
+    return res.status(503).json({ ok: false, status: "degraded", time: new Date().toISOString() });
+  }
+});
 
 function requireAuth(req, res, next) {
   if (!req.session.user) {
@@ -396,7 +419,7 @@ app.post("/api/register", async (req, res) => {
 
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Register failed", error, { requestId: req.requestId });
     return res.status(500).json({ error: "Nie udało się utworzyć konta." });
   }
 });
@@ -452,7 +475,7 @@ app.post("/api/login", async (req, res) => {
 
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Login failed", error, { requestId: req.requestId, email });
     return res.status(500).json({ error: "Błąd logowania." });
   }
 });
@@ -463,7 +486,7 @@ app.post("/api/logout", async (req, res) => {
     res.clearCookie(SESSION_COOKIE_NAME);
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Logout failed", error, { requestId: req.requestId, userId: req.session?.user?.id || null });
     return res.status(500).json({ error: "Nie udało się wylogować." });
   }
 });
@@ -502,7 +525,7 @@ app.get("/api/team-users", requireAuth, requireOwner, async (req, res) => {
       permissions: mergeUserAccess(row.role, row.permissions || {}).permissions
     })));
   } catch (error) {
-    console.error(error);
+    logServerError("Team users fetch failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null });
     return res.status(500).json({ error: "Nie udało się pobrać zespołu." });
   }
 });
@@ -558,7 +581,7 @@ app.post("/api/team-users", requireAuth, requireOwner, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error(error);
+    logServerError("Team user save failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null });
     return res.status(500).json({ error: "Nie udało się zapisać konta zespołu." });
   }
 });
@@ -582,7 +605,7 @@ app.post("/api/team-users/status", requireAuth, requireOwner, async (req, res) =
 
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Team user status change failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null });
     return res.status(500).json({ error: "Nie udało się zmienić statusu konta." });
   }
 });
@@ -605,7 +628,7 @@ app.post("/api/team-users/delete", requireAuth, requireOwner, async (req, res) =
 
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Team user delete failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null });
     return res.status(500).json({ error: "Nie udało się usunąć konta zespołu." });
   }
 });
@@ -693,7 +716,7 @@ app.post("/api/tenant-access", requireAuth, requireOwner, async (req, res) => {
 
     return res.json({ ok: true, tenantId, email });
   } catch (error) {
-    console.error(error);
+    logServerError("Tenant access save failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null });
     return res.status(500).json({ error: "Nie udało się utworzyć dostępu dla najemcy." });
   }
 });
@@ -720,7 +743,7 @@ app.get("/api/tenant-access-overview", requireAuth, requireOwner, async (req, re
       createdAt: row.created_at
     })));
   } catch (error) {
-    console.error(error);
+    logServerError("Tenant access overview failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null });
     return res.status(500).json({ error: "Nie udało się pobrać dostępu najemców." });
   }
 });
@@ -744,7 +767,7 @@ app.post("/api/tenant-access/status", requireAuth, requireOwner, async (req, res
 
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Tenant access status failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null });
     return res.status(500).json({ error: "Nie udało się zmienić statusu konta najemcy." });
   }
 });
@@ -767,7 +790,7 @@ app.post("/api/tenant-access/delete", requireAuth, requireOwner, async (req, res
 
     return res.json({ ok: true, tenantId });
   } catch (error) {
-    console.error(error);
+    logServerError("Tenant access delete failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null });
     return res.status(500).json({ error: "Nie udało się usunąć konta najemcy." });
   }
 });
@@ -785,7 +808,7 @@ app.get("/api/state", requireAuth, async (req, res) => {
 
     return res.json(state);
   } catch (error) {
-    console.error(error);
+    logServerError("State fetch failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null, role: req.session?.user?.role || null });
     return res.status(500).json({ error: "Nie udało się pobrać danych." });
   }
 });
@@ -796,7 +819,7 @@ app.post("/api/state", requireAuth, requireCapability("stateWrite"), async (req,
 
     return res.json({ ok: true, savedAt: new Date().toISOString() });
   } catch (error) {
-    console.error(error);
+    logServerError("State save failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null, role: req.session?.user?.role || null });
     return res.status(500).json({ error: "Nie udało się zapisać danych." });
   }
 });
@@ -843,7 +866,7 @@ app.post("/api/tenant/tickets", requireAuth, requireTenant, async (req, res) => 
 
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Tenant ticket create failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null, tenantId: req.session?.user?.tenantId || null });
     return res.status(500).json({ error: "Nie udało się dodać zgłoszenia." });
   }
 });
@@ -893,7 +916,7 @@ app.post("/api/tenant/messages", requireAuth, requireTenant, async (req, res) =>
     await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Tenant message create failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null, tenantId: req.session?.user?.tenantId || null });
     return res.status(500).json({ error: "Nie udało się wysłać wiadomości." });
   }
 });
@@ -936,7 +959,7 @@ app.post("/api/tenant/messages/reply", requireAuth, requireTenant, async (req, r
     await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Tenant message reply failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null, tenantId: req.session?.user?.tenantId || null });
     return res.status(500).json({ error: "Nie udało się odpowiedzieć w rozmowie." });
   }
 });
@@ -962,7 +985,7 @@ app.post("/api/tenant/messages/read", requireAuth, requireTenant, async (req, re
     await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Tenant message read failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null, tenantId: req.session?.user?.tenantId || null });
     return res.status(500).json({ error: "Nie udało się oznaczyć rozmowy jako przeczytanej." });
   }
 });
@@ -1000,7 +1023,7 @@ app.post("/api/tickets/comment", requireAuth, async (req, res) => {
     await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Ticket comment failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null, userId: req.session?.user?.id || null });
     return res.status(500).json({ error: "Nie udało się dodać komentarza." });
   }
 });
@@ -1060,7 +1083,7 @@ app.post("/api/tickets/status", requireAuth, requireCapability("ticketWorkflow")
     await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
     return res.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    logServerError("Ticket status update failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null, userId: req.session?.user?.id || null });
     return res.status(500).json({ error: "Nie udało się zaktualizować zgłoszenia." });
   }
 });
@@ -1089,6 +1112,31 @@ app.get("*", (req, res) => {
   return res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+app.use((error, req, res, _next) => {
+  if (error?.type === "entity.too.large") {
+    return res.status(413).json({ error: "Wysłane dane są zbyt duże." });
+  }
+
+  if (error instanceof SyntaxError && "body" in error) {
+    return res.status(400).json({ error: "Nieprawidłowy format JSON." });
+  }
+
+  logServerError("Unhandled express error", error, {
+    requestId: req?.requestId || null,
+    method: req?.method || null,
+    url: req?.originalUrl || null
+  });
+  return res.status(500).json({ error: "Wewnętrzny błąd aplikacji." });
+});
+
+process.on("unhandledRejection", (reason) => {
+  logServerError("Unhandled promise rejection", reason instanceof Error ? reason : new Error(String(reason)));
+});
+
+process.on("uncaughtException", (error) => {
+  logServerError("Uncaught exception", error);
+});
+
 (async () => {
   try {
     await initDb();
@@ -1096,7 +1144,7 @@ app.get("*", (req, res) => {
       console.log(`RentFlow działa na porcie ${PORT}`);
     });
   } catch (error) {
-    console.error("Błąd startu aplikacji:", error);
+    logServerError("Application startup failed", error);
     process.exit(1);
   }
 })();

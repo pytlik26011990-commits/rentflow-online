@@ -5251,6 +5251,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     function openTenantCard(id) {
       selectedTenantCardId = currentUser?.role === "tenant" ? (state.tenants[0]?.id || id) : id;
       renderTenantCard();
+      renderLeases();
+      renderTenants();
       showPage(currentUser?.role === "tenant" ? "tenantCard" : "tenants");
     }
     async function addLease() {
@@ -5303,11 +5305,15 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     function startLeaseEdit(id) {
       editingLeaseId = id;
       renderLeases();
+      renderTenantCard();
+      renderTenants();
       showPage(currentUser?.role === "tenant" ? "tenantCard" : "tenants");
     }
     function cancelLeaseEdit() {
       editingLeaseId = null;
       renderLeases();
+      renderTenantCard();
+      renderTenants();
     }
     async function removeLease(id) {
       if (!confirm("Usunąć umowę?")) return;
