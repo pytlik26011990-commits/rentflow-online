@@ -878,6 +878,8 @@ app.post("/api/tenant/messages", requireAuth, requireTenant, async (req, res) =>
       status: "otwarta",
       createdAt: now,
       updatedAt: now,
+      lastReadByTenantAt: now,
+      lastReadByOwnerAt: "",
       thread: [{
         id: uid("msgline"),
         authorRole: "tenant",
@@ -929,12 +931,39 @@ app.post("/api/tenant/messages/reply", requireAuth, requireTenant, async (req, r
     });
     conversation.updatedAt = now;
     conversation.status = "otwarta";
+    conversation.lastReadByTenantAt = now;
 
     await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
     return res.json({ ok: true });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Nie udało się odpowiedzieć w rozmowie." });
+  }
+});
+
+app.post("/api/tenant/messages/read", requireAuth, requireTenant, async (req, res) => {
+  try {
+    const conversationId = sanitizeText(req.body.conversationId || "");
+    if (!conversationId) {
+      return res.status(400).json({ error: "Brakuje rozmowy." });
+    }
+
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state) {
+      return res.status(404).json({ error: "Brak danych organizacji." });
+    }
+
+    const conversation = state.messages.find((entry) => entry.id === conversationId && entry.tenantId === req.session.user.tenantId);
+    if (!conversation) {
+      return res.status(404).json({ error: "Nie znaleziono rozmowy." });
+    }
+
+    conversation.lastReadByTenantAt = new Date().toISOString();
+    await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się oznaczyć rozmowy jako przeczytanej." });
   }
 });
 

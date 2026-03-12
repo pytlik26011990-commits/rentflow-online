@@ -1265,6 +1265,8 @@
         priority: ["normalna", "pilna"].includes(message?.priority) ? message.priority : "normalna",
         createdAt: message?.createdAt || "",
         updatedAt: message?.updatedAt || "",
+        lastReadByOwnerAt: message?.lastReadByOwnerAt || "",
+        lastReadByTenantAt: message?.lastReadByTenantAt || "",
         thread: Array.isArray(message?.thread)
           ? message.thread.map((entry) => ({
               ...entry,
@@ -1824,6 +1826,35 @@
 
     function findConversation(id) {
       return state.messages.find((message) => message.id === id);
+    }
+
+    function conversationUnreadForCurrentUser(conversation) {
+      if (!conversation) return false;
+      const lastReadAt = currentUser?.role === "tenant" ? conversation.lastReadByTenantAt : conversation.lastReadByOwnerAt;
+      const lastIncoming = (conversation.thread || [])
+        .filter((entry) => entry.authorRole !== currentUser?.role)
+        .slice()
+        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))[0];
+      if (!lastIncoming) return false;
+      if (!lastReadAt) return true;
+      return String(lastIncoming.createdAt || "") > String(lastReadAt || "");
+    }
+
+    function unreadConversationsCount() {
+      return conversationsForCurrentUser().filter(conversationUnreadForCurrentUser).length;
+    }
+
+    async function markConversationRead(id) {
+      const conversation = findConversation(id);
+      if (!conversation) return;
+      const now = nowIso();
+      if (currentUser?.role === "tenant") {
+        await apiPost("/api/tenant/messages/read", { conversationId: id });
+        conversation.lastReadByTenantAt = now;
+        return;
+      }
+      conversation.lastReadByOwnerAt = now;
+      await save();
     }
 
     function activeConversation() {
@@ -2735,9 +2766,14 @@
       mailtoText(item.targetEmail, subject, item.message || "");
     }
 
-    function selectConversation(id) {
+    async function selectConversation(id) {
       selectedConversationId = id;
       clearPendingConversationFiles();
+      try {
+        await markConversationRead(id);
+      } catch (error) {
+        console.error(error);
+      }
       renderCommunications();
       showPage("communications");
     }
@@ -2800,6 +2836,7 @@
       selectedConversationId = conversation.id;
       clearPendingConversationFiles();
       await save();
+      await markConversationRead(conversation.id);
       showPage("communications");
     }
 
@@ -2841,6 +2878,7 @@
       conversation.updatedAt = now;
       clearPendingConversationFiles();
       await save();
+      await markConversationRead(conversation.id);
       showPage("communications");
     }
 
@@ -4082,6 +4120,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       const documentCount = queue.filter((item) => item.kind === "document").length;
       const ticketCount = queue.filter((item) => item.kind === "ticket").length;
       const conversations = conversationsForCurrentUser();
+      const unreadCount = unreadConversationsCount();
       const active = activeConversation();
       const threadMarkup = active?.thread?.length
         ? active.thread
@@ -4112,6 +4151,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                       <div class="meta">${formatDateTime(conversation.updatedAt || conversation.createdAt)} · ${conversation.thread?.length || 0} wiadomości · ${conversation.priority === "pilna" ? "pilna" : "standard"}</div>
                     </div>
                     <div class="inline-actions">
+                      ${conversationUnreadForCurrentUser(conversation) ? `<span class="badge status-overdue">Nowa</span>` : ""}
                       <span class="badge ${conversation.status === "zamknięta" ? "status-closed" : conversation.priority === "pilna" ? "status-overdue" : "status-open"}">${conversation.status}</span>
                       <button class="btn secondary small" onclick="selectConversation('${conversation.id}')">Otwórz</button>
                     </div>
@@ -4144,6 +4184,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           <div class="card"><div class="muted">Płatności</div><div class="metric">${paymentCount}</div><div class="small muted">należności do przypomnienia</div></div>
           <div class="card"><div class="muted">Umowy i dokumenty</div><div class="metric">${leaseCount + documentCount}</div><div class="small muted">kończące się sprawy formalne</div></div>
           <div class="card"><div class="muted">Serwis</div><div class="metric">${ticketCount}</div><div class="small muted">sprawy wymagające komunikacji</div></div>
+          <div class="card"><div class="muted">Nowe wiadomości</div><div class="metric">${unreadCount}</div><div class="small muted">wątki z nieprzeczytaną odpowiedzią</div></div>
         </div>
         <div class="grid two section">
           <div class="card">
@@ -4174,6 +4215,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                     <div class="meta">${tenantName(conversation.tenantId)} · ${formatDateTime(conversation.updatedAt || conversation.createdAt)} · ${conversation.thread?.length || 0} wiadomości</div>
                   </div>
                   <div class="inline-actions">
+                    ${conversationUnreadForCurrentUser(conversation) ? `<span class="badge status-overdue">Nowa</span>` : ""}
                     <span class="badge ${conversation.status === "zamknięta" ? "status-closed" : conversation.priority === "pilna" ? "status-overdue" : "status-open"}">${conversation.priority}</span>
                     <button class="btn secondary small" onclick="selectConversation('${conversation.id}')">Otwórz</button>
                   </div>
