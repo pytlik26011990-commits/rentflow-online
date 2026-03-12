@@ -3067,8 +3067,24 @@
       const buildings = buildingPerformance().slice(0, 5);
       const tenants = topTenantsByBalance(5);
       const collection = collectionRate();
+      const unreadConversations = conversationsForCurrentUser().filter(conversationUnreadForCurrentUser);
+      const latestUnreadConversation = unreadConversations[0] || null;
 
       document.getElementById("dashboard").innerHTML = `
+        ${latestUnreadConversation ? `
+          <div class="card danger-box section">
+            <div class="panel-title"><h3>Nowa wiadomość od najemcy</h3><span class="badge status-overdue">${unreadConversations.length} nieprzeczytanych</span></div>
+            <div class="notice danger-box">
+              <strong>${tenantName(latestUnreadConversation.tenantId)}</strong><br>
+              Temat: <strong>${latestUnreadConversation.subject || "Rozmowa z najemcą"}</strong><br>
+              Ostatnia aktywność: <strong>${formatDateTime(latestUnreadConversation.updatedAt || latestUnreadConversation.createdAt)}</strong>
+            </div>
+            <div class="section inline-actions">
+              <button class="btn green" onclick="selectConversation('${latestUnreadConversation.id}')">Otwórz wiadomość</button>
+              <button class="btn secondary" onclick="showPage('communications')">Przejdź do komunikacji</button>
+            </div>
+          </div>
+        ` : ""}
         <div class="workspace-grid">
           <div class="card hero-card">
             <div class="hero-top">
