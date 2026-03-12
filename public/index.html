@@ -741,6 +741,7 @@
     let settlementPreviewLeaseId = "";
 
     let currentUser = null;
+    let pendingDocumentFiles = [];
 
     const ownerPages = [
       ["dashboard", "Dashboard", "Podgląd portfela najmu, płatności i mediów."],
@@ -1008,6 +1009,18 @@
         visibility: ["owner", "tenant", "shared"].includes(task?.visibility) ? task.visibility : "owner",
         dueDate: task?.dueDate || "",
         completedAt: task?.completedAt || ""
+      }));
+      state.documents = state.documents.map((document) => ({
+        ...document,
+        attachments: Array.isArray(document?.attachments)
+          ? document.attachments.map((attachment) => ({
+              ...attachment,
+              name: sanitizeText(attachment?.name || "plik"),
+              type: sanitizeText(attachment?.type || "application/octet-stream"),
+              size: Number(attachment?.size || 0),
+              dataUrl: String(attachment?.dataUrl || "")
+            }))
+          : []
       }));
 
       cleanupRelationships();
@@ -1392,6 +1405,111 @@
         .sort((a, b) => String(a.dueDate || "9999-99-99").localeCompare(String(b.dueDate || "9999-99-99")))
         .filter((task) => task.status !== "gotowe")
         .slice(0, limit);
+    }
+
+    function formatFileSize(size = 0) {
+      if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+      if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+      return `${size} B`;
+    }
+
+    function isImageAttachment(attachment) {
+      return String(attachment?.type || "").startsWith("image/");
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Nie udało się odczytać pliku."));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function queueDocumentFiles(files) {
+      const allowedFiles = Array.from(files || []);
+      if (!allowedFiles.length) return;
+      if (pendingDocumentFiles.length + allowedFiles.length > 6) {
+        return alert("Możesz dodać maksymalnie 6 załączników do jednego dokumentu.");
+      }
+
+      const nextFiles = [];
+      for (const file of allowedFiles) {
+        if (file.size > 2 * 1024 * 1024) {
+          alert(`Plik ${file.name} jest za duży. Limit jednego pliku to 2 MB.`);
+          continue;
+        }
+        const dataUrl = await readFileAsDataUrl(file);
+        nextFiles.push({
+          id: uid("att"),
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          dataUrl
+        });
+      }
+
+      const totalSize = [...pendingDocumentFiles, ...nextFiles].reduce((sum, file) => sum + Number(file.size || 0), 0);
+      if (totalSize > 8 * 1024 * 1024) {
+        return alert("Łączny rozmiar załączników do dokumentu nie może przekraczać 8 MB.");
+      }
+
+      pendingDocumentFiles = [...pendingDocumentFiles, ...nextFiles];
+      renderPendingDocumentFiles();
+    }
+
+    async function handleDocumentFileInput(event) {
+      try {
+        await queueDocumentFiles(event.target.files);
+      } catch (error) {
+        alert(error.message || "Nie udało się dodać plików.");
+      }
+      event.target.value = "";
+    }
+
+    async function handleDocumentPaste(event) {
+      const files = Array.from(event.clipboardData?.files || []);
+      if (!files.length) return;
+      event.preventDefault();
+      try {
+        await queueDocumentFiles(files);
+      } catch (error) {
+        alert(error.message || "Nie udało się wkleić plików.");
+      }
+    }
+
+    function removePendingDocumentFile(id) {
+      pendingDocumentFiles = pendingDocumentFiles.filter((file) => file.id !== id);
+      renderPendingDocumentFiles();
+    }
+
+    function clearPendingDocumentFiles() {
+      pendingDocumentFiles = [];
+      renderPendingDocumentFiles();
+    }
+
+    function attachmentLinkMarkup(attachment, compact = false) {
+      const label = compact ? `${attachment.name}` : `${attachment.name} · ${formatFileSize(attachment.size)}`;
+      if (isImageAttachment(attachment)) {
+        return `<a href="${attachment.dataUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+      }
+      return `<a href="${attachment.dataUrl}" download="${attachment.name}">${label}</a>`;
+    }
+
+    function renderPendingDocumentFiles() {
+      const mount = document.getElementById("doc_pending_files");
+      if (!mount) return;
+      mount.innerHTML = pendingDocumentFiles.length ? pendingDocumentFiles.map((file) => `
+        <div class="entity-item">
+          <div>
+            <strong>${file.name}</strong>
+            <div class="meta">${file.type || "plik"} · ${formatFileSize(file.size)}</div>
+          </div>
+          <div class="inline-actions">
+            <button class="btn secondary small" onclick="removePendingDocumentFile('${file.id}')">Usuń</button>
+          </div>
+        </div>
+      `).join("") : `<div class="empty-state">Dodaj pliki z dysku albo wklej obraz z schowka. Obsługiwane są zdjęcia, PDF-y i inne skany do 2 MB na plik.</div>`;
     }
 
     function chargeOutstandingAmount(charge) {
@@ -2565,7 +2683,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                   <div class="entity-item">
                     <div>
                       <strong>${document.title}</strong>
-                      <div class="meta">${document.category || "dokument"} · ${document.url ? `<a href="${document.url}" target="_blank" rel="noopener noreferrer">otwórz link</a>` : "bez linku"}</div>
+                      <div class="meta">${document.category || "dokument"} · ${document.url ? `<a href="${document.url}" target="_blank" rel="noopener noreferrer">otwórz link</a>` : "bez linku"} · ${document.attachments?.length ? `${document.attachments.length} załącz.` : "bez plików"}</div>
+                      ${document.attachments?.length ? `<div class="section inline-actions">${document.attachments.map((attachment) => attachmentLinkMarkup(attachment, true)).join(" ")}</div>` : ""}
                     </div>
                     <div><span class="badge ${status.cls}">${status.label}</span></div>
                   </div>
@@ -2602,6 +2721,14 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             <select id="doc_visibility"><option value="owner">Tylko właściciel</option><option value="tenant">Widoczny dla najemcy</option><option value="shared">Wspólny</option></select>
             <select id="doc_status"><option value="aktywne">Aktywne</option><option value="robocze">Robocze</option><option value="archiwalne">Archiwalne</option></select>
           </div>
+          <div class="section notice" onpaste="handleDocumentPaste(event)">
+            Wklej tutaj zdjęcie protokołu albo dodaj pliki z dysku. To dobre miejsce na umowy, protokoły, zdjęcia lokalu i skany dokumentów.
+          </div>
+          <div class="section inline-actions">
+            <input id="doc_files" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.rtf,.heic" onchange="handleDocumentFileInput(event)" />
+            <button class="btn secondary" onclick="clearPendingDocumentFiles()">Wyczyść załączniki</button>
+          </div>
+          <div id="doc_pending_files" class="entity-list section"></div>
           <div class="section"><button class="btn green" onclick="addDocument()">Zapisz dokument</button></div>
         </div>
         <div class="grid two section">
@@ -2618,9 +2745,10 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           </div>
           <div class="card">
             <div class="panel-title"><h3>Rejestr dokumentów</h3></div>
-            <table><thead><tr><th>Dokument</th><th>Powiązanie</th><th>Ważność</th><th>Widoczność</th><th>Status</th><th></th></tr></thead><tbody>${state.documents.slice().sort((a, b) => String(a.expiresAt || "9999-99-99").localeCompare(String(b.expiresAt || "9999-99-99"))).map((document) => { const status = documentStatus(document); const scope = document.leaseId ? leaseLabel(document.leaseId) : document.tenantId ? tenantName(document.tenantId) : document.unitId ? unitLabel(document.unitId) : "ogólne"; return `<tr><td><strong>${document.title}</strong><br><span class="muted small">${document.category || "dokument"}${document.url ? ` · <a href="${document.url}" target="_blank" rel="noopener noreferrer">link</a>` : ""}</span></td><td>${scope}</td><td>${document.expiresAt || "bez terminu"}</td><td>${document.visibility || "owner"}</td><td><span class="badge ${status.cls}">${status.label}</span></td><td><button class="btn secondary small" onclick="removeDocument('${document.id}')">Usuń</button></td></tr>`; }).join("") || `<tr><td colspan="6">Brak dokumentów</td></tr>`}</tbody></table>
+            <table><thead><tr><th>Dokument</th><th>Powiązanie</th><th>Ważność</th><th>Pliki</th><th>Status</th><th></th></tr></thead><tbody>${state.documents.slice().sort((a, b) => String(a.expiresAt || "9999-99-99").localeCompare(String(b.expiresAt || "9999-99-99"))).map((document) => { const status = documentStatus(document); const scope = document.leaseId ? leaseLabel(document.leaseId) : document.tenantId ? tenantName(document.tenantId) : document.unitId ? unitLabel(document.unitId) : "ogólne"; return `<tr><td><strong>${document.title}</strong><br><span class="muted small">${document.category || "dokument"}${document.url ? ` · <a href="${document.url}" target="_blank" rel="noopener noreferrer">link</a>` : ""}</span></td><td>${scope}<br><span class="muted small">${document.visibility || "owner"}</span></td><td>${document.expiresAt || "bez terminu"}</td><td>${document.attachments?.length ? document.attachments.map((attachment) => attachmentLinkMarkup(attachment, true)).join("<br>") : "brak plików"}</td><td><span class="badge ${status.cls}">${status.label}</span></td><td><button class="btn secondary small" onclick="removeDocument('${document.id}')">Usuń</button></td></tr>`; }).join("") || `<tr><td colspan="6">Brak dokumentów</td></tr>`}</tbody></table>
           </div>
         </div>`;
+      renderPendingDocumentFiles();
     }
 
     function renderTasks() {
@@ -3111,6 +3239,9 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       const expiresAt = document.getElementById("doc_expires").value;
       if (!title) return alert("Podaj nazwę dokumentu.");
       if (expiresAt && issuedAt && expiresAt < issuedAt) return alert("Data ważności nie może być wcześniejsza niż data wystawienia.");
+      if (!url && !pendingDocumentFiles.length) {
+        return alert("Dodaj link albo co najmniej jeden plik dokumentu.");
+      }
       state.documents.push({
         id: uid("doc"),
         title,
@@ -3123,8 +3254,10 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         expiresAt,
         visibility: document.getElementById("doc_visibility").value,
         status: document.getElementById("doc_status").value,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        attachments: pendingDocumentFiles.map((file) => ({ ...file }))
       });
+      clearPendingDocumentFiles();
       await save();
       showPage("documents");
     }
