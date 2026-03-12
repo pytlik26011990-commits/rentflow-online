@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RentFlow V7</title>
+  <title>RentFlow V8</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -154,15 +154,6 @@
     .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .positive { color: #8ef0b1; }
     .negative { color: #ff9c9c; }
-    .pill {
-      display: inline-block;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(255,255,255,.08);
-      font-size: 12px;
-      margin-right: 6px;
-      margin-bottom: 6px;
-    }
     @media (max-width: 1200px) {
       .cards, .two, .three-col, .form-grid, .form-grid.three, .form-grid.two {
         grid-template-columns: 1fr 1fr;
@@ -179,8 +170,8 @@
 <body>
   <div class="app">
     <aside>
-      <div class="brand">RentFlow V7</div>
-      <div class="sub">Saldo, zaliczki, śmieci, internet, terminy płatności</div>
+      <div class="brand">RentFlow V8</div>
+      <div class="sub">Opłaty stałe, media, saldo, terminy</div>
       <div class="nav" id="nav"></div>
     </aside>
 
@@ -231,7 +222,7 @@
       settlements: [],
       periodSettlements: [],
       settings: {
-        companyName: "RentFlow V7",
+        companyName: "RentFlow V8",
         ownerName: "Zarządca",
         baseCurrency: "PLN",
         utilityVAT: 23,
@@ -250,10 +241,10 @@
       ["properties", "Budynki i lokale", "Zarządzanie budynkami i mieszkaniami."],
       ["tenants", "Najemcy", "Baza najemców i kontaktów."],
       ["tenantCard", "Karta najemcy", "Saldo, historia, rozliczenia i wpłaty."],
-      ["leases", "Umowy", "Umowy najmu, zaliczki, śmieci, internet, terminy płatności."],
+      ["leases", "Umowy", "Umowy najmu, opłaty stałe, media i terminy płatności."],
       ["meters", "Media", "Liczniki, odczyty, korekty i rozliczenia zużycia."],
-      ["settlements", "Rozliczenia miesięczne", "Zamknięcie miesiąca i snapshoty miesięczne."],
-      ["periodSettlements", "Rozliczenia okresowe", "Porównanie zaliczek z zużyciem rzeczywistym."],
+      ["settlements", "Rozliczenia miesięczne", "Snapshot miesiąca i pełne pozycje rozliczenia."],
+      ["periodSettlements", "Rozliczenia okresowe", "Porównanie zaliczek z kosztami rzeczywistymi."],
       ["payments", "Opłaty i płatności", "Należności, wpłaty i zaległości."],
       ["expenses", "Koszty", "Koszty budynków i lokali."],
       ["maintenance", "Usterki", "Zgłoszenia, priorytety i statusy."],
@@ -294,12 +285,6 @@
         if (m > 12) { m = 1; y++; }
       }
       return arr;
-    }
-
-    function dueDateForMonth(month) {
-      const [y, m] = month.split("-").map(Number);
-      const day = Math.max(1, Math.min(28, Number(state.settings.paymentDueDay || 10)));
-      return new Date(y, m - 1, day).toISOString().slice(0, 10);
     }
 
     function dueDateForMonthByDay(month, dayInput) {
@@ -350,7 +335,7 @@
       state.settlements ||= [];
       state.periodSettlements ||= [];
       state.settings ||= {};
-      state.settings.companyName ||= "RentFlow V7";
+      state.settings.companyName ||= "RentFlow V8";
       state.settings.ownerName ||= "";
       state.settings.baseCurrency ||= "PLN";
       state.settings.utilityVAT ||= 23;
@@ -550,6 +535,37 @@
       return Number(lease.feeWaste || 0) + Number(lease.feeInternet || 0);
     }
 
+    function monthlyOtherChargesForLease(lease, month) {
+      const unit = unitById(lease.unitId);
+      const out = [];
+
+      if (Number(unit?.serviceCharge || 0) > 0) {
+        out.push({ label: "Opłata administracyjna", amount: Number(unit.serviceCharge || 0), group: "other" });
+      }
+      if (Number(lease.feeWaste || 0) > 0) {
+        out.push({ label: "Śmieci", amount: Number(lease.feeWaste || 0), group: "other" });
+      }
+      if (Number(lease.feeInternet || 0) > 0) {
+        out.push({ label: "Internet", amount: Number(lease.feeInternet || 0), group: "other" });
+      }
+
+      const utilityAdvanceMap = [
+        ["advanceColdWater", "Zaliczka zimna woda"],
+        ["advanceHotWater", "Zaliczka ciepła woda"],
+        ["advanceElectricity", "Zaliczka prąd"],
+        ["advanceGas", "Zaliczka gaz"],
+        ["advanceHeat", "Zaliczka ciepło"]
+      ];
+
+      utilityAdvanceMap.forEach(([key, label]) => {
+        if (Number(lease[key] || 0) > 0) {
+          out.push({ label, amount: Number(lease[key] || 0), group: "other" });
+        }
+      });
+
+      return out;
+    }
+
     function tenantLedger(tenantId) {
       const lease = activeLeaseByTenant(tenantId) || state.leases.find(l => l.tenantId === tenantId);
       if (!lease) return { items: [], charges: 0, payments: 0, balance: 0 };
@@ -626,7 +642,7 @@ ${state.settings.ownerName || state.settings.companyName}`;
       const name = tenant?.name || "Najemca";
       const lines = settlement.details.map((d) => {
         const diff = Number(d.difference || 0);
-        return `- ${d.label}: zużycie ${fmt(d.actual)}, zaliczki ${fmt(d.advances)}, różnica ${fmt(diff)}`;
+        return `- ${d.label}: koszt rzeczywisty ${fmt(d.actual)}, zaliczki ${fmt(d.advances)}, różnica ${fmt(diff)}`;
       }).join("\n");
 
       return `Dzień dobry ${name},
@@ -637,7 +653,7 @@ Szczegóły:
 ${lines}
 
 Łączna różnica: ${fmt(settlement.finalDifference)}
-${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 0 ? "Do zwrotu / nadpłata" : "Rozliczenie wyszło na zero"}
+${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 0 ? "Nadpłata / do zwrotu" : "Rozliczenie wyszło na zero"}
 ${settlement.bankAccount ? `Nr konta: ${settlement.bankAccount}` : ""}
 
 Pozdrawiam
@@ -721,7 +737,7 @@ th{background:#f2f2f2}
 ${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}
 </div>
 <table>
-<thead><tr><th>Pozycja</th><th class="right">Zużycie</th><th class="right">Zaliczki</th><th class="right">Różnica</th></tr></thead>
+<thead><tr><th>Pozycja</th><th class="right">Koszt rzeczywisty</th><th class="right">Zaliczki</th><th class="right">Różnica</th></tr></thead>
 <tbody>
 ${settlement.details.map(d => `
 <tr>
@@ -788,7 +804,7 @@ ${settlement.details.map(d => `
 
         <div class="grid three-col section">
           <div class="card"><div class="muted small">Zaległości</div><div class="metric" style="font-size:22px">${fmt(overdue)}</div></div>
-          <div class="card"><div class="muted small">Wynik netto</div><div class="metric" style="font-size:22px">${fmt(net - expenses)}</div></div>
+          <div class="card"><div class="muted small">Wynik netto</div><div class="metric" style="font-size:22px">${fmt(net)}</div></div>
           <div class="card"><div class="muted small">Rozliczenia okresowe</div><div class="metric" style="font-size:22px">${periodCount}</div></div>
         </div>
 
@@ -1061,7 +1077,6 @@ Termin pozostałych opłat: ${lease.otherDueDay || 10}</div>
             <input id="l_end" type="date" />
             <input id="l_rent" type="number" placeholder="Czynsz" />
             <input id="l_deposit" type="number" placeholder="Kaucja" />
-            <input id="l_billing" type="number" value="5" placeholder="Dzień rozliczenia" />
             <select id="l_status">
               <option>aktywna</option>
               <option>wypowiedziana</option>
@@ -1206,7 +1221,7 @@ Termin pozostałych opłat: ${lease.otherDueDay || 10}</div>
           <div class="form-grid two">
             <input id="settlement_month" type="month" value="${monthDefault}" />
             <div class="notice warning-box">
-              To jest snapshot miesięczny. Potem możesz go usunąć i wygenerować ponownie.
+              To jest pełne rozliczenie miesięczne: czynsz, administracja, śmieci, internet, zaliczki media i koszty rzeczywiste mediów.
             </div>
           </div>
           <div class="section inline-actions">
@@ -1352,7 +1367,7 @@ Razem: ${fmt(settlement.total)}`;
 
     function buildPeriodSettlementDetails(settlement) {
       const lines = settlement.details.map(d => {
-        return `${d.label} | zużycie: ${fmt(d.actual)} | zaliczki: ${fmt(d.advances)} | różnica: ${fmt(d.difference)}`;
+        return `${d.label} | koszt rzeczywisty: ${fmt(d.actual)} | zaliczki: ${fmt(d.advances)} | różnica: ${fmt(d.difference)}`;
       }).join("\n");
 
       return `Najemca: ${settlement.tenantName}
@@ -1702,7 +1717,6 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         endDate: document.getElementById("l_end").value,
         rent: Number(document.getElementById("l_rent").value || 0),
         deposit: Number(document.getElementById("l_deposit").value || 0),
-        billingDay: Number(document.getElementById("l_billing").value || 5),
         status: document.getElementById("l_status").value,
 
         advanceColdWater: Number(document.getElementById("l_adv_cold").value || 0),
@@ -1746,12 +1760,6 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         unit: document.getElementById("m_unit_name").value.trim() || meterUnitDefault(type)
       });
       await save();
-    }
-
-    function prefillReading(id) {
-      showPage("meters");
-      document.getElementById("r_meter").value = id;
-      showMeterHint();
     }
 
     function validateReadingAgainstNeighbors(readingId, meterId, date, value) {
@@ -1855,7 +1863,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           group: "rent"
         });
 
-        if (Number(unit.serviceCharge || 0) > 0) {
+        if (Number(unit?.serviceCharge || 0) > 0) {
           lines.push({
             label: "Opłata administracyjna",
             qty: 1,
@@ -1888,11 +1896,32 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           });
         }
 
+        const advanceRows = [
+          ["advanceColdWater", "Zaliczka zimna woda"],
+          ["advanceHotWater", "Zaliczka ciepła woda"],
+          ["advanceElectricity", "Zaliczka prąd"],
+          ["advanceGas", "Zaliczka gaz"],
+          ["advanceHeat", "Zaliczka ciepło"]
+        ];
+
+        advanceRows.forEach(([key, label]) => {
+          if (Number(lease[key] || 0) > 0) {
+            lines.push({
+              label,
+              qty: 1,
+              unit: "mies.",
+              rate: Number(lease[key] || 0),
+              amount: Number(lease[key] || 0),
+              group: "other"
+            });
+          }
+        });
+
         const utilityLines = utilityBreakdownForUnit(unit.id, month);
         utilityLines.forEach((u) => {
-          if (!u || !u.meter) return;
+          if (!u || !u.meter || !u.ready) return;
           lines.push({
-            label: u.meter.type,
+            label: `Rzeczywiste zużycie: ${u.meter.type}`,
             qty: u.usage,
             unit: u.meter.unit,
             rate: Number(u.meter.rate || 0),
@@ -1985,7 +2014,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
         const actual = months.reduce((sum, month) => {
           const unitLines = utilityBreakdownForUnit(unit.id, month);
-          const matching = unitLines.filter(x => x?.meter?.type === type);
+          const matching = unitLines.filter(x => x?.meter?.type === type && x.ready);
           return sum + matching.reduce((a,b)=>a+Number(b.amount || 0),0);
         }, 0);
 
@@ -2157,61 +2186,32 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.leases.filter((l) => l.status === "aktywna").forEach((l) => {
         const unit = unitById(l.unitId);
 
-        const rentExists = state.charges.some((c) => c.leaseId === l.id && c.type === `Czynsz ${month}`);
-        if (!rentExists && Number(l.rent || 0) > 0) {
-          state.charges.push({
-            id: uid("c"),
-            leaseId: l.id,
-            type: `Czynsz ${month}`,
-            amount: Number(l.rent || 0),
-            dueDate: dueDateForMonthByDay(month, l.rentDueDay || 5),
-            status: "oczekujące",
-            notes: "Automatycznie wygenerowano"
-          });
-          created++;
-        }
+        const addIfMissing = (type, amount, dueDate) => {
+          const exists = state.charges.some((c) => c.leaseId === l.id && c.type === type);
+          if (!exists && Number(amount || 0) > 0) {
+            state.charges.push({
+              id: uid("c"),
+              leaseId: l.id,
+              type,
+              amount: Number(amount || 0),
+              dueDate,
+              status: "oczekujące",
+              notes: "Automatycznie wygenerowano"
+            });
+            created++;
+          }
+        };
 
-        const adminExists = state.charges.some((c) => c.leaseId === l.id && c.type === `Administracja ${month}`);
-        if (!adminExists && Number(unit?.serviceCharge || 0) > 0) {
-          state.charges.push({
-            id: uid("c"),
-            leaseId: l.id,
-            type: `Administracja ${month}`,
-            amount: Number(unit?.serviceCharge || 0),
-            dueDate: dueDateForMonthByDay(month, l.otherDueDay || 10),
-            status: "oczekujące",
-            notes: "Automatycznie wygenerowano"
-          });
-          created++;
-        }
+        addIfMissing(`Czynsz ${month}`, Number(l.rent || 0), dueDateForMonthByDay(month, l.rentDueDay || 5));
+        addIfMissing(`Administracja ${month}`, Number(unit?.serviceCharge || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
+        addIfMissing(`Śmieci ${month}`, Number(l.feeWaste || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
+        addIfMissing(`Internet ${month}`, Number(l.feeInternet || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
 
-        const wasteExists = state.charges.some((c) => c.leaseId === l.id && c.type === `Śmieci ${month}`);
-        if (!wasteExists && Number(l.feeWaste || 0) > 0) {
-          state.charges.push({
-            id: uid("c"),
-            leaseId: l.id,
-            type: `Śmieci ${month}`,
-            amount: Number(l.feeWaste || 0),
-            dueDate: dueDateForMonthByDay(month, l.otherDueDay || 10),
-            status: "oczekujące",
-            notes: "Automatycznie wygenerowano"
-          });
-          created++;
-        }
-
-        const internetExists = state.charges.some((c) => c.leaseId === l.id && c.type === `Internet ${month}`);
-        if (!internetExists && Number(l.feeInternet || 0) > 0) {
-          state.charges.push({
-            id: uid("c"),
-            leaseId: l.id,
-            type: `Internet ${month}`,
-            amount: Number(l.feeInternet || 0),
-            dueDate: dueDateForMonthByDay(month, l.otherDueDay || 10),
-            status: "oczekujące",
-            notes: "Automatycznie wygenerowano"
-          });
-          created++;
-        }
+        addIfMissing(`Zaliczka zimna woda ${month}`, Number(l.advanceColdWater || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
+        addIfMissing(`Zaliczka ciepła woda ${month}`, Number(l.advanceHotWater || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
+        addIfMissing(`Zaliczka prąd ${month}`, Number(l.advanceElectricity || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
+        addIfMissing(`Zaliczka gaz ${month}`, Number(l.advanceGas || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
+        addIfMissing(`Zaliczka ciepło ${month}`, Number(l.advanceHeat || 0), dueDateForMonthByDay(month, l.otherDueDay || 10));
       });
 
       await save();
