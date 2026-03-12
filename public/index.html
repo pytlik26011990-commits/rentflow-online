@@ -723,6 +723,8 @@
       settings: {
         companyName: "RentFlow V9",
         ownerName: "Zarządca",
+        ownerAddress: "",
+        ownerDocument: "",
         baseCurrency: "PLN",
         utilityVAT: 23,
         lateFee: 50,
@@ -976,6 +978,8 @@
       state.settings ||= {};
       state.settings.companyName ||= "RentFlow V9";
       state.settings.ownerName ||= "";
+      state.settings.ownerAddress ||= "";
+      state.settings.ownerDocument ||= "";
       state.settings.baseCurrency ||= "PLN";
       state.settings.utilityVAT = Number(state.settings.utilityVAT || 23);
       state.settings.lateFee = Number(state.settings.lateFee || 50);
@@ -1405,6 +1409,69 @@
         .sort((a, b) => String(a.dueDate || "9999-99-99").localeCompare(String(b.dueDate || "9999-99-99")))
         .filter((task) => task.status !== "gotowe")
         .slice(0, limit);
+    }
+
+    function tenantFormalAddress(tenant) {
+      return tenant?.registrationAddress || tenant?.correspondenceAddress || "—";
+    }
+
+    function maskedValue(value) {
+      const text = String(value || "").trim();
+      if (!text || text.length < 4) return text || "—";
+      return `${"*".repeat(Math.max(0, text.length - 4))}${text.slice(-4)}`;
+    }
+
+    function landlordIdentityBlock() {
+      return [
+        state.settings.ownerName || state.settings.companyName || "Wynajmujący",
+        state.settings.ownerAddress || "adres wynajmującego do uzupełnienia",
+        state.settings.ownerDocument ? `Dokument / PESEL / NIP: ${state.settings.ownerDocument}` : "dokument identyfikacyjny do uzupełnienia"
+      ].join("<br>");
+    }
+
+    function htmlDocumentShell(title, body) {
+      return `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8" /><title>${title}</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#111;line-height:1.55}h1{margin:0 0 10px;font-size:28px}h2{margin:24px 0 8px;font-size:18px}p{margin:0 0 10px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ccc;padding:10px;text-align:left;vertical-align:top}th{background:#f2f2f2}.box{margin-top:18px;padding:14px;border:1px solid #ddd}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:36px}.signature{padding-top:28px;border-top:1px solid #999;text-align:center}.muted{color:#555}</style></head><body>${body}</body></html>`;
+    }
+
+    function overdueChargesForLease(leaseId) {
+      return state.charges.filter((charge) => charge.leaseId === leaseId && calcChargeStatus(charge) === "zaległe");
+    }
+
+    function latestPaymentForLease(leaseId) {
+      return state.payments
+        .filter((payment) => payment.leaseId === leaseId)
+        .slice()
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0] || null;
+    }
+
+    function leaseDocumentContext(tenantId) {
+      const tenant = tenantById(tenantId);
+      const lease = activeLeaseByTenant(tenantId) || state.leases.find((entry) => entry.tenantId === tenantId);
+      const unit = lease ? unitById(lease.unitId) : tenant?.unitId ? unitById(tenant.unitId) : null;
+      const building = unit ? state.buildings.find((entry) => entry.id === unit.buildingId) : null;
+      return { tenant, lease, unit, building };
+    }
+
+    function tenantIdentityMarkup(tenant, includeSensitive = true) {
+      if (!tenant) return "Brak danych najemcy.";
+      const rows = [
+        `Imię i nazwisko: ${tenant.name || "—"}`,
+        `Adres zameldowania: ${tenant.registrationAddress || "—"}`,
+        `Adres korespondencyjny: ${tenant.correspondenceAddress || "—"}`,
+        `Telefon: ${tenant.phone || "—"}`,
+        `E-mail: ${tenant.email || "—"}`,
+        `Data urodzenia: ${tenant.birthDate || "—"}`,
+        `Miejsce urodzenia: ${tenant.birthPlace || "—"}`,
+        `Obywatelstwo: ${tenant.nationality || "—"}`,
+        `Miejsce pracy / źródło dochodu: ${tenant.workplace || "—"}`,
+        `Kontakt awaryjny: ${tenant.emergencyContact || "—"} ${tenant.emergencyPhone ? `(${tenant.emergencyPhone})` : ""}`
+      ];
+      if (includeSensitive) {
+        rows.splice(5, 0, `PESEL: ${tenant.pesel || "—"}`, `Nr dowodu: ${tenant.idCardNumber || "—"}`, `Wydany przez: ${tenant.documentIssuer || "—"}`);
+      } else {
+        rows.splice(5, 0, `PESEL: ${maskedValue(tenant.pesel)}`, `Nr dowodu: ${maskedValue(tenant.idCardNumber)}`);
+      }
+      return rows.join("<br>");
     }
 
     function formatFileSize(size = 0) {
@@ -1848,6 +1915,103 @@
       return `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8" /><title>Rozliczenie okresowe</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#111}h1{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ccc;padding:10px;text-align:left}th{background:#f2f2f2}.right{text-align:right}.box{margin-top:20px;padding:14px;border:1px solid #ddd}</style></head><body><h1>Rozliczenie okresowe mediów</h1><div>${state.settings.companyName}</div><div>${state.settings.ownerName || ""}</div><div class="box"><div><strong>Okres:</strong> ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}</div><div><strong>Najemca:</strong> ${settlement.tenantName}</div><div><strong>Lokal:</strong> ${settlement.unitLabel}</div>${settlement.bankAccount ? `<div><strong>Nr konta:</strong> ${settlement.bankAccount}</div>` : ""}</div><table><thead><tr><th>Pozycja</th><th class="right">Koszt rzeczywisty</th><th class="right">Zaliczki</th><th class="right">Różnica</th></tr></thead><tbody>${settlement.details.map(d => `<tr><td>${d.label}</td><td class="right">${fmt(d.actual)}</td><td class="right">${fmt(d.advances)}</td><td class="right">${fmt(d.difference)}</td></tr>`).join("")}<tr><td colspan="3" class="right"><strong>Wynik końcowy</strong></td><td class="right"><strong>${fmt(settlement.finalDifference)}</strong></td></tr></tbody></table></body></html>`;
     }
 
+    function leaseAgreementHtml(tenantId) {
+      const { tenant, lease, unit, building } = leaseDocumentContext(tenantId);
+      if (!tenant || !lease || !unit) return "";
+      return htmlDocumentShell("Umowa najmu", `
+        <h1>Umowa najmu</h1>
+        <p class="muted">Data wygenerowania: ${today()}</p>
+        <div class="box"><strong>Wynajmujący</strong><br>${landlordIdentityBlock()}</div>
+        <div class="box"><strong>Najemca</strong><br>${tenantIdentityMarkup(tenant)}</div>
+        <h2>Przedmiot najmu</h2>
+        <p>Lokal: ${unitLabel(unit.id)}<br>Adres budynku: ${building?.address || "—"}<br>Typ: ${unit.type || "lokal"}<br>Powierzchnia: ${unit.area || "—"} m²</p>
+        <h2>Warunki finansowe</h2>
+        <p>Czynsz: ${fmt(lease.rent)} miesięcznie<br>Kaucja: ${fmt(lease.deposit)}<br>Termin płatności czynszu: do ${lease.rentDueDay || 5}. dnia miesiąca<br>Termin pozostałych opłat: do ${lease.otherDueDay || 10}. dnia miesiąca</p>
+        <h2>Czas trwania umowy</h2>
+        <p>Umowa obowiązuje od ${lease.startDate || "—"} do ${lease.endDate || "czas nieoznaczony"}.</p>
+        <h2>Dodatkowe opłaty i media</h2>
+        <p>Zaliczka zimna woda: ${fmt(lease.advanceColdWater)}<br>Zaliczka ciepła woda: ${fmt(lease.advanceHotWater)}<br>Zaliczka prąd: ${fmt(lease.advanceElectricity)}<br>Zaliczka gaz: ${fmt(lease.advanceGas)}<br>Zaliczka ciepło: ${fmt(lease.advanceHeat)}<br>Śmieci: ${fmt(lease.feeWaste || 0)}<br>Internet: ${fmt(lease.feeInternet || 0)}</p>
+        <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
+      `);
+    }
+
+    function handoverProtocolHtml(tenantId) {
+      const { tenant, lease, unit, building } = leaseDocumentContext(tenantId);
+      if (!tenant || !unit) return "";
+      return htmlDocumentShell("Protokół zdawczo-odbiorczy", `
+        <h1>Protokół zdawczo-odbiorczy</h1>
+        <p class="muted">Data wygenerowania: ${today()}</p>
+        <div class="box"><strong>Lokal</strong><br>${unitLabel(unit.id)}<br>Adres: ${building?.address || "—"}</div>
+        <div class="box"><strong>Strony</strong><br>Wynajmujący: ${state.settings.ownerName || state.settings.companyName || "—"}<br>Najemca: ${tenant.name || "—"}</div>
+        <h2>Stan lokalu przy wydaniu</h2>
+        <p>Ściany i podłogi: ..................................................<br>Wyposażenie: ..................................................<br>Liczba kluczy: ..................................................<br>Uwagi i uszkodzenia: ..................................................</p>
+        <h2>Stany liczników</h2>
+        <p>${state.meters.filter((meter) => meter.unitId === unit.id).map((meter) => `${meter.type}: ${latestReadingOnOrBefore(meter.id, today())?.value ?? "—"} ${meter.unit || ""}`).join("<br>") || "Brak przypisanych liczników."}</p>
+        <h2>Powiązana umowa</h2>
+        <p>Umowa od ${lease?.startDate || "—"} do ${lease?.endDate || "—"}.</p>
+        <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
+      `);
+    }
+
+    function demandForPaymentHtml(tenantId) {
+      const { tenant, lease, unit } = leaseDocumentContext(tenantId);
+      if (!tenant || !lease) return "";
+      const overdueItems = overdueChargesForLease(lease.id);
+      const total = overdueItems.reduce((sum, item) => sum + chargeOutstandingAmount(item), 0);
+      return htmlDocumentShell("Przedsądowe wezwanie do zapłaty", `
+        <h1>Przedsądowe wezwanie do zapłaty</h1>
+        <p class="muted">Data wygenerowania: ${today()}</p>
+        <div class="box"><strong>Adresat</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
+        <div class="box"><strong>Nadawca</strong><br>${landlordIdentityBlock()}</div>
+        <p>Wzywam do zapłaty zaległości wynikających z umowy najmu dla lokalu ${unit ? unitLabel(unit.id) : "—"}.</p>
+        <table><thead><tr><th>Pozycja</th><th>Termin</th><th>Kwota pozostała</th></tr></thead><tbody>${overdueItems.length ? overdueItems.map((item) => `<tr><td>${item.type}</td><td>${item.dueDate}</td><td>${fmt(chargeOutstandingAmount(item))}</td></tr>`).join("") : `<tr><td colspan="3">Brak zaległości na dzień wygenerowania.</td></tr>`}<tr><td colspan="2"><strong>Łącznie</strong></td><td><strong>${fmt(total)}</strong></td></tr></tbody></table>
+        <p class="section">Prosimy o uregulowanie należności w terminie 7 dni od doręczenia niniejszego wezwania pod rygorem skierowania sprawy na drogę postępowania sądowego.</p>
+        <div class="signature" style="margin-top:36px">Wynajmujący</div>
+      `);
+    }
+
+    function leaseTerminationHtml(tenantId) {
+      const { tenant, lease, unit } = leaseDocumentContext(tenantId);
+      if (!tenant || !lease) return "";
+      return htmlDocumentShell("Wypowiedzenie umowy najmu", `
+        <h1>Wypowiedzenie umowy najmu</h1>
+        <p class="muted">Data wygenerowania: ${today()}</p>
+        <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
+        <div class="box"><strong>Umowa</strong><br>Lokal: ${unit ? unitLabel(unit.id) : "—"}<br>Data rozpoczęcia: ${lease.startDate || "—"}<br>Data zakończenia wskazana w umowie: ${lease.endDate || "—"}</div>
+        <p>Wypowiadam umowę najmu z zachowaniem okresu wypowiedzenia wynikającego z umowy / przepisów prawa. Proszę o opuszczenie lokalu, rozliczenie wszystkich należności oraz uzgodnienie terminu zdania lokalu i podpisania protokołu końcowego.</p>
+        <p>Przyczynę wypowiedzenia oraz datę ustania stosunku najmu należy uzupełnić zgodnie z konkretnym stanem faktycznym.</p>
+        <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Potwierdzenie odbioru</div></div>
+      `);
+    }
+
+    function depositReceiptHtml(tenantId) {
+      const { tenant, lease, unit } = leaseDocumentContext(tenantId);
+      if (!tenant || !lease) return "";
+      return htmlDocumentShell("Potwierdzenie przyjęcia kaucji", `
+        <h1>Potwierdzenie przyjęcia kaucji</h1>
+        <p class="muted">Data wygenerowania: ${today()}</p>
+        <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
+        <p>Potwierdzam przyjęcie kaucji zabezpieczającej z tytułu umowy najmu dotyczącej lokalu ${unit ? unitLabel(unit.id) : "—"}.</p>
+        <p>Kwota kaucji: <strong>${fmt(lease.deposit)}</strong></p>
+        <p>Kaucja została przyjęta na zabezpieczenie należności wynikających z umowy najmu.</p>
+        <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
+      `);
+    }
+
+    function paymentReceiptHtml(tenantId) {
+      const { tenant, lease, unit } = leaseDocumentContext(tenantId);
+      const payment = lease ? latestPaymentForLease(lease.id) : null;
+      if (!tenant || !lease || !payment) return "";
+      return htmlDocumentShell("Potwierdzenie przyjęcia płatności", `
+        <h1>Potwierdzenie przyjęcia czynszu i opłat</h1>
+        <p class="muted">Data wygenerowania: ${today()}</p>
+        <div class="box"><strong>Najemca</strong><br>${tenant.name}<br>${tenantFormalAddress(tenant)}</div>
+        <div class="box"><strong>Płatność</strong><br>Data wpłaty: ${payment.date || "—"}<br>Kwota: ${fmt(payment.amount)}<br>Metoda: ${payment.method || "—"}<br>Lokal: ${unit ? unitLabel(unit.id) : "—"}</div>
+        <p>Potwierdzam przyjęcie płatności z tytułu czynszu / pozostałych opłat wynikających z umowy najmu.</p>
+        <div class="signatures"><div class="signature">Wynajmujący</div><div class="signature">Najemca</div></div>
+      `);
+    }
+
     function openPrintWindow(html) {
       const w = window.open("", "_blank", "width=900,height=700");
       w.document.open();
@@ -2257,16 +2421,30 @@
             <input id="t_name" placeholder="Imię i nazwisko" />
             <input id="t_phone" placeholder="Telefon" />
             <input id="t_email" placeholder="E-mail" />
+            <input id="t_pesel" placeholder="PESEL" />
+            <input id="t_id_card" placeholder="Nr dowodu" />
             <select id="t_unit"><option value="">Bez przypisania</option>${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
+          </div>
+          <div class="form-grid section">
+            <input id="t_reg_address" placeholder="Adres zameldowania" />
+            <input id="t_corr_address" placeholder="Adres korespondencyjny" />
+            <input id="t_birth_date" type="date" placeholder="Data urodzenia" />
+            <input id="t_birth_place" placeholder="Miejsce urodzenia" />
+            <input id="t_nationality" placeholder="Obywatelstwo" />
+            <input id="t_workplace" placeholder="Miejsce pracy / źródło dochodu" />
+            <input id="t_emergency_contact" placeholder="Kontakt awaryjny" />
+            <input id="t_emergency_phone" placeholder="Telefon awaryjny" />
+            <input id="t_document_issuer" placeholder="Wydany przez" />
           </div>
           <div class="section"><button class="btn green" onclick="addTenant()">Dodaj najemcę</button></div>
         </div>
         <div class="card section">
           <div class="panel-title"><h3>Najemcy</h3></div>
-          <table><thead><tr><th>Najemca</th><th>Kontakt</th><th>Lokal</th><th>Saldo</th><th></th></tr></thead><tbody>
+          <table><thead><tr><th>Najemca</th><th>Kontakt</th><th>Weryfikacja</th><th>Lokal</th><th>Saldo</th><th></th></tr></thead><tbody>
             ${state.tenants.map((t) => {
               const ledger = tenantLedger(t.id);
-              return `<tr><td><strong>${t.name}</strong></td><td>${t.phone || "—"}<br><span class="muted small">${t.email || "—"}</span></td><td>${t.unitId ? unitLabel(t.unitId) : "—"}</td><td class="${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}">${fmt(ledger.balance)}</td><td class="inline-actions"><button class="btn secondary small" onclick="openTenantCard('${t.id}')">Karta</button><button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button></td></tr>`;
+              const verified = t.pesel && t.idCardNumber && t.registrationAddress;
+              return `<tr><td><strong>${t.name}</strong></td><td>${t.phone || "—"}<br><span class="muted small">${t.email || "—"}</span></td><td><span class="badge ${verified ? "status-active" : "status-pending"}">${verified ? "formalnie uzupełniony" : "braki danych"}</span></td><td>${t.unitId ? unitLabel(t.unitId) : "—"}</td><td class="${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}">${fmt(ledger.balance)}</td><td class="inline-actions"><button class="btn secondary small" onclick="openTenantCard('${t.id}')">Karta</button><button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button></td></tr>`;
             }).join("")}
           </tbody></table>
         </div>`;
@@ -2284,6 +2462,14 @@
       const ledger = tenantLedger(tenant.id);
       const tenantSettlements = state.settlements.filter(s => s.tenantId === tenant.id).slice().sort((a,b)=>b.month.localeCompare(a.month));
       const tenantPeriodSettlements = state.periodSettlements.filter(s => s.tenantId === tenant.id).slice().sort((a,b)=>(b.toMonth+b.createdAt).localeCompare(a.toMonth+a.createdAt));
+      const ownerDocumentButtons = lease ? `
+        <button class="btn secondary small" onclick="printGeneratedDocument('leaseAgreement','${tenant.id}')">Umowa najmu</button>
+        <button class="btn secondary small" onclick="printGeneratedDocument('handoverProtocol','${tenant.id}')">Protokół odbioru</button>
+        <button class="btn secondary small" onclick="printGeneratedDocument('paymentDemand','${tenant.id}')">Wezwanie do zapłaty</button>
+        <button class="btn secondary small" onclick="printGeneratedDocument('leaseTermination','${tenant.id}')">Wypowiedzenie</button>
+        <button class="btn secondary small" onclick="printGeneratedDocument('depositReceipt','${tenant.id}')">Przyjęcie kaucji</button>
+        <button class="btn secondary small" onclick="printGeneratedDocument('paymentReceipt','${tenant.id}')">Przyjęcie czynszu i opłat</button>
+      ` : `<div class="empty-state">Aby wygenerować dokumenty, najemca musi mieć przypisaną umowę i lokal.</div>`;
 
       document.getElementById("tenantCard").innerHTML = `
         <div class="card"><div class="panel-title"><h3>${currentUser?.role === "tenant" ? "Mój profil najmu" : "Karta najemcy"}</h3></div><div class="form-grid two">${currentUser?.role === "tenant" ? `<div class="notice">Najemca: <strong>${tenant.name}</strong><br>Lokal: <strong>${tenant.unitId ? unitLabel(tenant.unitId) : "—"}</strong><br>E-mail: <strong>${tenant.email || currentUser.email || "—"}</strong></div><div class="notice">Właściciel / zarządca: <strong>${state.settings.ownerName || state.settings.companyName || "RentFlow"}</strong><br>Numer konta: <strong>${state.settings.bankAccount || "—"}</strong><br>Domyślny termin płatności: <strong>do ${state.settings.paymentDueDay || 10}. dnia miesiąca</strong></div>` : `<select id="tenant_card_select" onchange="openTenantCard(this.value)">${state.tenants.map(t => `<option value="${t.id}" ${t.id === tenant.id ? "selected" : ""}>${t.name}</option>`).join("")}</select><div class="notice">Najemca: <strong>${tenant.name}</strong><br>Lokal: <strong>${tenant.unitId ? unitLabel(tenant.unitId) : "—"}</strong><br>E-mail: <strong>${tenant.email || "—"}</strong></div>`}</div></div>
@@ -2300,6 +2486,32 @@
           <div class="card"><div class="panel-title"><h3>Rozliczenia miesięczne</h3></div><table><thead><tr><th>Miesiąc</th><th>Razem</th></tr></thead><tbody>${tenantSettlements.map(s => `<tr><td>${fmtMonth(s.month)}</td><td>${fmt(s.total)}</td></tr>`).join("") || `<tr><td colspan="2">Brak</td></tr>`}</tbody></table></div>
           <div class="card"><div class="panel-title"><h3>Rozliczenia okresowe</h3></div><table><thead><tr><th>Okres</th><th>Wynik</th></tr></thead><tbody>${tenantPeriodSettlements.map(s => `<tr><td>${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}</td><td class="${s.finalDifference > 0 ? "negative" : s.finalDifference < 0 ? "positive" : ""}">${fmt(s.finalDifference)}</td></tr>`).join("") || `<tr><td colspan="2">Brak</td></tr>`}</tbody></table></div>
         </div>
+        ${currentUser?.role === "owner" ? `
+          <div class="grid two section">
+            <div class="card">
+              <div class="panel-title"><h3>Dane formalne najemcy</h3></div>
+              <div class="form-grid two">
+                <input id="tenant_formal_reg_address" value="${tenant.registrationAddress || ""}" placeholder="Adres zameldowania" />
+                <input id="tenant_formal_corr_address" value="${tenant.correspondenceAddress || ""}" placeholder="Adres korespondencyjny" />
+                <input id="tenant_formal_pesel" value="${tenant.pesel || ""}" placeholder="PESEL" />
+                <input id="tenant_formal_id_card" value="${tenant.idCardNumber || ""}" placeholder="Nr dowodu" />
+                <input id="tenant_formal_document_issuer" value="${tenant.documentIssuer || ""}" placeholder="Wydany przez" />
+                <input id="tenant_formal_birth_date" type="date" value="${tenant.birthDate || ""}" placeholder="Data urodzenia" />
+                <input id="tenant_formal_birth_place" value="${tenant.birthPlace || ""}" placeholder="Miejsce urodzenia" />
+                <input id="tenant_formal_nationality" value="${tenant.nationality || ""}" placeholder="Obywatelstwo" />
+                <input id="tenant_formal_workplace" value="${tenant.workplace || ""}" placeholder="Miejsce pracy / źródło dochodu" />
+                <input id="tenant_formal_emergency_contact" value="${tenant.emergencyContact || ""}" placeholder="Kontakt awaryjny" />
+                <input id="tenant_formal_emergency_phone" value="${tenant.emergencyPhone || ""}" placeholder="Telefon awaryjny" />
+              </div>
+              <div class="section"><button class="btn green" onclick="saveTenantFormalData('${tenant.id}')">Zapisz dane formalne</button></div>
+            </div>
+            <div class="card">
+              <div class="panel-title"><h3>Generatory dokumentów</h3></div>
+              <div class="inline-actions">${ownerDocumentButtons}</div>
+              <div class="section notice">Dokumenty generują się z danych najemcy, lokalu, umowy i ustawień wynajmującego. Uzupełnij dane formalne najemcy oraz dane właściciela w ustawieniach, żeby wzory były kompletne.</div>
+            </div>
+          </div>
+        ` : ""}
         ${currentUser?.role === "owner" ? `<div class="card section"><div class="panel-title"><h3>Dostęp dla najemcy</h3></div><div class="form-grid three"><input id="portal_email_${tenant.id}" type="email" value="${tenant.email || ""}" placeholder="Login e-mail" /><input id="portal_password_${tenant.id}" type="password" placeholder="Hasło do portalu" /><button class="btn green" onclick="createTenantAccess('${tenant.id}')">Utwórz / zaktualizuj dostęp</button></div><div class="section inline-actions"><button class="btn secondary" onclick="deleteTenantAccess('${tenant.id}')">Usuń konto dostępu</button></div><div class="section notice">To konto otworzy uproszczony portal najemcy: saldo, płatności, rozliczenia i zgłoszenia serwisowe.</div></div>` : ""}
       `;
     }
@@ -2860,15 +3072,15 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           <div class="card">
             <div class="panel-title"><h3>Profil użytkownika</h3></div>
             <div class="form-grid two">
-              <div class="notice">Imię i nazwisko: <strong>${tenant?.name || currentUser?.name || "—"}</strong><br>E-mail: <strong>${tenant?.email || currentUser?.email || "—"}</strong><br>Telefon: <strong>${tenant?.phone || "—"}</strong></div>
-              <div class="notice">Firma / właściciel: <strong>${state.settings.companyName || "RentFlow"}</strong><br>Kontakt operacyjny: <strong>${state.settings.ownerName || "Biuro obsługi"}</strong><br>Numer konta: <strong>${state.settings.bankAccount || "—"}</strong></div>
+              <div class="notice">Imię i nazwisko: <strong>${tenant?.name || currentUser?.name || "—"}</strong><br>E-mail: <strong>${tenant?.email || currentUser?.email || "—"}</strong><br>Telefon: <strong>${tenant?.phone || "—"}</strong><br>Adres: <strong>${tenantFormalAddress(tenant)}</strong></div>
+              <div class="notice">Firma / właściciel: <strong>${state.settings.companyName || "RentFlow"}</strong><br>Kontakt operacyjny: <strong>${state.settings.ownerName || "Biuro obsługi"}</strong><br>Adres właściciela: <strong>${state.settings.ownerAddress || "—"}</strong><br>Numer konta: <strong>${state.settings.bankAccount || "—"}</strong></div>
             </div>
           </div>`;
         return;
       }
 
       document.getElementById("settings").innerHTML = `
-        <div class="card"><div class="panel-title"><h3>Ustawienia</h3></div><div class="form-grid"><input id="s_company" value="${state.settings.companyName || ""}" placeholder="Nazwa firmy" /><input id="s_owner" value="${state.settings.ownerName || ""}" placeholder="Właściciel / zarządca" /><input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" /><input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" /><input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" /><input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" /><input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Domyślny dzień płatności" /><input id="s_reminder_due" type="number" value="${state.settings.reminderDaysBeforeDue || 3}" placeholder="Ile dni przed płatnością przypominać" /><input id="s_reminder_lease" type="number" value="${state.settings.reminderDaysBeforeLeaseEnd || 45}" placeholder="Ile dni przed końcem umowy przypominać" /><input id="s_reminder_doc" type="number" value="${state.settings.reminderDaysBeforeDocumentExpiry || 30}" placeholder="Ile dni przed końcem dokumentu przypominać" /></div><div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div></div>`;
+        <div class="card"><div class="panel-title"><h3>Ustawienia</h3></div><div class="form-grid"><input id="s_company" value="${state.settings.companyName || ""}" placeholder="Nazwa firmy" /><input id="s_owner" value="${state.settings.ownerName || ""}" placeholder="Właściciel / zarządca" /><input id="s_owner_address" value="${state.settings.ownerAddress || ""}" placeholder="Adres właściciela / siedziby" /><input id="s_owner_document" value="${state.settings.ownerDocument || ""}" placeholder="Dokument / PESEL / NIP właściciela" /><input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" /><input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" /><input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" /><input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" /><input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Domyślny dzień płatności" /><input id="s_reminder_due" type="number" value="${state.settings.reminderDaysBeforeDue || 3}" placeholder="Ile dni przed płatnością przypominać" /><input id="s_reminder_lease" type="number" value="${state.settings.reminderDaysBeforeLeaseEnd || 45}" placeholder="Ile dni przed końcem umowy przypominać" /><input id="s_reminder_doc" type="number" value="${state.settings.reminderDaysBeforeDocumentExpiry || 30}" placeholder="Ile dni przed końcem dokumentu przypominać" /></div><div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div></div>`;
     }
 
     function renderCommunications() {
@@ -2993,8 +3205,44 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       const email = document.getElementById("t_email").value.trim();
       if (!name) return alert("Podaj imię i nazwisko.");
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return alert("Podaj poprawny e-mail.");
-      state.tenants.push({ id: uid("t"), name, phone: document.getElementById("t_phone").value.trim(), email, unitId: document.getElementById("t_unit").value, status: "aktywny", notes: "" });
+      state.tenants.push({
+        id: uid("t"),
+        name,
+        phone: document.getElementById("t_phone").value.trim(),
+        email,
+        unitId: document.getElementById("t_unit").value,
+        pesel: document.getElementById("t_pesel").value.trim(),
+        idCardNumber: document.getElementById("t_id_card").value.trim(),
+        documentIssuer: document.getElementById("t_document_issuer").value.trim(),
+        registrationAddress: document.getElementById("t_reg_address").value.trim(),
+        correspondenceAddress: document.getElementById("t_corr_address").value.trim(),
+        birthDate: document.getElementById("t_birth_date").value,
+        birthPlace: document.getElementById("t_birth_place").value.trim(),
+        nationality: document.getElementById("t_nationality").value.trim(),
+        workplace: document.getElementById("t_workplace").value.trim(),
+        emergencyContact: document.getElementById("t_emergency_contact").value.trim(),
+        emergencyPhone: document.getElementById("t_emergency_phone").value.trim(),
+        status: "aktywny",
+        notes: ""
+      });
       await save();
+    }
+    async function saveTenantFormalData(id) {
+      const tenant = tenantById(id);
+      if (!tenant) return;
+      tenant.registrationAddress = document.getElementById("tenant_formal_reg_address")?.value.trim() || "";
+      tenant.correspondenceAddress = document.getElementById("tenant_formal_corr_address")?.value.trim() || "";
+      tenant.pesel = document.getElementById("tenant_formal_pesel")?.value.trim() || "";
+      tenant.idCardNumber = document.getElementById("tenant_formal_id_card")?.value.trim() || "";
+      tenant.documentIssuer = document.getElementById("tenant_formal_document_issuer")?.value.trim() || "";
+      tenant.birthDate = document.getElementById("tenant_formal_birth_date")?.value || "";
+      tenant.birthPlace = document.getElementById("tenant_formal_birth_place")?.value.trim() || "";
+      tenant.nationality = document.getElementById("tenant_formal_nationality")?.value.trim() || "";
+      tenant.workplace = document.getElementById("tenant_formal_workplace")?.value.trim() || "";
+      tenant.emergencyContact = document.getElementById("tenant_formal_emergency_contact")?.value.trim() || "";
+      tenant.emergencyPhone = document.getElementById("tenant_formal_emergency_phone")?.value.trim() || "";
+      await save();
+      showPage("tenantCard");
     }
     async function createTenantAccess(tenantId) {
       const tenant = tenantById(tenantId);
@@ -3426,6 +3674,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     async function saveSettings() {
       state.settings.companyName = document.getElementById("s_company").value.trim() || "RentFlow";
       state.settings.ownerName = document.getElementById("s_owner").value.trim();
+      state.settings.ownerAddress = document.getElementById("s_owner_address").value.trim();
+      state.settings.ownerDocument = document.getElementById("s_owner_document").value.trim();
       state.settings.baseCurrency = document.getElementById("s_currency").value.trim() || "PLN";
       state.settings.utilityVAT = Math.max(0, Number(document.getElementById("s_vat").value || 23));
       state.settings.lateFee = Math.max(0, Number(document.getElementById("s_late").value || 50));
@@ -3436,6 +3686,25 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.settings.reminderDaysBeforeDocumentExpiry = Math.min(180, Math.max(1, Number(document.getElementById("s_reminder_doc").value || 30)));
       await save();
       alert("Zapisano ustawienia.");
+    }
+
+    function printGeneratedDocument(kind, tenantId) {
+      const builders = {
+        leaseAgreement: leaseAgreementHtml,
+        handoverProtocol: handoverProtocolHtml,
+        paymentDemand: demandForPaymentHtml,
+        leaseTermination: leaseTerminationHtml,
+        depositReceipt: depositReceiptHtml,
+        paymentReceipt: paymentReceiptHtml
+      };
+      const builder = builders[kind];
+      if (!builder) return;
+      const html = builder(tenantId);
+      if (!html) {
+        alert("Brakuje danych do wygenerowania tego dokumentu. Uzupełnij najemcę, lokal, umowę i płatności.");
+        return;
+      }
+      openPrintWindow(html);
     }
 
     function downloadFile(filename, content, mime) {
