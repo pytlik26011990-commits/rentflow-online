@@ -1321,6 +1321,7 @@
       }));
       state.messages = state.messages.map((message) => ({
         ...message,
+        type: ["general", "settlement", "period_settlement"].includes(message?.type) ? message.type : "general",
         subject: sanitizeText(message?.subject || ""),
         status: ["otwarta", "zamknięta"].includes(message?.status) ? message.status : "otwarta",
         priority: ["normalna", "pilna"].includes(message?.priority) ? message.priority : "normalna",
@@ -2297,13 +2298,14 @@
       return next;
     }
 
-    async function deliverOwnerMessageToTenantPortal({ tenantId, leaseId = "", unitId = "", subject, body, priority = "normalna" }) {
+    async function deliverOwnerMessageToTenantPortal({ tenantId, leaseId = "", unitId = "", subject, body, priority = "normalna", type = "general" }) {
       const tenant = tenantById(tenantId);
       if (!tenant) throw new Error("Nie znaleziono najemcy.");
       if (!String(subject || "").trim() || !String(body || "").trim()) throw new Error("Brakuje tematu albo treści wiadomości.");
       const now = nowIso();
       const conversation = {
         id: uid("msg"),
+        type,
         tenantId,
         leaseId,
         unitId,
@@ -2845,6 +2847,50 @@
     function findSettlement(id) { return state.settlements.find((s) => s.id === id); }
     function findPeriodSettlement(id) { return state.periodSettlements.find((s) => s.id === id); }
 
+    function messageTypeLabel(type) {
+      return ({
+        general: "Wiadomość",
+        settlement: "Rozliczenie miesięczne",
+        period_settlement: "Rozliczenie okresowe"
+      })[type] || "Wiadomość";
+    }
+
+    function leaseActiveInMonth(lease, month) {
+      if (!lease || !month) return false;
+      const startMonth = String(lease.startDate || "").slice(0, 7);
+      const endMonth = String(lease.endDate || "").slice(0, 7);
+      if (!startMonth || startMonth > month) return false;
+      if (endMonth && endMonth < month) return false;
+      return ["aktywna", "wypowiedziana", "zakończona"].includes(lease.status || "aktywna");
+    }
+
+    function leasesRequiringMonthlySettlement(month) {
+      return state.leases.filter((lease) => leaseActiveInMonth(lease, month));
+    }
+
+    function monthlySettlementCoverage(month) {
+      const requiredLeases = leasesRequiringMonthlySettlement(month);
+      const settlementsByLease = new Map();
+      state.settlements
+        .filter((settlement) => settlement.month === month && settlement.leaseId)
+        .forEach((settlement) => {
+          if (!settlementsByLease.has(settlement.leaseId)) settlementsByLease.set(settlement.leaseId, []);
+          settlementsByLease.get(settlement.leaseId).push(settlement);
+        });
+      const missingLeases = requiredLeases.filter((lease) => !settlementsByLease.has(lease.id));
+      const duplicateLeases = Array.from(settlementsByLease.entries())
+        .filter(([, entries]) => entries.length > 1)
+        .map(([leaseId, entries]) => ({ lease: leaseById(leaseId), entries }));
+      return {
+        month,
+        requiredLeases,
+        settledCount: requiredLeases.filter((lease) => settlementsByLease.has(lease.id)).length,
+        missingLeases,
+        duplicateLeases,
+        isComplete: requiredLeases.length > 0 && missingLeases.length === 0 && duplicateLeases.length === 0
+      };
+    }
+
     function settlementMessage(settlement) {
       const tenant = tenantById(settlement.tenantId);
       const name = tenant?.name || "Najemca";
@@ -3277,6 +3323,7 @@
       const now = nowIso();
       const conversation = {
         id: uid("msg"),
+        type: "general",
         tenantId,
         leaseId: context.lease?.id || "",
         unitId: context.unit?.id || "",
@@ -3520,6 +3567,7 @@
       const latestUnreadConversation = unreadConversations[0] || null;
       const taxSummary = privateRentalTaxSummary();
       const nextTaxPeriod = taxSummary.periods.find((period) => period.remaining > 0) || null;
+      const currentSettlementCoverage = monthlySettlementCoverage(currentMonth());
 
       document.getElementById("dashboard").innerHTML = `
         ${latestUnreadConversation ? `
@@ -3534,6 +3582,15 @@
               <button class="btn green" onclick="selectConversation('${latestUnreadConversation.id}')">Otwórz wiadomość</button>
               <button class="btn secondary" onclick="showPage('communications')">Przejdź do komunikacji</button>
             </div>
+          </div>
+        ` : ""}
+        ${currentSettlementCoverage.requiredLeases.length ? `
+          <div class="card ${currentSettlementCoverage.isComplete ? "success-box" : "warning-box"} section">
+            <div class="panel-title"><h3>Kontrola rozliczeń za ${fmtMonth(currentSettlementCoverage.month)}</h3><span class="badge ${currentSettlementCoverage.isComplete ? "status-active" : "status-pending"}">${currentSettlementCoverage.settledCount}/${currentSettlementCoverage.requiredLeases.length}</span></div>
+            <div class="notice ${currentSettlementCoverage.isComplete ? "success-box" : "warning-box"}">
+              ${currentSettlementCoverage.isComplete ? "Wszystkie umowy wymagające rozliczenia w tym miesiącu mają już zapisane rozliczenie." : `Brakuje rozliczeń dla ${currentSettlementCoverage.missingLeases.length} umów.`}
+            </div>
+            ${!currentSettlementCoverage.isComplete ? `<div class="entity-list section">${currentSettlementCoverage.missingLeases.map((lease) => `<div class="entity-item"><div><strong>${leaseLabel(lease.id)}</strong><div class="meta">${tenantName(lease.tenantId)} · ${unitLabel(lease.unitId)}</div></div><div class="inline-actions"><button class="btn secondary small" onclick="showPage('settlements')">Rozlicz teraz</button></div></div>`).join("")}</div>` : ""}
           </div>
         ` : ""}
         ${nextTaxPeriod ? `
@@ -3999,21 +4056,35 @@
 
     function renderSettlements() {
       const monthDefault = selectedSettlementMonth || currentMonth();
-      const previewLease = settlementPreviewLeaseId ? leaseById(settlementPreviewLeaseId) : (state.leases.find(l => l.status === "aktywna") || null);
+      const availableLeases = leasesRequiringMonthlySettlement(monthDefault);
+      const previewLease = settlementPreviewLeaseId
+        ? availableLeases.find((lease) => lease.id === settlementPreviewLeaseId) || null
+        : (availableLeases[0] || null);
       const preview = previewLease ? buildMonthlySettlementDraft(previewLease, monthDefault) : null;
       const selected = selectedSettlementId ? findSettlement(selectedSettlementId) : null;
+      const coverage = monthlySettlementCoverage(monthDefault);
 
       document.getElementById("settlements").innerHTML = `
         <div class="card">
           <div class="panel-title"><h3>Wygeneruj rozliczenie miesięczne</h3></div>
           <div class="form-grid three">
             <input id="settlement_month" type="month" value="${monthDefault}" onchange="refreshSettlementPreview()" />
-            <select id="settlement_lease" onchange="refreshSettlementPreview()">${state.leases.filter(l => l.status === "aktywna").map(l => `<option value="${l.id}" ${previewLease?.id === l.id ? "selected" : ""}>${leaseLabel(l.id)}</option>`).join("")}</select>
+            <select id="settlement_lease" onchange="refreshSettlementPreview()">${availableLeases.map(l => `<option value="${l.id}" ${previewLease?.id === l.id ? "selected" : ""}>${leaseLabel(l.id)}</option>`).join("")}</select>
             <div class="inline-actions"><button class="btn green" onclick="generateSelectedSettlement()">Wygeneruj tylko tę umowę</button></div>
           </div>
           <div class="section ${preview && !preview.canGenerate ? 'notice danger-box' : 'notice'}">
             ${preview ? (preview.canGenerate ? 'Ta umowa ma komplet danych do rozliczenia.' : `Brakuje odczytów dla: ${preview.missingTypes.join(', ')}. System zablokuje generowanie, żeby nie zrobić miesiąca bez mediów.`) : 'Brak aktywnych umów.'}
           </div>
+        </div>
+        <div class="card section">
+          <div class="panel-title"><h3>Kontrola kompletności miesiąca</h3><span class="badge ${coverage.isComplete ? "status-active" : "status-pending"}">${coverage.settledCount}/${coverage.requiredLeases.length || 0}</span></div>
+          ${coverage.requiredLeases.length ? `
+            <div class="notice ${coverage.isComplete ? "success-box" : "warning-box"}">
+              ${coverage.isComplete ? `Wszystkie umowy aktywne w ${fmtMonth(monthDefault)} zostały rozliczone.` : `System wykrył brak rozliczeń dla ${coverage.missingLeases.length} umów w ${fmtMonth(monthDefault)}.`}
+            </div>
+            ${coverage.missingLeases.length ? `<div class="entity-list section">${coverage.missingLeases.map((lease) => `<div class="entity-item"><div><strong>${leaseLabel(lease.id)}</strong><div class="meta">${tenantName(lease.tenantId)} · ${unitLabel(lease.unitId)}</div></div><div class="inline-actions"><button class="btn secondary small" onclick="document.getElementById('settlement_lease').value='${lease.id}'; refreshSettlementPreview()">Przygotuj</button></div></div>`).join("")}</div>` : ""}
+            ${coverage.duplicateLeases.length ? `<div class="entity-list section">${coverage.duplicateLeases.map((entry) => `<div class="entity-item"><div><strong>${leaseLabel(entry.lease?.id || "")}</strong><div class="meta">Wykryto ${entry.entries.length} rozliczenia dla tej samej umowy w ${fmtMonth(monthDefault)}.</div></div></div>`).join("")}</div>` : ""}
+          ` : `<div class="empty-state">Brak umów wymagających rozliczenia w tym miesiącu.</div>`}
         </div>
 
         <div class="grid two section">
@@ -4675,10 +4746,11 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                   <div class="entity-item">
                     <div>
                       <strong>${conversation.subject || "Wiadomość do zarządcy"}</strong>
-                      <div class="meta">${formatDateTime(conversation.updatedAt || conversation.createdAt)} · ${conversation.thread?.length || 0} wiadomości · ${conversation.priority === "pilna" ? "pilna" : "standard"}</div>
+                      <div class="meta">${messageTypeLabel(conversation.type)} · ${formatDateTime(conversation.updatedAt || conversation.createdAt)} · ${conversation.thread?.length || 0} wiadomości · ${conversation.priority === "pilna" ? "pilna" : "standard"}</div>
                     </div>
                     <div class="inline-actions">
                       ${conversationUnreadForCurrentUser(conversation) ? `<span class="badge status-overdue">Nowa</span>` : ""}
+                      <span class="badge status-pending">${messageTypeLabel(conversation.type)}</span>
                       <span class="badge ${conversation.status === "zamknięta" ? "status-closed" : conversation.priority === "pilna" ? "status-overdue" : "status-open"}">${conversation.status}</span>
                       <button class="btn secondary small" onclick="selectConversation('${conversation.id}')">Otwórz</button>
                     </div>
@@ -4687,7 +4759,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
               </div>
             </div>
             <div class="card">
-              <div class="panel-title"><h3>${active ? active.subject : "Nowa wiadomość"}</h3>${active ? `<span class="badge ${active.status === "zamknięta" ? "status-closed" : active.priority === "pilna" ? "status-overdue" : "status-open"}">${active.priority} · ${active.status}</span>` : ""}</div>
+              <div class="panel-title"><h3>${active ? active.subject : "Nowa wiadomość"}</h3>${active ? `<div class="inline-actions"><span class="badge status-pending">${messageTypeLabel(active.type)}</span><span class="badge ${active.status === "zamknięta" ? "status-closed" : active.priority === "pilna" ? "status-overdue" : "status-open"}">${active.priority} · ${active.status}</span></div>` : ""}</div>
               ${active ? `<div class="entity-list">${threadMarkup}</div>` : `<div class="empty-state">Utwórz pierwszą wiadomość do zarządcy.</div>`}
               <div class="section">
                 <input id="new_message_subject" placeholder="Temat wiadomości" value="${active?.subject || ""}" ${active ? "disabled" : ""} />
@@ -4739,10 +4811,11 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                 <div class="entity-item">
                   <div>
                     <strong>${conversation.subject || "Rozmowa"}</strong>
-                    <div class="meta">${tenantName(conversation.tenantId)} · ${formatDateTime(conversation.updatedAt || conversation.createdAt)} · ${conversation.thread?.length || 0} wiadomości</div>
+                    <div class="meta">${messageTypeLabel(conversation.type)} · ${tenantName(conversation.tenantId)} · ${formatDateTime(conversation.updatedAt || conversation.createdAt)} · ${conversation.thread?.length || 0} wiadomości</div>
                   </div>
                   <div class="inline-actions">
                     ${conversationUnreadForCurrentUser(conversation) ? `<span class="badge status-overdue">Nowa</span>` : ""}
+                    <span class="badge status-pending">${messageTypeLabel(conversation.type)}</span>
                     <span class="badge ${conversation.status === "zamknięta" ? "status-closed" : conversation.priority === "pilna" ? "status-overdue" : "status-open"}">${conversation.priority}</span>
                     <button class="btn secondary small" onclick="selectConversation('${conversation.id}')">Otwórz</button>
                   </div>
@@ -4765,7 +4838,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             </div>
           </div>
           <div class="card">
-            <div class="panel-title"><h3>${active ? active.subject : "Wybierz rozmowę"}</h3>${active ? `<span class="badge ${active.status === "zamknięta" ? "status-closed" : active.priority === "pilna" ? "status-overdue" : "status-open"}">${active.priority} · ${active.status}</span>` : ""}</div>
+            <div class="panel-title"><h3>${active ? active.subject : "Wybierz rozmowę"}</h3>${active ? `<div class="inline-actions"><span class="badge status-pending">${messageTypeLabel(active.type)}</span><span class="badge ${active.status === "zamknięta" ? "status-closed" : active.priority === "pilna" ? "status-overdue" : "status-open"}">${active.priority} · ${active.status}</span></div>` : ""}</div>
             ${active ? `<div class="entity-list">${threadMarkup}</div>` : `<div class="empty-state">Po lewej wybierz rozmowę, aby odpisać najemcy.</div>`}
             ${active ? `
               <div class="section">
@@ -5479,6 +5552,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           tenantId: settlement.tenantId,
           leaseId: settlement.leaseId,
           unitId: settlement.unitId,
+          type: "settlement",
           subject: `Rozliczenie najmu za ${fmtMonth(settlement.month)}`,
           body: settlementMessage(settlement)
         });
@@ -5500,6 +5574,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           tenantId: settlement.tenantId,
           leaseId: settlement.leaseId,
           unitId: settlement.unitId,
+          type: "period_settlement",
           subject: `Rozliczenie okresowe mediów ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}`,
           body: periodSettlementMessage(settlement)
         });

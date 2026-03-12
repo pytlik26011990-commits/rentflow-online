@@ -893,6 +893,7 @@ app.post("/api/tenant/messages", requireAuth, requireTenant, async (req, res) =>
 
     state.messages.push({
       id: uid("msg"),
+      type: "general",
       tenantId: req.session.user.tenantId,
       leaseId: lease?.id || "",
       unitId: unit?.id || "",
