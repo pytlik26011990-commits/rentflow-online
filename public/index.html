@@ -848,6 +848,8 @@
     let editingTenantId = null;
     let editingLeaseId = null;
     let selectedTaxYear = new Date().getFullYear();
+    let selectedTaxLedgerUnitId = "";
+    let selectedTaxLedgerMonth = "";
 
     function defaultDocumentTemplates() {
       return {
@@ -1738,6 +1740,71 @@
 
     function portfolioTaxAnnualClosing(year = selectedTaxYearValue()) {
       return state.taxAnnualClosings.find((entry) => entry.scope === "portfolio" && !entry.unitId && entry.year === Number(year)) || null;
+    }
+
+    function taxLedgerMonthOptions(year = selectedTaxYearValue(), unitId = "") {
+      const months = new Set();
+      privateRentalRevenueRows(year, unitId).forEach((row) => months.add(String(row.date || "").slice(0, 7)));
+      privateRentalAdjustments(year, unitId).forEach((entry) => months.add(String(entry.date || "").slice(0, 7)));
+      state.taxPayments
+        .filter((entry) => String(entry.periodKey || "").startsWith(String(year)))
+        .filter((entry) => !unitId || entry.unitId === unitId)
+        .forEach((entry) => {
+          const month = entry.periodKey.includes("-Q") ? "" : entry.periodKey;
+          if (month) months.add(month);
+        });
+      return Array.from(months).sort();
+    }
+
+    function effectiveTaxLedgerUnitId(year = selectedTaxYearValue()) {
+      const units = bookkeptUnits(year);
+      if (selectedTaxLedgerUnitId && units.some((unit) => unit.id === selectedTaxLedgerUnitId)) return selectedTaxLedgerUnitId;
+      selectedTaxLedgerUnitId = units[0]?.id || "";
+      return selectedTaxLedgerUnitId;
+    }
+
+    function effectiveTaxLedgerMonth(year = selectedTaxYearValue(), unitId = effectiveTaxLedgerUnitId(year)) {
+      const months = taxLedgerMonthOptions(year, unitId);
+      if (selectedTaxLedgerMonth && months.includes(selectedTaxLedgerMonth)) return selectedTaxLedgerMonth;
+      selectedTaxLedgerMonth = months[0] || "";
+      return selectedTaxLedgerMonth;
+    }
+
+    function unitTaxLedgerRows(year = selectedTaxYearValue(), unitId = effectiveTaxLedgerUnitId(year), month = effectiveTaxLedgerMonth(year, unitId)) {
+      if (!unitId) return [];
+      const revenueRows = privateRentalRevenueRows(year, unitId)
+        .filter((row) => !month || String(row.date || "").startsWith(month))
+        .map((row) => ({
+          date: row.date,
+          kind: "wpływ",
+          title: row.chargeType,
+          detail: `${row.tenantLabel} · ${row.leaseLabel}`,
+          amount: Number(row.amount || 0),
+          cls: row.excluded ? "status-closed" : "status-active"
+        }));
+      const adjustmentRows = privateRentalAdjustments(year, unitId)
+        .filter((entry) => !month || String(entry.date || "").startsWith(month))
+        .map((entry) => ({
+          date: entry.date,
+          kind: entry.mode === "decrease" ? "korekta -" : "korekta +",
+          title: entry.note || "Korekta podatkowa",
+          detail: unitLabel(unitId),
+          amount: entry.mode === "decrease" ? -Math.abs(Number(entry.amount || 0)) : Math.abs(Number(entry.amount || 0)),
+          cls: entry.mode === "decrease" ? "status-pending" : "status-open"
+        }));
+      const taxRows = state.taxPayments
+        .filter((entry) => !unitId || entry.unitId === unitId)
+        .filter((entry) => String(entry.periodKey || "").startsWith(String(year)))
+        .filter((entry) => !month || (!entry.periodKey.includes("-Q") && entry.periodKey === month))
+        .map((entry) => ({
+          date: entry.paymentDate,
+          kind: "podatek",
+          title: `Wpłata do US za ${taxPeriodLabel(entry.periodKey)}`,
+          detail: entry.note || unitLabel(unitId),
+          amount: -Math.abs(Number(entry.amount || 0)),
+          cls: "status-active"
+        }));
+      return [...revenueRows, ...adjustmentRows, ...taxRows].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
     }
 
     function activeLeases() {
@@ -4723,6 +4790,11 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       const portfolioClosing = portfolioTaxAnnualClosing(year);
       const closings = taxAnnualClosingsForYear(year);
       const periods = summary.periods;
+      const ledgerUnitId = effectiveTaxLedgerUnitId(year);
+      const ledgerMonth = effectiveTaxLedgerMonth(year, ledgerUnitId);
+      const ledgerMonths = taxLedgerMonthOptions(year, ledgerUnitId);
+      const ledgerRows = unitTaxLedgerRows(year, ledgerUnitId, ledgerMonth);
+      const ledgerUnitSummary = ledgerUnitId ? privateRentalTaxSummary(year, ledgerUnitId) : null;
       const periodOptions = periods.length
         ? periods.map((period) => `<option value="${period.periodKey}">${period.label} · termin ${period.dueDate}</option>`).join("")
         : `<option value="">Brak okresów do wyboru</option>`;
@@ -4785,6 +4857,34 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
               `).join("") : `<div class="empty-state">Włącz lokale do księgowania, aby prowadzić je oddzielnie.</div>`}
             </div>
           </div>
+        </div>
+        <div class="card section">
+          <div class="panel-title"><h3>Dziennik księgowy lokalu</h3></div>
+          <div class="form-grid three">
+            <select onchange="setTaxLedgerUnit(this.value)"><option value="">Wybierz lokal</option>${includedUnits.map((unit) => `<option value="${unit.id}" ${ledgerUnitId === unit.id ? "selected" : ""}>${unitLabel(unit.id)}</option>`).join("")}</select>
+            <select onchange="setTaxLedgerMonth(this.value)"><option value="">Cały rok</option>${ledgerMonths.map((month) => `<option value="${month}" ${ledgerMonth === month ? "selected" : ""}>${fmtMonth(month)}</option>`).join("")}</select>
+            <div class="inline-actions">
+              <button class="btn secondary" onclick="copyUnitMonthlyTaxReport('${ledgerUnitId || ""}')">Kopiuj raport</button>
+              <button class="btn secondary" onclick="printUnitMonthlyTaxReport('${ledgerUnitId || ""}')">Drukuj raport</button>
+            </div>
+          </div>
+          ${ledgerUnitId ? `
+            <div class="section notice">Lokal: <strong>${unitLabel(ledgerUnitId)}</strong><br>Przychód roczny: <strong>${fmt(ledgerUnitSummary?.taxableRevenue || 0)}</strong><br>Podatek roczny: <strong>${fmt(ledgerUnitSummary?.taxDue || 0)}</strong></div>
+            <table>
+              <thead><tr><th>Data</th><th>Typ</th><th>Tytuł</th><th>Szczegóły</th><th>Kwota</th></tr></thead>
+              <tbody>
+                ${ledgerRows.length ? ledgerRows.map((row) => `
+                  <tr>
+                    <td>${row.date}</td>
+                    <td><span class="badge ${row.cls}">${row.kind}</span></td>
+                    <td>${truncatedText(row.title, 26)}</td>
+                    <td>${truncatedText(row.detail, 28)}</td>
+                    <td class="${row.amount >= 0 ? "positive" : "negative"}">${fmt(row.amount)}</td>
+                  </tr>
+                `).join("") : `<tr><td colspan="5">Brak pozycji dla wybranego filtra.</td></tr>`}
+              </tbody>
+            </table>
+          ` : `<div class="empty-state">Włącz lokal do księgowania, aby zobaczyć dziennik księgowy.</div>`}
         </div>
         <div class="card section">
           <div class="panel-title"><h3>Roczne zestawienie do PIT-28</h3></div>
@@ -5573,6 +5673,19 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
 
     function setSelectedTaxYear(year) {
       selectedTaxYear = Number(year) || new Date().getFullYear();
+      selectedTaxLedgerMonth = "";
+      selectedTaxLedgerUnitId = "";
+      renderTaxes();
+    }
+
+    function setTaxLedgerUnit(unitId) {
+      selectedTaxLedgerUnitId = unitId || "";
+      selectedTaxLedgerMonth = "";
+      renderTaxes();
+    }
+
+    function setTaxLedgerMonth(month) {
+      selectedTaxLedgerMonth = month || "";
       renderTaxes();
     }
 
@@ -5656,6 +5769,7 @@ Pozostało według danych w systemie: ${summary.taxRemainingRounded} zł`;
     }
 
     function unitTaxSummaryText(unitId, year = selectedTaxYearValue()) {
+      if (!unitId) return "Brak wybranego lokalu do raportu.";
       const summary = privateRentalPit28Summary(year, unitId);
       return `Roczne podsumowanie lokalu ${unitLabel(unitId)} za ${year}
 
@@ -5668,6 +5782,7 @@ Pozostało: ${summary.taxRemainingRounded} zł`;
     }
 
     function unitMonthlyTaxReportText(unitId, year = selectedTaxYearValue()) {
+      if (!unitId) return "Brak wybranego lokalu do raportu miesięcznego.";
       const summary = privateRentalTaxSummary(year, unitId);
       const lines = summary.periods.map((period) => `${period.label}: przychód ${fmt(period.revenue)}, korekty ${fmt(period.adjustments)}, podstawa ${fmt(period.taxableRevenue)}, podatek ${fmt(period.taxDue)}, wpłaty ${fmt(period.paid)}`).join("\n");
       return `Miesięczny raport podatkowy lokalu ${unitLabel(unitId)} za ${year}
@@ -5682,6 +5797,9 @@ Pozostało: ${fmt(summary.taxRemaining)}`;
     }
 
     function unitMonthlyTaxPrintableHtml(unitId, year = selectedTaxYearValue()) {
+      if (!unitId) {
+        return htmlDocumentShell("Raport miesięczny", `<h1>Raport miesięczny podatkowy</h1><p>Nie wybrano lokalu.</p>`);
+      }
       const summary = privateRentalTaxSummary(year, unitId);
       return htmlDocumentShell(`Raport miesięczny ${unitLabel(unitId)} ${year}`, `
         <h1>Raport miesięczny podatkowy lokalu</h1>
