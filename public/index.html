@@ -699,6 +699,7 @@
     }
 
     function today() { return new Date().toISOString().slice(0, 10); }
+    function nowIso() { return new Date().toISOString(); }
     function currentMonth() { return new Date().toISOString().slice(0, 7); }
     function monthStart(month) { return `${month}-01`; }
     function monthEnd(month) {
@@ -777,6 +778,65 @@
       return typeof value === "string" ? sanitizeText(value) : value;
     }
 
+    function asIsoDateTime(value) {
+      if (!value) return "";
+      if (typeof value === "string" && value.length === 10) return `${value}T09:00:00.000Z`;
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      return date.toISOString();
+    }
+
+    function addHours(dateValue, hours) {
+      const base = new Date(asIsoDateTime(dateValue) || nowIso());
+      base.setHours(base.getHours() + Number(hours || 0));
+      return base.toISOString();
+    }
+
+    function ticketSlaTargets(priority, createdAt) {
+      const matrix = {
+        niski: { responseHours: 24, resolutionHours: 120 },
+        "średni": { responseHours: 8, resolutionHours: 72 },
+        wysoki: { responseHours: 2, resolutionHours: 24 }
+      };
+      const selected = matrix[priority] || matrix["średni"];
+      return {
+        responseHours: selected.responseHours,
+        resolutionHours: selected.resolutionHours,
+        targetResponseAt: addHours(createdAt, selected.responseHours),
+        targetResolutionAt: addHours(createdAt, selected.resolutionHours)
+      };
+    }
+
+    function normalizeTicket(ticket) {
+      const createdAt = asIsoDateTime(ticket?.createdAt) || nowIso();
+      const priority = ["niski", "średni", "wysoki"].includes(ticket?.priority) ? ticket.priority : "średni";
+      const status = ["otwarte", "w trakcie", "zamknięte"].includes(ticket?.status) ? ticket.status : "otwarte";
+      const defaults = ticketSlaTargets(priority, createdAt);
+
+      return {
+        ...ticket,
+        createdAt,
+        priority,
+        status,
+        responseHours: Number(ticket?.responseHours || defaults.responseHours),
+        resolutionHours: Number(ticket?.resolutionHours || defaults.resolutionHours),
+        targetResponseAt: asIsoDateTime(ticket?.targetResponseAt) || defaults.targetResponseAt,
+        targetResolutionAt: asIsoDateTime(ticket?.targetResolutionAt) || defaults.targetResolutionAt,
+        startedAt: asIsoDateTime(ticket?.startedAt),
+        resolvedAt: asIsoDateTime(ticket?.resolvedAt),
+        lastCommentAt: asIsoDateTime(ticket?.lastCommentAt),
+        comments: Array.isArray(ticket?.comments)
+          ? ticket.comments.map((comment) => ({
+              ...comment,
+              message: sanitizeText(comment?.message || ""),
+              authorName: sanitizeText(comment?.authorName || ""),
+              authorRole: sanitizeText(comment?.authorRole || ""),
+              createdAt: asIsoDateTime(comment?.createdAt)
+            }))
+          : []
+      };
+    }
+
     function cleanupRelationships() {
       const buildingIds = new Set(state.buildings.map((building) => building.id));
       state.units = state.units.filter((unit) => buildingIds.has(unit.buildingId));
@@ -846,17 +906,7 @@
         deposit: Number(lease.deposit || 0)
       }));
 
-      state.tickets = state.tickets.map((ticket) => ({
-        ...ticket,
-        comments: Array.isArray(ticket.comments)
-          ? ticket.comments.map((comment) => ({
-              ...comment,
-              message: sanitizeText(comment?.message || ""),
-              authorName: sanitizeText(comment?.authorName || ""),
-              authorRole: sanitizeText(comment?.authorRole || "")
-            }))
-          : []
-      }));
+      state.tickets = state.tickets.map(normalizeTicket);
 
       cleanupRelationships();
     }
@@ -983,10 +1033,10 @@
         .map((ticket) => ({
           kind: "ticket",
           label: unitLabel(ticket.unitId),
-          title: ticket.title,
+          title: `${ticket.title} · ${ticketSlaState(ticket).label}`,
           amount: 0,
-          date: ticket.createdAt,
-          severity: ticket.priority === "wysoki" ? "high" : "medium"
+          date: ticket.targetResolutionAt || ticket.targetResponseAt || ticket.createdAt,
+          severity: ticketSlaState(ticket).tone === "high" ? "high" : "medium"
         }));
 
       const documentSignals = expiringDocuments(45).slice(0, 4).map((document) => ({
@@ -1023,8 +1073,8 @@
           id: ticket.id,
           type: "Zgłoszenie",
           title: `${ticket.title} · ${unitLabel(ticket.unitId)}`,
-          meta: `${ticket.status} · ${ticket.createdAt}`,
-          date: ticket.createdAt || ""
+          meta: `${ticket.status} · ${ticketSlaState(ticket).label}`,
+          date: ticket.lastCommentAt || ticket.resolvedAt || ticket.createdAt || ""
         })),
         ...state.documents.map((document) => ({
           id: document.id,
@@ -1129,6 +1179,25 @@
       return Math.ceil(diff / (1000 * 60 * 60 * 24));
     }
 
+    function hoursUntil(dateValue) {
+      if (!dateValue) return null;
+      const diff = new Date(dateValue).getTime() - new Date().getTime();
+      return Math.ceil(diff / (1000 * 60 * 60));
+    }
+
+    function formatDateTime(dateValue) {
+      if (!dateValue) return "—";
+      const date = new Date(dateValue);
+      if (Number.isNaN(date.getTime())) return "—";
+      return new Intl.DateTimeFormat("pl-PL", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(date);
+    }
+
     function documentStatus(document) {
       const days = daysUntil(document.expiresAt);
       if (document.status === "archiwalne") return { label: "archiwalne", cls: "status-closed" };
@@ -1146,6 +1215,54 @@
           return remaining !== null && remaining <= days;
         })
         .sort((a, b) => String(a.expiresAt || "").localeCompare(String(b.expiresAt || "")));
+    }
+
+    function ticketSlaState(ticket) {
+      const responseRemaining = hoursUntil(ticket.targetResponseAt);
+      const resolutionRemaining = hoursUntil(ticket.targetResolutionAt);
+      const responseBreached = ticket.status === "otwarte" && responseRemaining !== null && responseRemaining < 0;
+      const resolutionBreached = ticket.status !== "zamknięte" && resolutionRemaining !== null && resolutionRemaining < 0;
+      const warning = !responseBreached && !resolutionBreached && (
+        (ticket.status === "otwarte" && responseRemaining !== null && responseRemaining <= 2) ||
+        (ticket.status !== "zamknięte" && resolutionRemaining !== null && resolutionRemaining <= 8)
+      );
+
+      if (resolutionBreached) return { label: "po SLA rozwiązania", cls: "status-overdue", tone: "high" };
+      if (responseBreached) return { label: "po SLA reakcji", cls: "status-overdue", tone: "high" };
+      if (ticket.status === "zamknięte") return { label: "zamknięte w toku", cls: "status-closed", tone: "ok" };
+      if (warning) return { label: "wymaga reakcji", cls: "status-pending", tone: "medium" };
+      return { label: "w SLA", cls: "status-active", tone: "ok" };
+    }
+
+    function ticketAlerts(limit = 6) {
+      return state.tickets
+        .filter((ticket) => ticket.status !== "zamknięte")
+        .map((ticket) => {
+          const sla = ticketSlaState(ticket);
+          return {
+            id: ticket.id,
+            title: ticket.title,
+            label: `${unitLabel(ticket.unitId)} · ${tenantName(ticket.tenantId)}`,
+            date: ticket.targetResolutionAt || ticket.targetResponseAt || ticket.createdAt,
+            severity: sla.tone === "high" ? "high" : sla.tone === "medium" ? "medium" : "low",
+            badge: sla.label
+          };
+        })
+        .filter((alert) => alert.severity !== "low")
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+        .slice(0, limit);
+    }
+
+    function ticketTimelineSummary(ticket) {
+      if (!ticket) return [];
+      return [
+        { label: "Utworzone", value: formatDateTime(ticket.createdAt) },
+        { label: "SLA reakcji", value: formatDateTime(ticket.targetResponseAt) },
+        { label: "SLA rozwiązania", value: formatDateTime(ticket.targetResolutionAt) },
+        { label: "Przejęte", value: ticket.startedAt ? formatDateTime(ticket.startedAt) : "jeszcze nie" },
+        { label: "Ostatnia wiadomość", value: ticket.lastCommentAt ? formatDateTime(ticket.lastCommentAt) : "brak" },
+        { label: "Zamknięte", value: ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : "otwarte" }
+      ];
     }
 
     function ticketPriorityClass(priority) {
@@ -1480,6 +1597,7 @@
       const upcomingLeases = expiringLeases(45);
       const signals = operationalSignals();
       const activities = recentActivity();
+      const alerts = ticketAlerts();
       const buildings = buildingPerformance().slice(0, 5);
       const tenants = topTenantsByBalance(5);
       const collection = collectionRate();
@@ -1527,6 +1645,21 @@
                     <div class="muted small">${item.meta}</div>
                   </div>
                 `).join("") : `<div class="empty-state">Gdy pojawią się wpłaty, koszty i zgłoszenia, zobaczysz je tutaj.</div>`}
+              </div>
+            </div>
+            <div class="card">
+              <div class="panel-title"><h3>Centrum SLA</h3></div>
+              <div class="ops-list">
+                ${alerts.length ? alerts.map((alert) => `
+                  <div class="ops-item ${alert.severity === "high" ? "danger-box" : ""}">
+                    <strong>${alert.title}</strong>
+                    <div class="muted">${alert.label}</div>
+                    <div class="signal-row">
+                      <span class="badge ${alert.severity === "high" ? "status-overdue" : "status-pending"}">${alert.badge}</span>
+                      <span>${formatDateTime(alert.date)}</span>
+                    </div>
+                  </div>
+                `).join("") : `<div class="empty-state">Wszystkie aktywne zgłoszenia mieszczą się w SLA.</div>`}
               </div>
             </div>
           </div>
@@ -1966,6 +2099,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             </div>
           `).join("")
         : `<div class="empty-state">Jeszcze nie ma żadnej komunikacji w tym zgłoszeniu.</div>`;
+      const activeTicketSla = activeTicket ? ticketSlaState(activeTicket) : null;
+      const activeTimeline = activeTicket ? ticketTimelineSummary(activeTicket) : [];
 
       if (currentUser?.role === "tenant") {
         document.getElementById("maintenance").innerHTML = `
@@ -1990,8 +2125,12 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                   <div class="card"><div class="muted small">Status</div><div><span class="badge ${ticketStatusClass(activeTicket.status)}">${activeTicket.status}</span></div></div>
                   <div class="card"><div class="muted small">Priorytet</div><div><span class="badge ${ticketPriorityClass(activeTicket.priority)}">${activeTicket.priority}</span></div></div>
                   <div class="card"><div class="muted small">Opiekun</div><div>${activeTicket.assignee || "W przygotowaniu"}</div></div>
+                  <div class="card"><div class="muted small">SLA</div><div><span class="badge ${activeTicketSla.cls}">${activeTicketSla.label}</span></div></div>
                 </div>
                 <div class="section notice">${activeTicket.notes || "Brak dodatkowego opisu od najemcy."}</div>
+                <div class="grid cards section">
+                  ${activeTimeline.map((item) => `<div class="card"><div class="muted small">${item.label}</div><div>${item.value}</div></div>`).join("")}
+                </div>
                 <div class="section">
                   <div class="panel-title"><h3>Rozmowa w sprawie</h3></div>
                   <div class="entity-list">${commentThreadMarkup}</div>
@@ -2034,6 +2173,12 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                 Najemca: ${tenantName(activeTicket.tenantId)}<br>
                 Data utworzenia: ${activeTicket.createdAt || "—"}
               </div>
+              <div class="grid cards section">
+                <div class="card"><div class="muted small">SLA</div><div><span class="badge ${activeTicketSla.cls}">${activeTicketSla.label}</span></div></div>
+                <div class="card"><div class="muted small">Reakcja do</div><div>${formatDateTime(activeTicket.targetResponseAt)}</div></div>
+                <div class="card"><div class="muted small">Rozwiązanie do</div><div>${formatDateTime(activeTicket.targetResolutionAt)}</div></div>
+                <div class="card"><div class="muted small">Ostatnia wiadomość</div><div>${activeTicket.lastCommentAt ? formatDateTime(activeTicket.lastCommentAt) : "brak"}</div></div>
+              </div>
               <div class="form-grid three section">
                 <select id="ticket_status_input">
                   <option value="otwarte" ${activeTicket.status === "otwarte" ? "selected" : ""}>otwarte</option>
@@ -2044,6 +2189,9 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                 <button class="btn" onclick="updateTicketWorkflow()">Zapisz workflow</button>
               </div>
               <div class="section notice">${activeTicket.notes || "Brak notatek startowych do zgłoszenia."}</div>
+              <div class="grid cards section">
+                ${activeTimeline.map((item) => `<div class="card"><div class="muted small">${item.label}</div><div>${item.value}</div></div>`).join("")}
+              </div>
               <div class="section">
                 <div class="panel-title"><h3>Komunikacja</h3></div>
                 <div class="entity-list">${commentThreadMarkup}</div>
@@ -2522,23 +2670,31 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       if (!title) return alert("Podaj tytuł zgłoszenia.");
       const notes = document.getElementById("tk_notes").value.trim();
       const ticketId = uid("tk");
+      const createdAt = nowIso();
+      const priority = document.getElementById("tk_priority").value;
+      const slaTargets = ticketSlaTargets(priority, createdAt);
       state.tickets.push({
         id: ticketId,
-        createdAt: today(),
+        createdAt,
         unitId,
         tenantId: document.getElementById("tk_tenant").value,
         title,
-        priority: document.getElementById("tk_priority").value,
+        priority,
         status: document.getElementById("tk_status").value,
         assignee: document.getElementById("tk_assignee").value.trim(),
         notes,
+        responseHours: slaTargets.responseHours,
+        resolutionHours: slaTargets.resolutionHours,
+        targetResponseAt: slaTargets.targetResponseAt,
+        targetResolutionAt: slaTargets.targetResolutionAt,
         comments: notes ? [{
           id: uid("cmt"),
           authorRole: "owner",
           authorName: currentUser?.name || "Właściciel",
           message: notes,
-          createdAt: new Date().toISOString()
-        }] : []
+          createdAt
+        }] : [],
+        lastCommentAt: notes ? createdAt : ""
       });
       selectedTicketId = ticketId;
       await save();

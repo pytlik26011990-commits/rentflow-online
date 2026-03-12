@@ -525,13 +525,15 @@ app.post("/api/tickets/comment", requireAuth, async (req, res) => {
     }
 
     ticket.comments = Array.isArray(ticket.comments) ? ticket.comments : [];
+    const commentCreatedAt = new Date().toISOString();
     ticket.comments.push({
       id: uid("cmt"),
       authorRole: req.session.user.role,
       authorName: req.session.user.name,
       message: messageResult.value,
-      createdAt: new Date().toISOString()
+      createdAt: commentCreatedAt
     });
+    ticket.lastCommentAt = commentCreatedAt;
 
     await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
     return res.json({ ok: true });
@@ -563,9 +565,21 @@ app.post("/api/tickets/status", requireAuth, requireOwner, async (req, res) => {
 
     const previousStatus = ticket.status || "otwarte";
     const previousAssignee = ticket.assignee || "";
+    const statusChangedAt = new Date().toISOString();
     ticket.status = status;
     ticket.assignee = assignee;
     ticket.comments = Array.isArray(ticket.comments) ? ticket.comments : [];
+
+    if (status === "w trakcie" && !ticket.startedAt) {
+      ticket.startedAt = statusChangedAt;
+    }
+    if (status === "zamknięte") {
+      ticket.startedAt = ticket.startedAt || statusChangedAt;
+      ticket.resolvedAt = statusChangedAt;
+    }
+    if (status !== "zamknięte" && previousStatus === "zamknięte") {
+      ticket.resolvedAt = "";
+    }
 
     if (previousStatus !== status || previousAssignee !== assignee) {
       const changes = [];
@@ -576,8 +590,9 @@ app.post("/api/tickets/status", requireAuth, requireOwner, async (req, res) => {
         authorRole: "owner",
         authorName: req.session.user.name,
         message: `Aktualizacja zgłoszenia (${changes.join(", ")})`,
-        createdAt: new Date().toISOString()
+        createdAt: statusChangedAt
       });
+      ticket.lastCommentAt = statusChangedAt;
     }
 
     await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, state);
