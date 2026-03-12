@@ -864,8 +864,8 @@
 
     const ownerPages = [
       ["dashboard", "Dashboard", "Podgląd portfela najmu, płatności i mediów."],
-      ["properties", "Budynki i lokale", "Zarządzanie budynkami i mieszkaniami."],
-      ["tenants", "Najemcy i umowy", "Baza najemców, karta najmu i obsługa umów w jednym miejscu."],
+      ["properties", "Budynki, lokale i umowy", "Zarządzanie budynkami, mieszkaniami i przypisanymi umowami."],
+      ["tenants", "Najemcy", "Baza najemców i pełna karta najmu w jednym miejscu."],
       ["meters", "Media", "Liczniki, odczyty, korekty i kontrola zużycia."],
       ["settlements", "Rozliczenia miesięczne", "Każda umowa osobno, z kontrolą brakujących mediów."],
       ["periodSettlements", "Rozliczenia okresowe", "Porównanie zaliczek z kosztami rzeczywistymi."],
@@ -2295,6 +2295,37 @@
       const next = selected && conversations.some((message) => message.id === selected.id) ? selected : fallback;
       selectedConversationId = next?.id || null;
       return next;
+    }
+
+    async function deliverOwnerMessageToTenantPortal({ tenantId, leaseId = "", unitId = "", subject, body, priority = "normalna" }) {
+      const tenant = tenantById(tenantId);
+      if (!tenant) throw new Error("Nie znaleziono najemcy.");
+      if (!String(subject || "").trim() || !String(body || "").trim()) throw new Error("Brakuje tematu albo treści wiadomości.");
+      const now = nowIso();
+      const conversation = {
+        id: uid("msg"),
+        tenantId,
+        leaseId,
+        unitId,
+        subject: String(subject).trim(),
+        priority,
+        status: "otwarta",
+        createdAt: now,
+        updatedAt: now,
+        lastReadByOwnerAt: now,
+        thread: [{
+          id: uid("msgline"),
+          authorRole: currentUser?.role || "owner",
+          authorName: currentUser?.name || "Zarządca",
+          body: String(body).trim(),
+          createdAt: now,
+          attachments: []
+        }]
+      };
+      state.messages.push(conversation);
+      selectedConversationId = conversation.id;
+      await save();
+      return conversation;
     }
 
     function formatFileSize(size = 0) {
@@ -3998,7 +4029,7 @@
           </div>
         </div>
 
-        ${selected ? `<div class="card section"><div class="panel-title"><h3>Wybrane rozliczenie</h3><div class="inline-actions"><button class="btn secondary small" onclick="copySettlementMessage()">Kopiuj</button><button class="btn secondary small" onclick="sendSettlementMail()">Mail</button><button class="btn secondary small" onclick="printSettlement()">Drukuj</button></div></div><div class="details-box">${buildSettlementDetails(selected)}</div><div class="section"><textarea>${settlementMessage(selected)}</textarea></div></div>` : ''}
+        ${selected ? `<div class="card section"><div class="panel-title"><h3>Wybrane rozliczenie</h3><div class="inline-actions"><button class="btn secondary small" onclick="copySettlementMessage()">Kopiuj</button><button class="btn secondary small" onclick="sendSettlementToPortal()">Wyślij do panelu</button><button class="btn secondary small" onclick="sendSettlementMail()">Mail</button><button class="btn secondary small" onclick="printSettlement()">Drukuj</button></div></div><div class="details-box">${buildSettlementDetails(selected)}</div><div class="section"><textarea>${settlementMessage(selected)}</textarea></div></div>` : ''}
       `;
     }
 
@@ -4066,7 +4097,7 @@ Razem: ${fmt(settlement.total)}`;
         </div>
         <div class="grid two section">
           <div class="card"><div class="panel-title"><h3>Historia rozliczeń okresowych</h3></div><table><thead><tr><th>Najemca</th><th>Okres</th><th>Wynik</th><th></th></tr></thead><tbody>${state.periodSettlements.slice().sort((a,b)=>(b.toMonth + b.createdAt).localeCompare(a.toMonth + a.createdAt)).map(s => `<tr><td>${s.tenantName}</td><td>${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}</td><td class="${s.finalDifference > 0 ? "negative" : s.finalDifference < 0 ? "positive" : ""}">${fmt(s.finalDifference)}</td><td class="inline-actions"><button class="btn secondary small" onclick="selectPeriodSettlement('${s.id}')">Podgląd</button><button class="btn red small" onclick="deletePeriodSettlement('${s.id}')">Usuń</button></td></tr>`).join("") || `<tr><td colspan="4">Brak rozliczeń okresowych</td></tr>`}</tbody></table></div>
-          <div class="card"><div class="panel-title"><h3>Podgląd rozliczenia okresowego</h3>${selected ? `<div class="inline-actions"><button class="btn secondary small" onclick="copyPeriodSettlementMessage()">Kopiuj</button><button class="btn secondary small" onclick="sendPeriodSettlementMail()">Mail</button><button class="btn secondary small" onclick="printPeriodSettlement()">Drukuj</button></div>` : ""}</div>${selected ? `<div class="details-box">${buildPeriodSettlementDetails(selected)}</div>` : `<div class="notice warning-box">Wybierz rozliczenie okresowe.</div>`}</div>
+          <div class="card"><div class="panel-title"><h3>Podgląd rozliczenia okresowego</h3>${selected ? `<div class="inline-actions"><button class="btn secondary small" onclick="copyPeriodSettlementMessage()">Kopiuj</button><button class="btn secondary small" onclick="sendPeriodSettlementToPortal()">Wyślij do panelu</button><button class="btn secondary small" onclick="sendPeriodSettlementMail()">Mail</button><button class="btn secondary small" onclick="printPeriodSettlement()">Drukuj</button></div>` : ""}</div>${selected ? `<div class="details-box">${buildPeriodSettlementDetails(selected)}</div>` : `<div class="notice warning-box">Wybierz rozliczenie okresowe.</div>`}</div>
         </div>
         ${selected ? `<div class="card section"><div class="panel-title"><h3>Wiadomość dla najemcy</h3></div><textarea>${periodSettlementMessage(selected)}</textarea></div>` : ""}
       `;
@@ -5440,9 +5471,45 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     }
     function copySettlementMessage() { const settlement = findSettlement(selectedSettlementId); if (!settlement) return; copyToClipboard(settlementMessage(settlement)); }
     function sendSettlementMail() { const settlement = findSettlement(selectedSettlementId); if (!settlement) return; const tenant = tenantById(settlement.tenantId); mailtoText(tenant?.email || "", `Rozliczenie najmu za ${fmtMonth(settlement.month)}`, settlementMessage(settlement)); }
+    async function sendSettlementToPortal() {
+      const settlement = findSettlement(selectedSettlementId);
+      if (!settlement) return alert("Wybierz rozliczenie.");
+      try {
+        await deliverOwnerMessageToTenantPortal({
+          tenantId: settlement.tenantId,
+          leaseId: settlement.leaseId,
+          unitId: settlement.unitId,
+          subject: `Rozliczenie najmu za ${fmtMonth(settlement.month)}`,
+          body: settlementMessage(settlement)
+        });
+        renderAll();
+        showPage("communications");
+        alert("Rozliczenie zostało wysłane do panelu najemcy.");
+      } catch (error) {
+        alert(error.message || "Nie udało się wysłać rozliczenia do panelu.");
+      }
+    }
     function printSettlement() { const settlement = findSettlement(selectedSettlementId); if (!settlement) return; openPrintWindow(settlementPrintableHtml(settlement)); }
     function copyPeriodSettlementMessage() { const settlement = findPeriodSettlement(selectedPeriodSettlementId); if (!settlement) return; copyToClipboard(periodSettlementMessage(settlement)); }
     function sendPeriodSettlementMail() { const settlement = findPeriodSettlement(selectedPeriodSettlementId); if (!settlement) return; const tenant = tenantById(settlement.tenantId); mailtoText(tenant?.email || "", `Rozliczenie okresowe mediów ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}`, periodSettlementMessage(settlement)); }
+    async function sendPeriodSettlementToPortal() {
+      const settlement = findPeriodSettlement(selectedPeriodSettlementId);
+      if (!settlement) return alert("Wybierz rozliczenie okresowe.");
+      try {
+        await deliverOwnerMessageToTenantPortal({
+          tenantId: settlement.tenantId,
+          leaseId: settlement.leaseId,
+          unitId: settlement.unitId,
+          subject: `Rozliczenie okresowe mediów ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}`,
+          body: periodSettlementMessage(settlement)
+        });
+        renderAll();
+        showPage("communications");
+        alert("Rozliczenie okresowe zostało wysłane do panelu najemcy.");
+      } catch (error) {
+        alert(error.message || "Nie udało się wysłać rozliczenia okresowego do panelu.");
+      }
+    }
     function printPeriodSettlement() { const settlement = findPeriodSettlement(selectedPeriodSettlementId); if (!settlement) return; openPrintWindow(periodSettlementPrintableHtml(settlement)); }
     async function addCharge() {
       const leaseId = document.getElementById("c_lease").value;
