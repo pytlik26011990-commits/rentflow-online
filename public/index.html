@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RentFlow V4</title>
+  <title>RentFlow V5</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -231,6 +231,11 @@
     .right {
       text-align: right;
     }
+    .inline-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     @media (max-width: 1200px) {
       .cards, .two, .form-grid, .form-grid.three, .form-grid.two {
         grid-template-columns: 1fr 1fr;
@@ -249,8 +254,8 @@
 <body>
   <div class="app">
     <aside>
-      <div class="brand">RentFlow V4</div>
-      <div class="sub">Rozliczenia Pro</div>
+      <div class="brand">RentFlow V5</div>
+      <div class="sub">Rozliczenia Pro + korekty</div>
       <div class="nav" id="nav"></div>
     </aside>
 
@@ -298,7 +303,7 @@
       tickets: [],
       settlements: [],
       settings: {
-        companyName: "RentFlow V4",
+        companyName: "RentFlow V5",
         ownerName: "Zarządca",
         baseCurrency: "PLN",
         utilityVAT: 23,
@@ -315,8 +320,8 @@
       ["properties", "Budynki i lokale", "Zarządzanie budynkami i mieszkaniami."],
       ["tenants", "Najemcy", "Baza najemców i kontaktów."],
       ["leases", "Umowy", "Umowy najmu, czynsz i kaucje."],
-      ["meters", "Media", "Liczniki, odczyty i rozliczenia zużycia."],
-      ["settlements", "Rozliczenia", "Zamknięcie miesiąca, historia, wiadomości dla najemców."],
+      ["meters", "Media", "Liczniki, odczyty, korekty i rozliczenia zużycia."],
+      ["settlements", "Rozliczenia", "Zamknięcie miesiąca, historia, cofanie i wiadomości dla najemców."],
       ["payments", "Opłaty i płatności", "Należności, wpłaty i zaległości."],
       ["expenses", "Koszty", "Koszty budynków i lokali."],
       ["maintenance", "Usterki", "Zgłoszenia, priorytety i statusy."],
@@ -345,12 +350,6 @@
     function monthEnd(month) {
       const [y, m] = month.split("-").map(Number);
       return new Date(y, m, 0).toISOString().slice(0, 10);
-    }
-
-    function prevDay(dateStr) {
-      const d = new Date(dateStr);
-      d.setDate(d.getDate() - 1);
-      return d.toISOString().slice(0, 10);
     }
 
     function dueDateForMonth(month) {
@@ -400,7 +399,7 @@
       state.tickets ||= [];
       state.settlements ||= [];
       state.settings ||= {};
-      state.settings.companyName ||= "RentFlow V4";
+      state.settings.companyName ||= "RentFlow V5";
       state.settings.ownerName ||= "";
       state.settings.baseCurrency ||= "PLN";
       state.settings.utilityVAT ||= 23;
@@ -487,7 +486,7 @@
     function readingsForMeter(meterId) {
       return state.meterReadings
         .filter((r) => r.meterId === meterId)
-        .sort((a, b) => a.date.localeCompare(b.date));
+        .sort((a, b) => (a.date + a.id).localeCompare(b.date + b.id));
     }
 
     function latestReadingOnOrBefore(meterId, date) {
@@ -498,6 +497,20 @@
     function readingBefore(meterId, date) {
       const all = readingsForMeter(meterId).filter((r) => r.date < date);
       return all.length ? all[all.length - 1] : null;
+    }
+
+    function previousReadingOf(reading) {
+      const all = readingsForMeter(reading.meterId);
+      const idx = all.findIndex((r) => r.id === reading.id);
+      if (idx <= 0) return null;
+      return all[idx - 1];
+    }
+
+    function nextReadingOf(reading) {
+      const all = readingsForMeter(reading.meterId);
+      const idx = all.findIndex((r) => r.id === reading.id);
+      if (idx < 0 || idx >= all.length - 1) return null;
+      return all[idx + 1];
     }
 
     function meterConsumptionForMonth(meterId, month) {
@@ -925,9 +938,9 @@ ${settlement.lines.map(line => `
         </div>
 
         <div class="card section">
-          <div class="panel-title"><h3>Historia odczytów</h3></div>
+          <div class="panel-title"><h3>Historia odczytów z korektą</h3></div>
           <table>
-            <thead><tr><th>Data</th><th>Licznik</th><th>Stan</th></tr></thead>
+            <thead><tr><th>Data</th><th>Licznik</th><th>Stan</th><th></th></tr></thead>
             <tbody>
               ${state.meterReadings
                 .slice()
@@ -939,6 +952,10 @@ ${settlement.lines.map(line => `
                       <td>${r.date}</td>
                       <td>${meter ? `${unitLabel(meter.unitId)} — ${meter.type}` : "—"}</td>
                       <td>${r.value}</td>
+                      <td class="inline-actions">
+                        <button class="btn secondary small" onclick="editReading('${r.id}')">Edytuj</button>
+                        <button class="btn red small" onclick="deleteReading('${r.id}')">Usuń</button>
+                      </td>
                     </tr>
                   `;
                 }).join("")}
@@ -959,12 +976,13 @@ ${settlement.lines.map(line => `
           <div class="panel-title"><h3>Zamknięcie miesiąca</h3></div>
           <div class="form-grid two">
             <input id="settlement_month" type="month" value="${monthDefault}" />
-            <div class="notice">
-              System zapisze snapshot rozliczeń za wybrany miesiąc. Późniejsze zmiany liczników nie zmienią już zamkniętego rozliczenia.
+            <div class="notice warning-box">
+              Przed zamknięciem miesiąca upewnij się, że odczyty liczników są poprawne. V5 pozwala potem usunąć rozliczenie i wygenerować je ponownie.
             </div>
           </div>
-          <div class="section">
+          <div class="section inline-actions">
             <button class="btn green" onclick="closeMonth()">Zamknij miesiąc i wygeneruj rozliczenia</button>
+            <button class="btn red" onclick="deleteMonthSettlements()">Usuń cały miesiąc</button>
           </div>
         </div>
 
@@ -991,8 +1009,9 @@ ${settlement.lines.map(line => `
                       <td>${s.tenantName}</td>
                       <td>${s.unitLabel}</td>
                       <td>${fmt(s.total)}</td>
-                      <td>
+                      <td class="inline-actions">
                         <button class="btn secondary small" onclick="selectSettlement('${s.id}')">Podgląd</button>
+                        <button class="btn red small" onclick="deleteSettlement('${s.id}')">Usuń</button>
                       </td>
                     </tr>
                   `).join("") || `<tr><td colspan="5">Brak rozliczeń</td></tr>`}
@@ -1004,7 +1023,7 @@ ${settlement.lines.map(line => `
             <div class="panel-title">
               <h3>Podgląd rozliczenia</h3>
               ${selected ? `
-                <div>
+                <div class="inline-actions">
                   <button class="btn secondary small" onclick="copySettlementMessage()">Kopiuj wiadomość</button>
                   <button class="btn secondary small" onclick="sendSettlementMail()">Mail</button>
                   <button class="btn secondary small" onclick="printSettlement()">Drukuj</button>
@@ -1013,12 +1032,8 @@ ${settlement.lines.map(line => `
             </div>
             ${
               selected
-                ? `
-                  <div class="details-box" id="settlement_details">${buildSettlementDetails(selected)}</div>
-                `
-                : `
-                  <div class="notice warning-box">Wybierz rozliczenie z listy po lewej.</div>
-                `
+                ? `<div class="details-box">${buildSettlementDetails(selected)}</div>`
+                : `<div class="notice warning-box">Wybierz rozliczenie z listy po lewej.</div>`
             }
           </div>
         </div>
@@ -1425,6 +1440,29 @@ Razem: ${fmt(settlement.total)}`;
       showMeterHint();
     }
 
+    function validateReadingAgainstNeighbors(readingId, meterId, date, value) {
+      const current = readingId ? state.meterReadings.find((r) => r.id === readingId) : null;
+      const temp = { id: readingId || "temp", meterId, date, value: Number(value) };
+      const meterReadings = state.meterReadings
+        .filter((r) => r.meterId === meterId && r.id !== readingId)
+        .concat(temp)
+        .sort((a, b) => (a.date + a.id).localeCompare(b.date + b.id));
+
+      const idx = meterReadings.findIndex((r) => r.id === temp.id);
+      const prev = idx > 0 ? meterReadings[idx - 1] : null;
+      const next = idx < meterReadings.length - 1 ? meterReadings[idx + 1] : null;
+
+      if (prev && Number(value) < Number(prev.value)) {
+        return `Stan nie może być mniejszy od poprzedniego odczytu (${prev.value} z ${prev.date}).`;
+      }
+
+      if (next && Number(value) > Number(next.value)) {
+        return `Stan nie może być większy od następnego odczytu (${next.value} z ${next.date}).`;
+      }
+
+      return null;
+    }
+
     async function addReading() {
       const meterId = document.getElementById("r_meter").value;
       const date = document.getElementById("r_date").value;
@@ -1432,10 +1470,8 @@ Razem: ${fmt(settlement.total)}`;
 
       if (!meterId || !date) return alert("Wybierz licznik i datę.");
 
-      const last = latestReadingOnOrBefore(meterId, "9999-12-31");
-      if (last && value < Number(last.value)) {
-        return alert(`Nowy stan (${value}) nie może być mniejszy od ostatniego stanu (${last.value}).`);
-      }
+      const error = validateReadingAgainstNeighbors(null, meterId, date, value);
+      if (error) return alert(error);
 
       state.meterReadings.push({
         id: uid("r"),
@@ -1444,6 +1480,43 @@ Razem: ${fmt(settlement.total)}`;
         value
       });
 
+      await save();
+    }
+
+    async function editReading(id) {
+      const reading = state.meterReadings.find((r) => r.id === id);
+      if (!reading) return;
+
+      const newDate = prompt("Podaj nową datę odczytu (RRRR-MM-DD):", reading.date);
+      if (!newDate) return;
+
+      const newValueRaw = prompt("Podaj nowy stan licznika:", reading.value);
+      if (newValueRaw === null) return;
+
+      const newValue = Number(newValueRaw);
+      if (Number.isNaN(newValue)) return alert("Stan licznika musi być liczbą.");
+
+      const error = validateReadingAgainstNeighbors(id, reading.meterId, newDate, newValue);
+      if (error) return alert(error);
+
+      reading.date = newDate;
+      reading.value = newValue;
+      await save();
+    }
+
+    async function deleteReading(id) {
+      const reading = state.meterReadings.find((r) => r.id === id);
+      if (!reading) return;
+
+      const next = nextReadingOf(reading);
+      const prev = previousReadingOf(reading);
+
+      if (next && prev && Number(next.value) < Number(prev.value)) {
+        return alert("Nie można usunąć tego odczytu, bo rozwali to kolejność stanów licznika.");
+      }
+
+      if (!confirm("Usunąć odczyt licznika?")) return;
+      state.meterReadings = state.meterReadings.filter((r) => r.id !== id);
       await save();
     }
 
@@ -1527,6 +1600,27 @@ Razem: ${fmt(settlement.total)}`;
     function selectSettlement(id) {
       selectedSettlementId = id;
       renderSettlements();
+    }
+
+    async function deleteSettlement(id) {
+      const s = findSettlement(id);
+      if (!s) return;
+      if (!confirm(`Usunąć rozliczenie ${fmtMonth(s.month)} dla ${s.tenantName}?`)) return;
+      state.settlements = state.settlements.filter((x) => x.id !== id);
+      if (selectedSettlementId === id) selectedSettlementId = null;
+      await save();
+    }
+
+    async function deleteMonthSettlements() {
+      const month = document.getElementById("settlement_month").value;
+      if (!month) return alert("Wybierz miesiąc.");
+      const count = state.settlements.filter((s) => s.month === month).length;
+      if (!count) return alert("Brak rozliczeń dla tego miesiąca.");
+      if (!confirm(`Usunąć wszystkie rozliczenia za ${fmtMonth(month)}? Ilość: ${count}`)) return;
+      state.settlements = state.settlements.filter((s) => s.month !== month);
+      if (selectedSettlementId && !findSettlement(selectedSettlementId)) selectedSettlementId = null;
+      await save();
+      alert(`Usunięto ${count} rozliczeń za ${fmtMonth(month)}.`);
     }
 
     function copySettlementMessage() {
