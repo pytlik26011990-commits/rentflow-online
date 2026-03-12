@@ -64,15 +64,19 @@ function destroySession(req) {
 }
 
 function setAuthenticatedUser(req, user) {
+  const access = mergeUserAccess(user.role, user.permissions);
   req.session.user = {
     id: user.id,
     orgId: user.orgId,
     email: user.email,
     name: user.name,
     role: user.role,
-    capabilities: capabilitiesForRole(user.role),
+    capabilities: access.capabilities,
+    permissions: access.permissions,
     companyName: user.companyName,
-    tenantId: user.tenantId || null
+    tenantId: user.tenantId || null,
+    lastLoginAt: user.lastLoginAt || null,
+    isActive: user.isActive !== false
   };
 }
 
@@ -142,6 +146,80 @@ function capabilitiesForRole(role) {
   };
 
   return matrix[role] || matrix.tenant;
+}
+
+function defaultPermissionsForRole(role) {
+  const ownerAll = {
+    dashboard: true,
+    properties: true,
+    tenants: true,
+    tenantCard: true,
+    leases: true,
+    meters: true,
+    settlements: true,
+    periodSettlements: true,
+    payments: true,
+    expenses: true,
+    maintenance: true,
+    documents: true,
+    tasks: true,
+    communications: true,
+    reports: true,
+    settings: true
+  };
+  const matrix = {
+    owner: ownerAll,
+    manager: { ...ownerAll, settings: false },
+    accountant: {
+      dashboard: true,
+      properties: false,
+      tenants: true,
+      tenantCard: true,
+      leases: true,
+      meters: false,
+      settlements: true,
+      periodSettlements: true,
+      payments: true,
+      expenses: true,
+      maintenance: false,
+      documents: true,
+      tasks: false,
+      communications: true,
+      reports: true,
+      settings: false
+    },
+    technician: {
+      dashboard: true,
+      properties: false,
+      tenants: false,
+      tenantCard: false,
+      leases: false,
+      meters: false,
+      settlements: false,
+      periodSettlements: false,
+      payments: false,
+      expenses: false,
+      maintenance: true,
+      documents: true,
+      tasks: true,
+      communications: true,
+      reports: true,
+      settings: false
+    },
+    tenant: {}
+  };
+
+  return matrix[role] || {};
+}
+
+function mergeUserAccess(role, permissions = {}) {
+  return {
+    capabilities: capabilitiesForRole(role),
+    permissions: {
+      ...defaultPermissionsForRole(role),
+      ...(permissions && typeof permissions === "object" ? permissions : {})
+    }
+  };
 }
 
 function requireOwner(req, res, next) {
@@ -222,7 +300,10 @@ async function createOrganizationWithOwner({ companyName, name, email, password 
         email,
         name,
         role: "owner",
-        companyName
+        companyName,
+        permissions: defaultPermissionsForRole("owner"),
+        isActive: true,
+        lastLoginAt: null
       }
     };
   } catch (error) {
@@ -331,7 +412,7 @@ app.post("/api/login", async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT u.id, u.org_id, u.name, u.email, u.password_hash, u.role, u.tenant_id, o.name AS company_name
+      SELECT u.id, u.org_id, u.name, u.email, u.password_hash, u.role, u.tenant_id, u.is_active, u.last_login_at, u.permissions, o.name AS company_name
       FROM users u
       JOIN organizations o ON o.id = u.org_id
       WHERE u.email = $1
@@ -345,12 +426,16 @@ app.post("/api/login", async (req, res) => {
     }
 
     const user = result.rows[0];
+    if (user.is_active === false) {
+      return res.status(403).json({ error: "To konto jest obecnie wyłączone." });
+    }
     const passwordValid = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordValid) {
       return res.status(401).json({ error: "Nieprawidłowy login lub hasło." });
     }
 
+    await pool.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
     await regenerateSession(req);
     setAuthenticatedUser(req, {
       id: user.id,
@@ -359,7 +444,10 @@ app.post("/api/login", async (req, res) => {
       name: sanitizeText(user.name),
       role: user.role,
       companyName: sanitizeText(user.company_name),
-      tenantId: user.tenant_id || null
+      tenantId: user.tenant_id || null,
+      permissions: user.permissions || {},
+      isActive: user.is_active !== false,
+      lastLoginAt: new Date().toISOString()
     });
 
     return res.json({ ok: true });
@@ -385,7 +473,9 @@ app.get("/api/me", (req, res) => {
     return res.status(401).json({ error: "Brak sesji." });
   }
 
-  req.session.user.capabilities ||= capabilitiesForRole(req.session.user.role);
+  const access = mergeUserAccess(req.session.user.role, req.session.user.permissions);
+  req.session.user.capabilities = access.capabilities;
+  req.session.user.permissions = access.permissions;
   return res.json(req.session.user);
 });
 
@@ -393,7 +483,7 @@ app.get("/api/team-users", requireAuth, requireOwner, async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT id, name, email, role, created_at
+      SELECT id, name, email, role, created_at, last_login_at, is_active, permissions
       FROM users
       WHERE org_id = $1 AND role <> 'tenant'
       ORDER BY created_at ASC
@@ -406,7 +496,10 @@ app.get("/api/team-users", requireAuth, requireOwner, async (req, res) => {
       name: sanitizeText(row.name),
       email: row.email,
       role: row.role,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      lastLoginAt: row.last_login_at,
+      isActive: row.is_active !== false,
+      permissions: mergeUserAccess(row.role, row.permissions || {}).permissions
     })));
   } catch (error) {
     console.error(error);
@@ -420,6 +513,7 @@ app.post("/api/team-users", requireAuth, requireOwner, async (req, res) => {
     const nameResult = ensureRequiredText(req.body.name, "Imię i nazwisko");
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
+    const permissions = mergeUserAccess(role, req.body.permissions || {}).permissions;
 
     if (!role || nameResult.error || !email || password.length < 8) {
       return res.status(400).json({ error: "Uzupełnij dane członka zespołu i ustaw hasło min. 8 znaków." });
@@ -445,13 +539,13 @@ app.post("/api/team-users", requireAuth, requireOwner, async (req, res) => {
         }
 
         await client.query(
-          "UPDATE users SET name = $1, password_hash = $2, role = $3, tenant_id = NULL WHERE id = $4",
-          [nameResult.value, await bcrypt.hash(password, 12), role, row.id]
+          "UPDATE users SET name = $1, password_hash = $2, role = $3, tenant_id = NULL, permissions = $4::jsonb, is_active = TRUE WHERE id = $5",
+          [nameResult.value, await bcrypt.hash(password, 12), role, JSON.stringify(permissions), row.id]
         );
       } else {
         await client.query(
-          "INSERT INTO users (id, org_id, name, email, password_hash, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, NULL)",
-          [uid("usr"), req.session.user.orgId, nameResult.value, email, await bcrypt.hash(password, 12), role]
+          "INSERT INTO users (id, org_id, name, email, password_hash, role, tenant_id, permissions, is_active) VALUES ($1, $2, $3, $4, $5, $6, NULL, $7::jsonb, TRUE)",
+          [uid("usr"), req.session.user.orgId, nameResult.value, email, await bcrypt.hash(password, 12), role, JSON.stringify(permissions)]
         );
       }
 
@@ -466,6 +560,30 @@ app.post("/api/team-users", requireAuth, requireOwner, async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Nie udało się zapisać konta zespołu." });
+  }
+});
+
+app.post("/api/team-users/status", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const userId = sanitizeText(req.body.userId || "");
+    const isActive = req.body.isActive !== false;
+    if (!userId) {
+      return res.status(400).json({ error: "Brakuje identyfikatora użytkownika." });
+    }
+
+    const result = await pool.query(
+      "UPDATE users SET is_active = $1 WHERE org_id = $2 AND id = $3 AND role IN ('manager', 'accountant', 'technician') RETURNING id",
+      [isActive, req.session.user.orgId, userId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Nie znaleziono konta zespołu." });
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się zmienić statusu konta." });
   }
 });
 
@@ -499,16 +617,12 @@ app.post("/api/tenant-access", requireAuth, requireOwner, async (req, res) => {
     const password = String(req.body.password || "");
     const tenantNameResult = ensureRequiredText(req.body.name, "Imię i nazwisko najemcy");
 
-    if (!tenantId || !email || !password || tenantNameResult.error) {
+    if (!tenantId || !email || tenantNameResult.error) {
       return res.status(400).json({ error: "Uzupełnij dane dostępu najemcy." });
     }
 
     if (!isValidEmail(email)) {
       return res.status(400).json({ error: "Podaj poprawny e-mail najemcy." });
-    }
-
-    if (password.length < 8) {
-      return res.status(400).json({ error: "Hasło dla najemcy musi mieć co najmniej 8 znaków." });
     }
 
     const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
@@ -525,28 +639,47 @@ app.post("/api/tenant-access", requireAuth, requireOwner, async (req, res) => {
     try {
       await client.query("BEGIN");
 
-      const existing = await client.query(
+      const existingForTenant = await client.query(
+        "SELECT id, role, tenant_id, password_hash FROM users WHERE org_id = $1 AND role = 'tenant' AND tenant_id = $2 LIMIT 1",
+        [req.session.user.orgId, tenantId]
+      );
+      const existingForEmail = await client.query(
         "SELECT id, role, tenant_id FROM users WHERE email = $1 LIMIT 1",
         [email]
       );
 
-      if (existing.rows.length && existing.rows[0].role !== "tenant") {
+      if (existingForEmail.rows.length && existingForEmail.rows[0].role !== "tenant") {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "Ten e-mail jest już używany przez konto właściciela lub administratora." });
       }
 
-      const passwordHash = await bcrypt.hash(password, 12);
-      const tenantUserId = existing.rows[0]?.id || uid("usr");
+      if (existingForEmail.rows.length && existingForEmail.rows[0].tenant_id !== tenantId) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Ten e-mail jest już przypisany do innego konta najemcy." });
+      }
 
-      if (existing.rows.length) {
+      const tenantUserId = existingForTenant.rows[0]?.id || existingForEmail.rows[0]?.id || uid("usr");
+
+      if (existingForTenant.rows.length || existingForEmail.rows.length) {
+        const nextPasswordHash = password
+          ? await bcrypt.hash(password, 12)
+          : existingForTenant.rows[0]?.password_hash;
+        if (!nextPasswordHash) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: "Podaj hasło dla nowego konta najemcy." });
+        }
         await client.query(
-          "UPDATE users SET org_id = $1, name = $2, password_hash = $3, role = $4, tenant_id = $5 WHERE id = $6",
-          [req.session.user.orgId, tenantNameResult.value, passwordHash, "tenant", tenantId, tenantUserId]
+          "UPDATE users SET org_id = $1, name = $2, email = $3, password_hash = $4, role = $5, tenant_id = $6, is_active = TRUE, permissions = '{}'::jsonb WHERE id = $7",
+          [req.session.user.orgId, tenantNameResult.value, email, nextPasswordHash, "tenant", tenantId, tenantUserId]
         );
       } else {
+        if (password.length < 8) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: "Hasło dla najemcy musi mieć co najmniej 8 znaków." });
+        }
         await client.query(
-          "INSERT INTO users (id, org_id, name, email, password_hash, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-          [tenantUserId, req.session.user.orgId, tenantNameResult.value, email, passwordHash, "tenant", tenantId]
+          "INSERT INTO users (id, org_id, name, email, password_hash, role, tenant_id, is_active, permissions) VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, '{}'::jsonb)",
+          [tenantUserId, req.session.user.orgId, tenantNameResult.value, email, await bcrypt.hash(password, 12), "tenant", tenantId]
         );
       }
 
@@ -562,6 +695,57 @@ app.post("/api/tenant-access", requireAuth, requireOwner, async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Nie udało się utworzyć dostępu dla najemcy." });
+  }
+});
+
+app.get("/api/tenant-access-overview", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, tenant_id, name, email, last_login_at, is_active, created_at
+      FROM users
+      WHERE org_id = $1 AND role = 'tenant'
+      ORDER BY created_at ASC
+      `,
+      [req.session.user.orgId]
+    );
+
+    return res.json(result.rows.map((row) => ({
+      id: row.id,
+      tenantId: row.tenant_id,
+      name: sanitizeText(row.name),
+      email: row.email,
+      lastLoginAt: row.last_login_at,
+      isActive: row.is_active !== false,
+      createdAt: row.created_at
+    })));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się pobrać dostępu najemców." });
+  }
+});
+
+app.post("/api/tenant-access/status", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const tenantId = sanitizeText(req.body.tenantId || "");
+    const isActive = req.body.isActive !== false;
+    if (!tenantId) {
+      return res.status(400).json({ error: "Brakuje identyfikatora najemcy." });
+    }
+
+    const result = await pool.query(
+      "UPDATE users SET is_active = $1 WHERE org_id = $2 AND role = 'tenant' AND tenant_id = $3 RETURNING id",
+      [isActive, req.session.user.orgId, tenantId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Nie znaleziono konta dostępowego dla tego najemcy." });
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Nie udało się zmienić statusu konta najemcy." });
   }
 });
 

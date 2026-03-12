@@ -813,6 +813,7 @@
     let pendingDocumentFiles = [];
     let pendingConversationFiles = [];
     let teamUsers = [];
+    let tenantAccessOverview = [];
     let selectedGeneratedDocumentId = null;
     let selectedConversationId = null;
     let editingBuildingId = null;
@@ -869,6 +870,25 @@
       ["settings", "Profil", "Dane konta i konfiguracja widoku."]
     ];
 
+    const teamPagePermissionKeys = {
+      dashboard: "dashboard",
+      properties: "properties",
+      tenants: "tenants",
+      tenantCard: "tenantCard",
+      leases: "leases",
+      meters: "meters",
+      settlements: "settlements",
+      periodSettlements: "periodSettlements",
+      payments: "payments",
+      expenses: "expenses",
+      maintenance: "maintenance",
+      documents: "documents",
+      tasks: "tasks",
+      communications: "communications",
+      reports: "reports",
+      settings: "settings"
+    };
+
     function activePages() {
       if (currentUser?.role === "tenant") {
         return tenantPages.filter(([id]) => {
@@ -882,10 +902,10 @@
       }
 
       if (currentUser?.role === "technician") {
-        return technicianPages;
+        return technicianPages.filter(([id]) => (currentUser.permissions || defaultPermissionsForRole(currentUser.role))[teamPagePermissionKeys[id]] !== false);
       }
 
-      return ownerPages;
+      return ownerPages.filter(([id]) => (currentUser?.permissions || defaultPermissionsForRole(currentUser?.role))[teamPagePermissionKeys[id]] !== false);
     }
 
     function roleLabel(role) {
@@ -898,6 +918,27 @@
       })[role] || role;
     }
 
+    function permissionLabel(key) {
+      return ({
+        dashboard: "Dashboard",
+        properties: "Budynki i lokale",
+        tenants: "Najemcy",
+        tenantCard: "Karta najemcy",
+        leases: "Umowy",
+        meters: "Media",
+        settlements: "Rozliczenia miesięczne",
+        periodSettlements: "Rozliczenia okresowe",
+        payments: "Płatności",
+        expenses: "Koszty",
+        maintenance: "Usterki",
+        documents: "Dokumenty",
+        tasks: "Zadania",
+        communications: "Komunikacja",
+        reports: "Raporty",
+        settings: "Ustawienia"
+      })[key] || key;
+    }
+
     function defaultCapabilitiesForRole(role) {
       return ({
         owner: { manageUsers: true, stateWrite: true, ticketWorkflow: true, fullWorkspace: true },
@@ -906,6 +947,24 @@
         technician: { manageUsers: false, stateWrite: false, ticketWorkflow: true, fullWorkspace: false },
         tenant: { manageUsers: false, stateWrite: false, ticketWorkflow: false, fullWorkspace: false }
       })[role] || { manageUsers: false, stateWrite: false, ticketWorkflow: false, fullWorkspace: false };
+    }
+
+    function defaultPermissionsForRole(role) {
+      return ({
+        owner: {
+          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, reports: true, settings: true
+        },
+        manager: {
+          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, reports: true, settings: false
+        },
+        accountant: {
+          dashboard: true, properties: false, tenants: true, tenantCard: true, leases: true, meters: false, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: false, documents: true, tasks: false, communications: true, reports: true, settings: false
+        },
+        technician: {
+          dashboard: true, properties: false, tenants: false, tenantCard: false, leases: false, meters: false, settlements: false, periodSettlements: false, payments: false, expenses: false, maintenance: true, documents: true, tasks: true, communications: true, reports: true, settings: false
+        },
+        tenant: {}
+      })[role] || {};
     }
 
     function hasCapability(capability) {
@@ -3170,6 +3229,7 @@
       const tenantSettlements = state.settlements.filter(s => s.tenantId === tenant.id).slice().sort((a,b)=>b.month.localeCompare(a.month));
       const tenantPeriodSettlements = state.periodSettlements.filter(s => s.tenantId === tenant.id).slice().sort((a,b)=>(b.toMonth+b.createdAt).localeCompare(a.toMonth+a.createdAt));
       const generatedDrafts = generatedDraftsForTenant(tenant.id);
+      const tenantAccess = tenantAccessByTenantId(tenant.id);
       const selectedDraft = findGeneratedDocument(selectedGeneratedDocumentId) || generatedDrafts[0] || null;
       if (selectedDraft) selectedGeneratedDocumentId = selectedDraft.id;
       const ownerDocumentButtons = lease ? `
@@ -3257,7 +3317,25 @@
             </div>
           </div>
         ` : ""}
-        ${currentUser?.role === "owner" ? `<div class="card section"><div class="panel-title"><h3>Dostęp dla najemcy</h3></div><div class="form-grid three"><input id="portal_email_${tenant.id}" type="email" value="${tenant.email || ""}" placeholder="Login e-mail" /><input id="portal_password_${tenant.id}" type="password" placeholder="Hasło do portalu" /><button class="btn green" onclick="createTenantAccess('${tenant.id}')">Utwórz / zaktualizuj dostęp</button></div><div class="section inline-actions"><button class="btn secondary" onclick="deleteTenantAccess('${tenant.id}')">Usuń konto dostępu</button></div><div class="section notice">To konto otworzy uproszczony portal najemcy: saldo, płatności, rozliczenia i zgłoszenia serwisowe.</div></div>` : ""}
+        ${currentUser?.role === "owner" ? `
+          <div class="card section">
+            <div class="panel-title"><h3>Dostęp dla najemcy</h3></div>
+            <div class="form-grid three">
+              <input id="portal_email_${tenant.id}" type="email" value="${tenantAccess?.email || tenant.email || ""}" placeholder="Login e-mail" />
+              <input id="portal_password_${tenant.id}" type="password" placeholder="${tenantAccess ? "Nowe hasło opcjonalnie" : "Hasło do portalu"}" />
+              <button class="btn green" onclick="createTenantAccess('${tenant.id}')">${tenantAccess ? "Zapisz dane logowania" : "Utwórz dostęp"}</button>
+            </div>
+            <div class="grid two section">
+              <div class="notice">Status konta: <strong>${tenantAccess ? (tenantAccess.isActive ? "aktywne" : "wyłączone") : "brak konta"}</strong><br>Ostatnie logowanie: <strong>${tenantAccess?.lastLoginAt ? formatDateTime(tenantAccess.lastLoginAt) : "jeszcze nigdy"}</strong><br>Utworzono: <strong>${tenantAccess?.createdAt ? formatDateTime(tenantAccess.createdAt) : "—"}</strong></div>
+              <div class="notice">Tutaj możesz edytować login najemcy, zmienić hasło bez kasowania konta oraz czasowo wyłączyć portal bez usuwania dostępu.</div>
+            </div>
+            <div class="section inline-actions">
+              ${tenantAccess ? `<button class="btn secondary" onclick="toggleTenantAccessStatus('${tenant.id}', ${tenantAccess.isActive ? "false" : "true"})">${tenantAccess.isActive ? "Wyłącz dostęp" : "Włącz dostęp"}</button>` : ""}
+              <button class="btn secondary" onclick="deleteTenantAccess('${tenant.id}')">Usuń konto dostępu</button>
+            </div>
+            <div class="section notice">To konto otworzy uproszczony portal najemcy: saldo, płatności, rozliczenia i zgłoszenia serwisowe.</div>
+          </div>
+        ` : ""}
       `;
     }
 
@@ -3929,11 +4007,15 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
               <input id="team_name" placeholder="Imię i nazwisko" />
               <input id="team_email" type="email" placeholder="E-mail do logowania" />
               <input id="team_password" type="password" placeholder="Hasło tymczasowe" />
-              <select id="team_role">
+              <select id="team_role" onchange="applyRolePermissionPreset(this.value)">
                 <option value="manager">Manager</option>
                 <option value="accountant">Księgowość</option>
                 <option value="technician">Techniczny</option>
               </select>
+            </div>
+            <div class="section notice">Szczegółowe moduły dla nowego konta zespołu:</div>
+            <div class="form-grid two section">
+              ${Object.keys(teamPagePermissionKeys).map((key) => `<label><input id="perm_${key}" type="checkbox" ${defaultPermissionsForRole("manager")[key] ? "checked" : ""} /> ${permissionLabel(key)}</label>`).join("")}
             </div>
             <div class="section inline-actions">
               <button class="btn green" onclick="saveTeamUser()">Dodaj / zaktualizuj konto</button>
@@ -3944,16 +4026,16 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                 <div class="entity-item">
                   <div>
                     <strong>${user.name}</strong>
-                    <div class="meta">${user.email} · ${roleLabel(user.role)}${user.role === "owner" ? " · konto główne" : ""}</div>
+                    <div class="meta">${user.email} · ${roleLabel(user.role)}${user.role === "owner" ? " · konto główne" : ""} · ostatnie logowanie: ${user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "jeszcze nigdy"}</div>
                   </div>
                   <div class="inline-actions">
-                    <span class="badge ${user.role === "owner" ? "status-active" : user.role === "technician" ? "status-open" : "status-pending"}">${roleLabel(user.role)}</span>
-                    ${user.role !== "owner" ? `<button class="btn secondary small" onclick="deleteTeamUser('${user.id}')">Usuń</button>` : ""}
+                    <span class="badge ${user.isActive ? (user.role === "owner" ? "status-active" : user.role === "technician" ? "status-open" : "status-pending") : "status-closed"}">${user.isActive ? roleLabel(user.role) : "wyłączone"}</span>
+                    ${user.role !== "owner" ? `<button class="btn secondary small" onclick="toggleTeamUserStatus('${user.id}', ${user.isActive ? "false" : "true"})">${user.isActive ? "Wyłącz" : "Włącz"}</button><button class="btn secondary small" onclick="deleteTeamUser('${user.id}')">Usuń</button>` : ""}
                   </div>
                 </div>
               `).join("") : `<div class="empty-state">Nie ma jeszcze dodatkowych kont zespołu.</div>`}
             </div>
-            <div class="section notice">Manager i księgowość mają pełny dostęp operacyjny. Technik widzi tylko dashboard techniczny, komunikację i zgłoszenia.</div>
+            <div class="section notice">Role możesz dodatkowo ograniczyć modułami. Konto wyłączone nie zaloguje się do systemu, ale pozostaje zachowane w historii.</div>
           </div>
         ` : ""}`;
     }
@@ -4299,9 +4381,11 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       if (!tenant) return alert("Nie znaleziono najemcy.");
       const email = document.getElementById(`portal_email_${tenantId}`)?.value.trim().toLowerCase();
       const password = document.getElementById(`portal_password_${tenantId}`)?.value || "";
+      const existingAccess = tenantAccessByTenantId(tenantId);
       if (!email) return alert("Podaj e-mail do logowania.");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return alert("Podaj poprawny e-mail.");
-      if (password.length < 8) return alert("Hasło musi mieć co najmniej 8 znaków.");
+      if (!existingAccess && password.length < 8) return alert("Hasło musi mieć co najmniej 8 znaków.");
+      if (password && password.length < 8) return alert("Nowe hasło musi mieć co najmniej 8 znaków.");
       try {
         await apiPost("/api/tenant-access", {
           tenantId,
@@ -4309,6 +4393,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           email,
           password
         });
+        await loadTenantAccessOverview(true);
+        renderTenantCard();
         alert(`Dostęp dla ${tenant.name} został zapisany.`);
       } catch (error) {
         alert(error.message || "Nie udało się utworzyć dostępu.");
@@ -4320,9 +4406,22 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       if (!confirm(`Usunąć konto portalu dla ${tenant.name}?`)) return;
       try {
         await apiPost("/api/tenant-access/delete", { tenantId });
+        await loadTenantAccessOverview(true);
+        renderTenantCard();
         alert(`Konto dostępu dla ${tenant.name} zostało usunięte.`);
       } catch (error) {
         alert(error.message || "Nie udało się usunąć konta dostępu.");
+      }
+    }
+    async function toggleTenantAccessStatus(tenantId, isActive) {
+      const tenant = tenantById(tenantId);
+      if (!tenant) return alert("Nie znaleziono najemcy.");
+      try {
+        await apiPost("/api/tenant-access/status", { tenantId, isActive });
+        await loadTenantAccessOverview(true);
+        renderTenantCard();
+      } catch (error) {
+        alert(error.message || "Nie udało się zmienić statusu konta.");
       }
     }
     async function removeTenant(id) {
@@ -4810,16 +4909,34 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       }
     }
 
+    async function loadTenantAccessOverview(silent = false) {
+      if (currentUser?.role !== "owner") {
+        tenantAccessOverview = [];
+        return;
+      }
+      try {
+        tenantAccessOverview = await apiGet("/api/tenant-access-overview");
+        if (!silent) renderTenantCard();
+      } catch (error) {
+        if (!silent) alert(error.message || "Nie udało się pobrać danych dostępu najemców.");
+      }
+    }
+
+    function tenantAccessByTenantId(tenantId) {
+      return tenantAccessOverview.find((entry) => entry.tenantId === tenantId) || null;
+    }
+
     async function saveTeamUser() {
       const name = document.getElementById("team_name")?.value.trim() || "";
       const email = document.getElementById("team_email")?.value.trim().toLowerCase() || "";
       const password = document.getElementById("team_password")?.value || "";
       const role = document.getElementById("team_role")?.value || "manager";
+      const permissions = Object.fromEntries(Object.keys(teamPagePermissionKeys).map((key) => [key, !!document.getElementById(`perm_${key}`)?.checked]));
       if (!name || !email || password.length < 8) {
         return alert("Podaj imię i nazwisko, e-mail oraz hasło min. 8 znaków.");
       }
       try {
-        await apiPost("/api/team-users", { name, email, password, role });
+        await apiPost("/api/team-users", { name, email, password, role, permissions });
         await loadTeamUsers(true);
         renderSettings();
         alert("Konto zespołu zostało zapisane.");
@@ -4837,6 +4954,24 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       } catch (error) {
         alert(error.message || "Nie udało się usunąć konta zespołu.");
       }
+    }
+
+    async function toggleTeamUserStatus(userId, isActive) {
+      try {
+        await apiPost("/api/team-users/status", { userId, isActive });
+        await loadTeamUsers(true);
+        renderSettings();
+      } catch (error) {
+        alert(error.message || "Nie udało się zmienić statusu konta zespołu.");
+      }
+    }
+
+    function applyRolePermissionPreset(role) {
+      const preset = defaultPermissionsForRole(role);
+      Object.keys(teamPagePermissionKeys).forEach((key) => {
+        const input = document.getElementById(`perm_${key}`);
+        if (input) input.checked = !!preset[key];
+      });
     }
 
     function downloadFile(filename, content, mime) {
@@ -4978,11 +5113,13 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         }
         currentUser = await me.json();
         currentUser.capabilities ||= defaultCapabilitiesForRole(currentUser.role);
+        currentUser.permissions ||= defaultPermissionsForRole(currentUser.role);
         if (currentUser.role === "tenant") {
           selectedTenantCardId = currentUser.tenantId || null;
         }
         renderNav();
         await loadTeamUsers(true);
+        await loadTenantAccessOverview(true);
         await load();
         renderAll();
         showPage(currentUser.role === "tenant" ? "dashboard" : "dashboard");
