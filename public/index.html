@@ -471,6 +471,47 @@
       min-height: 200px;
     }
     .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .clamped-text {
+      display: inline-block;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: bottom;
+    }
+    .text-tooltip {
+      cursor: help;
+      border-bottom: 1px dashed rgba(33, 42, 62, 0.24);
+    }
+    .cell-stack {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+    .thread-attachments {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .attachment-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(33, 42, 62, 0.08);
+      background: rgba(255,255,255,0.88);
+      color: var(--ink);
+      font-size: 12px;
+      text-decoration: none;
+    }
+    .attachment-chip img {
+      width: 20px;
+      height: 20px;
+      object-fit: cover;
+      border-radius: 6px;
+    }
     .positive { color: #8ef0b1; }
     .negative { color: #ff9c9c; }
     .workspace-grid {
@@ -746,8 +787,13 @@
 
     let currentUser = null;
     let pendingDocumentFiles = [];
+    let pendingConversationFiles = [];
     let selectedGeneratedDocumentId = null;
     let selectedConversationId = null;
+    let editingBuildingId = null;
+    let editingUnitId = null;
+    let editingTenantId = null;
+    let editingLeaseId = null;
 
     const ownerPages = [
       ["dashboard", "Dashboard", "Podgląd portfela najmu, płatności i mediów."],
@@ -1036,6 +1082,8 @@
       state.messages = state.messages.map((message) => ({
         ...message,
         subject: sanitizeText(message?.subject || ""),
+        status: ["otwarta", "zamknięta"].includes(message?.status) ? message.status : "otwarta",
+        priority: ["normalna", "pilna"].includes(message?.priority) ? message.priority : "normalna",
         createdAt: message?.createdAt || "",
         updatedAt: message?.updatedAt || "",
         thread: Array.isArray(message?.thread)
@@ -1044,7 +1092,16 @@
               authorName: sanitizeText(entry?.authorName || ""),
               authorRole: sanitizeText(entry?.authorRole || ""),
               body: sanitizeText(entry?.body || ""),
-              createdAt: entry?.createdAt || ""
+              createdAt: entry?.createdAt || "",
+              attachments: Array.isArray(entry?.attachments)
+                ? entry.attachments.map((attachment) => ({
+                    ...attachment,
+                    name: sanitizeText(attachment?.name || "plik"),
+                    type: sanitizeText(attachment?.type || "application/octet-stream"),
+                    size: Number(attachment?.size || 0),
+                    dataUrl: String(attachment?.dataUrl || "")
+                  }))
+                : []
             }))
           : []
       }));
@@ -1102,6 +1159,20 @@
     }
     function activeLeaseByUnit(unitId) { return state.leases.find((l) => l.unitId === unitId && l.status === "aktywna"); }
     function activeLeaseByTenant(tenantId) { return state.leases.find((l) => l.tenantId === tenantId && l.status === "aktywna"); }
+    function syncLeaseAssignments() {
+      state.units.forEach((unit) => {
+        const activeLease = activeLeaseByUnit(unit.id);
+        if (activeLease) {
+          unit.status = "wynajęte";
+        } else if (unit.status === "wynajęte") {
+          unit.status = "wolne";
+        }
+      });
+      state.tenants.forEach((tenant) => {
+        const activeLease = activeLeaseByTenant(tenant.id);
+        tenant.unitId = activeLease?.unitId || "";
+      });
+    }
 
     function chargePaidAmount(chargeId) {
       return state.payments.filter((p) => p.chargeId === chargeId).reduce((a, b) => a + Number(b.amount || 0), 0);
@@ -1567,6 +1638,14 @@
       return `${size} B`;
     }
 
+    function truncatedText(value, limit = 15) {
+      const text = String(value || "").trim();
+      if (!text) return "—";
+      if (text.length <= limit) return text;
+      const short = `${text.slice(0, limit)}...`;
+      return `<span class="clamped-text text-tooltip" title="${sanitizeText(text)}">${short}</span>`;
+    }
+
     function isImageAttachment(attachment) {
       return String(attachment?.type || "").startsWith("image/");
     }
@@ -1650,6 +1729,15 @@
       return `<a href="${attachment.dataUrl}" download="${attachment.name}">${label}</a>`;
     }
 
+    function conversationAttachmentMarkup(attachment) {
+      return `
+        <a class="attachment-chip" href="${attachment.dataUrl}" ${isImageAttachment(attachment) ? `target="_blank" rel="noopener noreferrer"` : `download="${attachment.name}"`}>
+          ${isImageAttachment(attachment) ? `<img src="${attachment.dataUrl}" alt="${attachment.name}" />` : ""}
+          <span>${attachment.name}</span>
+        </a>
+      `;
+    }
+
     function renderPendingDocumentFiles() {
       const mount = document.getElementById("doc_pending_files");
       if (!mount) return;
@@ -1664,6 +1752,87 @@
           </div>
         </div>
       `).join("") : `<div class="empty-state">Dodaj pliki z dysku albo wklej obraz z schowka. Obsługiwane są zdjęcia, PDF-y i inne skany do 2 MB na plik.</div>`;
+    }
+
+    async function queueConversationFiles(files) {
+      const allowedFiles = Array.from(files || []);
+      if (!allowedFiles.length) return;
+      if (pendingConversationFiles.length + allowedFiles.length > 4) {
+        return alert("Do jednej wiadomości możesz dodać maksymalnie 4 załączniki.");
+      }
+
+      const nextFiles = [];
+      for (const file of allowedFiles) {
+        if (file.size > 2 * 1024 * 1024) {
+          alert(`Plik ${file.name} jest za duży. Limit jednego pliku to 2 MB.`);
+          continue;
+        }
+        const dataUrl = await readFileAsDataUrl(file);
+        nextFiles.push({
+          id: uid("msgatt"),
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          dataUrl
+        });
+      }
+
+      const totalSize = [...pendingConversationFiles, ...nextFiles].reduce((sum, file) => sum + Number(file.size || 0), 0);
+      if (totalSize > 6 * 1024 * 1024) {
+        return alert("Łączny rozmiar załączników do wiadomości nie może przekraczać 6 MB.");
+      }
+
+      pendingConversationFiles = [...pendingConversationFiles, ...nextFiles];
+      renderPendingConversationFiles();
+    }
+
+    async function handleConversationFileInput(event) {
+      try {
+        await queueConversationFiles(event.target.files);
+      } catch (error) {
+        alert(error.message || "Nie udało się dodać załączników do wiadomości.");
+      }
+      event.target.value = "";
+    }
+
+    async function handleConversationPaste(event) {
+      const files = Array.from(event.clipboardData?.files || []);
+      if (!files.length) return;
+      event.preventDefault();
+      try {
+        await queueConversationFiles(files);
+      } catch (error) {
+        alert(error.message || "Nie udało się wkleić załączników do wiadomości.");
+      }
+    }
+
+    function removePendingConversationFile(id) {
+      pendingConversationFiles = pendingConversationFiles.filter((file) => file.id !== id);
+      renderPendingConversationFiles();
+    }
+
+    function clearPendingConversationFiles() {
+      pendingConversationFiles = [];
+      renderPendingConversationFiles();
+    }
+
+    function renderPendingConversationFiles() {
+      const mounts = Array.from(document.querySelectorAll("[data-conversation-pending-files]"));
+      if (!mounts.length) return;
+      const markup = pendingConversationFiles.length ? pendingConversationFiles.map((file) => `
+        <div class="entity-item">
+          <div>
+            <strong>${file.name}</strong>
+            <div class="meta">${file.type || "plik"} · ${formatFileSize(file.size)}</div>
+          </div>
+          <div class="inline-actions">
+            <button class="btn secondary small" onclick="removePendingConversationFile('${file.id}')">Usuń</button>
+          </div>
+        </div>
+      `).join("") : `<div class="empty-state">Dodaj zdjęcie, PDF lub inny plik do rozmowy. Możesz też wkleić obraz ze schowka.</div>`;
+      mounts.forEach((mount) => {
+        mount.innerHTML = markup;
+      });
     }
 
     function chargeOutstandingAmount(charge) {
@@ -2295,6 +2464,7 @@
 
     function selectConversation(id) {
       selectedConversationId = id;
+      clearPendingConversationFiles();
       renderCommunications();
       showPage("communications");
     }
@@ -2309,6 +2479,9 @@
       const body = currentUser?.role === "tenant"
         ? (document.getElementById("new_message_body")?.value.trim() || "")
         : (document.getElementById("conversation_body")?.value.trim() || "");
+      const priority = currentUser?.role === "tenant"
+        ? (document.getElementById("new_message_priority")?.value || "normalna")
+        : (document.getElementById("conversation_priority")?.value || "normalna");
       if (!tenantId) return alert("Wybierz najemcę.");
       if (!subject || !body) return alert("Uzupełnij temat i treść wiadomości.");
       const context = leaseDocumentContext(tenantId);
@@ -2319,6 +2492,8 @@
         leaseId: context.lease?.id || "",
         unitId: context.unit?.id || "",
         subject,
+        priority,
+        status: "otwarta",
         createdAt: now,
         updatedAt: now,
         thread: [{
@@ -2326,11 +2501,13 @@
           authorRole: currentUser?.role || "owner",
           authorName: currentUser?.name || (currentUser?.role === "tenant" ? "Najemca" : "Zarządca"),
           body,
-          createdAt: now
+          createdAt: now,
+          attachments: pendingConversationFiles.map((file) => ({ ...file }))
         }]
       };
       state.messages.push(conversation);
       selectedConversationId = conversation.id;
+      clearPendingConversationFiles();
       await save();
       showPage("communications");
     }
@@ -2338,6 +2515,7 @@
     async function sendConversationMessage() {
       const conversation = activeConversation();
       if (!conversation) return createConversation();
+      if (conversation.status === "zamknięta") return alert("Ta rozmowa jest zamknięta. Otwórz ją ponownie, aby odpisać.");
       const body = currentUser?.role === "tenant"
         ? (document.getElementById("new_message_body")?.value.trim() || "")
         : (document.getElementById("conversation_reply")?.value.trim() || "");
@@ -2349,9 +2527,29 @@
         authorRole: currentUser?.role || "owner",
         authorName: currentUser?.name || (currentUser?.role === "tenant" ? "Najemca" : "Zarządca"),
         body,
-        createdAt: now
+        createdAt: now,
+        attachments: pendingConversationFiles.map((file) => ({ ...file }))
       });
       conversation.updatedAt = now;
+      clearPendingConversationFiles();
+      await save();
+      showPage("communications");
+    }
+
+    async function toggleConversationStatus(id) {
+      const conversation = findConversation(id);
+      if (!conversation) return;
+      conversation.status = conversation.status === "zamknięta" ? "otwarta" : "zamknięta";
+      conversation.updatedAt = nowIso();
+      await save();
+      showPage("communications");
+    }
+
+    async function toggleConversationPriority(id) {
+      const conversation = findConversation(id);
+      if (!conversation) return;
+      conversation.priority = conversation.priority === "pilna" ? "normalna" : "pilna";
+      conversation.updatedAt = nowIso();
       await save();
       showPage("communications");
     }
@@ -2667,68 +2865,71 @@
     }
 
     function renderProperties() {
+      const building = editingBuildingId ? state.buildings.find((entry) => entry.id === editingBuildingId) : null;
+      const unit = editingUnitId ? state.units.find((entry) => entry.id === editingUnitId) : null;
       document.getElementById("properties").innerHTML = `
         <div class="card">
-          <div class="panel-title"><h3>Dodaj budynek</h3></div>
+          <div class="panel-title"><h3>${building ? "Edytuj budynek" : "Dodaj budynek"}</h3></div>
           <div class="form-grid three">
-            <input id="b_name" placeholder="Nazwa budynku" />
-            <input id="b_address" placeholder="Adres" />
-            <input id="b_notes" placeholder="Notatki" />
+            <input id="b_name" placeholder="Nazwa budynku" value="${building?.name || ""}" />
+            <input id="b_address" placeholder="Adres" value="${building?.address || ""}" />
+            <input id="b_notes" placeholder="Notatki" value="${building?.notes || ""}" />
           </div>
-          <div class="section"><button class="btn green" onclick="addBuilding()">Dodaj budynek</button></div>
+          <div class="section inline-actions"><button class="btn green" onclick="addBuilding()">${building ? "Zapisz budynek" : "Dodaj budynek"}</button>${building ? `<button class="btn secondary" onclick="cancelBuildingEdit()">Anuluj</button>` : ""}</div>
         </div>
         <div class="card section">
-          <div class="panel-title"><h3>Dodaj lokal</h3></div>
+          <div class="panel-title"><h3>${unit ? "Edytuj lokal" : "Dodaj lokal"}</h3></div>
           <div class="form-grid">
-            <select id="u_building">${state.buildings.map((b) => `<option value="${b.id}">${b.name}</option>`).join("")}</select>
-            <input id="u_code" placeholder="Nr lokalu" />
-            <select id="u_type"><option>kawalerka</option><option>2 pokoje</option><option>3 pokoje</option><option>4 pokoje</option></select>
-            <input id="u_area" type="number" placeholder="Metraż m²" />
-            <input id="u_floor" type="number" placeholder="Piętro" />
-            <input id="u_rent" type="number" placeholder="Czynsz bazowy" />
-            <input id="u_service" type="number" placeholder="Opłata adm." />
-            <select id="u_status"><option>wynajęte</option><option>wolne</option><option>serwis</option></select>
+            <select id="u_building">${state.buildings.map((b) => `<option value="${b.id}" ${unit?.buildingId === b.id ? "selected" : ""}>${b.name}</option>`).join("")}</select>
+            <input id="u_code" placeholder="Nr lokalu" value="${unit?.code || ""}" />
+            <select id="u_type"><option ${unit?.type === "kawalerka" ? "selected" : ""}>kawalerka</option><option ${unit?.type === "2 pokoje" ? "selected" : ""}>2 pokoje</option><option ${unit?.type === "3 pokoje" ? "selected" : ""}>3 pokoje</option><option ${unit?.type === "4 pokoje" ? "selected" : ""}>4 pokoje</option></select>
+            <input id="u_area" type="number" placeholder="Metraż m²" value="${unit?.area ?? ""}" />
+            <input id="u_floor" type="number" placeholder="Piętro" value="${unit?.floor ?? ""}" />
+            <input id="u_rent" type="number" placeholder="Czynsz bazowy" value="${unit?.rentDefault ?? ""}" />
+            <input id="u_service" type="number" placeholder="Opłata adm." value="${unit?.serviceCharge ?? ""}" />
+            <select id="u_status"><option ${unit?.status === "wynajęte" ? "selected" : ""}>wynajęte</option><option ${unit?.status === "wolne" || !unit?.status ? "selected" : ""}>wolne</option><option ${unit?.status === "serwis" ? "selected" : ""}>serwis</option></select>
           </div>
-          <div class="section"><button class="btn green" onclick="addUnit()">Dodaj lokal</button></div>
+          <div class="section inline-actions"><button class="btn green" onclick="addUnit()">${unit ? "Zapisz lokal" : "Dodaj lokal"}</button>${unit ? `<button class="btn secondary" onclick="cancelUnitEdit()">Anuluj</button>` : ""}</div>
         </div>
         <div class="card section">
           <div class="panel-title"><h3>Budynki</h3></div>
           <table><thead><tr><th>Nazwa</th><th>Adres</th><th>Lokale</th><th></th></tr></thead><tbody>
-            ${state.buildings.map((b) => `<tr><td>${b.name}</td><td>${b.address || "—"}</td><td>${state.units.filter((u) => u.buildingId === b.id).length}</td><td><button class="btn secondary small" onclick="removeBuilding('${b.id}')">Usuń</button></td></tr>`).join("")}
+            ${state.buildings.map((b) => `<tr><td><div class="cell-stack"><strong>${b.name}</strong>${b.notes ? `<span class="muted small">${truncatedText(b.notes)}</span>` : ""}</div></td><td>${truncatedText(b.address)}</td><td>${state.units.filter((u) => u.buildingId === b.id).length}</td><td class="inline-actions"><button class="btn secondary small" onclick="startBuildingEdit('${b.id}')">Edytuj</button><button class="btn secondary small" onclick="removeBuilding('${b.id}')">Usuń</button></td></tr>`).join("")}
           </tbody></table>
         </div>
         <div class="card section">
           <div class="panel-title"><h3>Lokale</h3></div>
           <table><thead><tr><th>Lokal</th><th>Typ</th><th>Status</th><th>Czynsz</th><th></th></tr></thead><tbody>
-            ${state.units.map((u) => `<tr><td>${unitLabel(u.id)}</td><td>${u.type}, ${u.area} m²</td><td><span class="badge ${u.status === "wynajęte" ? "status-active" : "status-pending"}">${u.status}</span></td><td>${fmt(u.rentDefault)}</td><td><button class="btn secondary small" onclick="removeUnit('${u.id}')">Usuń</button></td></tr>`).join("")}
+            ${state.units.map((u) => `<tr><td><div class="cell-stack"><strong>${unitLabel(u.id)}</strong>${u.notes ? `<span class="muted small">${truncatedText(u.notes)}</span>` : ""}</div></td><td>${truncatedText(`${u.type}, ${u.area} m²`, 18)}</td><td><span class="badge ${u.status === "wynajęte" ? "status-active" : "status-pending"}">${u.status}</span></td><td>${fmt(u.rentDefault)}</td><td class="inline-actions"><button class="btn secondary small" onclick="startUnitEdit('${u.id}')">Edytuj</button><button class="btn secondary small" onclick="removeUnit('${u.id}')">Usuń</button></td></tr>`).join("")}
           </tbody></table>
         </div>`;
     }
 
     function renderTenants() {
+      const tenant = editingTenantId ? tenantById(editingTenantId) : null;
       document.getElementById("tenants").innerHTML = `
         <div class="card">
-          <div class="panel-title"><h3>Dodaj najemcę</h3></div>
+          <div class="panel-title"><h3>${tenant ? "Edytuj najemcę" : "Dodaj najemcę"}</h3></div>
           <div class="form-grid">
-            <input id="t_name" placeholder="Imię i nazwisko" />
-            <input id="t_phone" placeholder="Telefon" />
-            <input id="t_email" placeholder="E-mail" />
-            <input id="t_pesel" placeholder="PESEL" />
-            <input id="t_id_card" placeholder="Nr dowodu" />
-            <select id="t_unit"><option value="">Bez przypisania</option>${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
+            <input id="t_name" placeholder="Imię i nazwisko" value="${tenant?.name || ""}" />
+            <input id="t_phone" placeholder="Telefon" value="${tenant?.phone || ""}" />
+            <input id="t_email" placeholder="E-mail" value="${tenant?.email || ""}" />
+            <input id="t_pesel" placeholder="PESEL" value="${tenant?.pesel || ""}" />
+            <input id="t_id_card" placeholder="Nr dowodu" value="${tenant?.idCardNumber || ""}" />
+            <select id="t_unit"><option value="">Bez przypisania</option>${state.units.map((u) => `<option value="${u.id}" ${tenant?.unitId === u.id ? "selected" : ""}>${unitLabel(u.id)}</option>`).join("")}</select>
           </div>
           <div class="form-grid section">
-            <input id="t_reg_address" placeholder="Adres zameldowania" />
-            <input id="t_corr_address" placeholder="Adres korespondencyjny" />
-            <input id="t_birth_date" type="date" placeholder="Data urodzenia" />
-            <input id="t_birth_place" placeholder="Miejsce urodzenia" />
-            <input id="t_nationality" placeholder="Obywatelstwo" />
-            <input id="t_workplace" placeholder="Miejsce pracy / źródło dochodu" />
-            <input id="t_emergency_contact" placeholder="Kontakt awaryjny" />
-            <input id="t_emergency_phone" placeholder="Telefon awaryjny" />
-            <input id="t_document_issuer" placeholder="Wydany przez" />
+            <input id="t_reg_address" placeholder="Adres zameldowania" value="${tenant?.registrationAddress || ""}" />
+            <input id="t_corr_address" placeholder="Adres korespondencyjny" value="${tenant?.correspondenceAddress || ""}" />
+            <input id="t_birth_date" type="date" placeholder="Data urodzenia" value="${tenant?.birthDate || ""}" />
+            <input id="t_birth_place" placeholder="Miejsce urodzenia" value="${tenant?.birthPlace || ""}" />
+            <input id="t_nationality" placeholder="Obywatelstwo" value="${tenant?.nationality || ""}" />
+            <input id="t_workplace" placeholder="Miejsce pracy / źródło dochodu" value="${tenant?.workplace || ""}" />
+            <input id="t_emergency_contact" placeholder="Kontakt awaryjny" value="${tenant?.emergencyContact || ""}" />
+            <input id="t_emergency_phone" placeholder="Telefon awaryjny" value="${tenant?.emergencyPhone || ""}" />
+            <input id="t_document_issuer" placeholder="Wydany przez" value="${tenant?.documentIssuer || ""}" />
           </div>
-          <div class="section"><button class="btn green" onclick="addTenant()">Dodaj najemcę</button></div>
+          <div class="section inline-actions"><button class="btn green" onclick="addTenant()">${tenant ? "Zapisz najemcę" : "Dodaj najemcę"}</button>${tenant ? `<button class="btn secondary" onclick="cancelTenantEdit()">Anuluj</button>` : ""}</div>
         </div>
         <div class="card section">
           <div class="panel-title"><h3>Najemcy</h3></div>
@@ -2736,7 +2937,7 @@
             ${state.tenants.map((t) => {
               const ledger = tenantLedger(t.id);
               const verified = t.pesel && t.idCardNumber && t.registrationAddress;
-              return `<tr><td><strong>${t.name}</strong></td><td>${t.phone || "—"}<br><span class="muted small">${t.email || "—"}</span></td><td><span class="badge ${verified ? "status-active" : "status-pending"}">${verified ? "formalnie uzupełniony" : "braki danych"}</span></td><td>${t.unitId ? unitLabel(t.unitId) : "—"}</td><td class="${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}">${fmt(ledger.balance)}</td><td class="inline-actions"><button class="btn secondary small" onclick="openTenantCard('${t.id}')">Karta</button><button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button></td></tr>`;
+              return `<tr><td><div class="cell-stack"><strong>${t.name}</strong><span class="muted small">${truncatedText(tenantFormalAddress(t), 20)}</span></div></td><td>${truncatedText(t.phone || "—")}<br><span class="muted small">${truncatedText(t.email || "—", 22)}</span></td><td><span class="badge ${verified ? "status-active" : "status-pending"}">${verified ? "formalnie uzupełniony" : "braki danych"}</span></td><td>${t.unitId ? unitLabel(t.unitId) : "—"}</td><td class="${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}">${fmt(ledger.balance)}</td><td class="inline-actions"><button class="btn secondary small" onclick="openTenantCard('${t.id}')">Karta</button><button class="btn secondary small" onclick="startTenantEdit('${t.id}')">Edytuj</button><button class="btn secondary small" onclick="removeTenant('${t.id}')">Usuń</button></td></tr>`;
             }).join("")}
           </tbody></table>
         </div>`;
@@ -2847,39 +3048,40 @@
     }
 
     function renderLeases() {
+      const lease = editingLeaseId ? leaseById(editingLeaseId) : null;
       document.getElementById("leases").innerHTML = `
         <div class="card">
-          <div class="panel-title"><h3>Dodaj umowę</h3></div>
+          <div class="panel-title"><h3>${lease ? "Edytuj umowę" : "Dodaj umowę"}</h3></div>
           <div class="form-grid">
-            <select id="l_tenant">${state.tenants.map((t) => `<option value="${t.id}">${t.name}</option>`).join("")}</select>
-            <select id="l_unit">${state.units.map((u) => `<option value="${u.id}">${unitLabel(u.id)}</option>`).join("")}</select>
-            <input id="l_start" type="date" value="${today()}" />
-            <input id="l_end" type="date" />
-            <input id="l_rent" type="number" placeholder="Czynsz" />
-            <input id="l_deposit" type="number" placeholder="Kaucja" />
-            <select id="l_status"><option>aktywna</option><option>wypowiedziana</option><option>zakończona</option></select>
+            <select id="l_tenant">${state.tenants.map((t) => `<option value="${t.id}" ${lease?.tenantId === t.id ? "selected" : ""}>${t.name}</option>`).join("")}</select>
+            <select id="l_unit">${state.units.map((u) => `<option value="${u.id}" ${lease?.unitId === u.id ? "selected" : ""}>${unitLabel(u.id)}</option>`).join("")}</select>
+            <input id="l_start" type="date" value="${lease?.startDate || today()}" />
+            <input id="l_end" type="date" value="${lease?.endDate || ""}" />
+            <input id="l_rent" type="number" placeholder="Czynsz" value="${lease?.rent ?? ""}" />
+            <input id="l_deposit" type="number" placeholder="Kaucja" value="${lease?.deposit ?? ""}" />
+            <select id="l_status"><option ${lease?.status === "aktywna" || !lease?.status ? "selected" : ""}>aktywna</option><option ${lease?.status === "wypowiedziana" ? "selected" : ""}>wypowiedziana</option><option ${lease?.status === "zakończona" ? "selected" : ""}>zakończona</option></select>
           </div>
           <div class="form-grid section">
-            <input id="l_adv_cold" type="number" step="0.01" placeholder="Zaliczka zimna woda" />
-            <input id="l_adv_hot" type="number" step="0.01" placeholder="Zaliczka ciepła woda" />
-            <input id="l_adv_el" type="number" step="0.01" placeholder="Zaliczka prąd" />
-            <input id="l_adv_gas" type="number" step="0.01" placeholder="Zaliczka gaz" />
+            <input id="l_adv_cold" type="number" step="0.01" placeholder="Zaliczka zimna woda" value="${lease?.advanceColdWater ?? ""}" />
+            <input id="l_adv_hot" type="number" step="0.01" placeholder="Zaliczka ciepła woda" value="${lease?.advanceHotWater ?? ""}" />
+            <input id="l_adv_el" type="number" step="0.01" placeholder="Zaliczka prąd" value="${lease?.advanceElectricity ?? ""}" />
+            <input id="l_adv_gas" type="number" step="0.01" placeholder="Zaliczka gaz" value="${lease?.advanceGas ?? ""}" />
           </div>
           <div class="form-grid section">
-            <input id="l_adv_heat" type="number" step="0.01" placeholder="Zaliczka ciepło" />
-            <input id="l_fee_waste" type="number" step="0.01" placeholder="Śmieci / miesiąc" />
-            <input id="l_fee_internet" type="number" step="0.01" placeholder="Internet / miesiąc" />
-            <input id="l_rent_due" type="number" value="5" placeholder="Termin płatności czynszu" />
+            <input id="l_adv_heat" type="number" step="0.01" placeholder="Zaliczka ciepło" value="${lease?.advanceHeat ?? ""}" />
+            <input id="l_fee_waste" type="number" step="0.01" placeholder="Śmieci / miesiąc" value="${lease?.feeWaste ?? ""}" />
+            <input id="l_fee_internet" type="number" step="0.01" placeholder="Internet / miesiąc" value="${lease?.feeInternet ?? ""}" />
+            <input id="l_rent_due" type="number" value="${lease?.rentDueDay ?? 5}" placeholder="Termin płatności czynszu" />
           </div>
           <div class="form-grid section">
-            <input id="l_other_due" type="number" value="10" placeholder="Termin płatności pozostałych opłat" />
+            <input id="l_other_due" type="number" value="${lease?.otherDueDay ?? 10}" placeholder="Termin płatności pozostałych opłat" />
           </div>
-          <div class="section"><button class="btn green" onclick="addLease()">Dodaj umowę</button></div>
+          <div class="section inline-actions"><button class="btn green" onclick="addLease()">${lease ? "Zapisz umowę" : "Dodaj umowę"}</button>${lease ? `<button class="btn secondary" onclick="cancelLeaseEdit()">Anuluj</button>` : ""}</div>
         </div>
         <div class="card section">
           <div class="panel-title"><h3>Umowy</h3><button class="btn secondary" onclick="generateMonthlyCharges()">Generuj miesięczne opłaty</button></div>
           <table><thead><tr><th>Najemca</th><th>Lokal</th><th>Okres</th><th>Czynsz</th><th>Stałe opłaty</th><th>Zaliczki media</th><th>Terminy</th><th>Status</th><th></th></tr></thead><tbody>
-            ${state.leases.map((l) => `<tr><td>${tenantName(l.tenantId)}</td><td>${unitLabel(l.unitId)}</td><td>${l.startDate}<br><span class="muted small">do ${l.endDate || "bezterminowo"}</span></td><td>${fmt(l.rent)}</td><td>śmieci: ${fmt(l.feeWaste || 0)}<br>internet: ${fmt(l.feeInternet || 0)}</td><td>${fmt(leaseAdvanceTotal(l))}</td><td>czynsz: ${l.rentDueDay || 5}<br>pozostałe: ${l.otherDueDay || 10}</td><td><span class="badge ${l.status === "aktywna" ? "status-active" : "status-closed"}">${l.status}</span></td><td><button class="btn secondary small" onclick="removeLease('${l.id}')">Usuń</button></td></tr>`).join("")}
+            ${state.leases.map((l) => `<tr><td>${tenantName(l.tenantId)}</td><td>${truncatedText(unitLabel(l.unitId), 20)}</td><td>${l.startDate}<br><span class="muted small">do ${l.endDate || "bezterminowo"}</span></td><td>${fmt(l.rent)}</td><td>śmieci: ${fmt(l.feeWaste || 0)}<br>internet: ${fmt(l.feeInternet || 0)}</td><td>${fmt(leaseAdvanceTotal(l))}</td><td>czynsz: ${l.rentDueDay || 5}<br>pozostałe: ${l.otherDueDay || 10}</td><td><span class="badge ${l.status === "aktywna" ? "status-active" : "status-closed"}">${l.status}</span></td><td class="inline-actions"><button class="btn secondary small" onclick="startLeaseEdit('${l.id}')">Edytuj</button><button class="btn secondary small" onclick="removeLease('${l.id}')">Usuń</button></td></tr>`).join("")}
           </tbody></table>
         </div>`;
     }
@@ -3430,6 +3632,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
               <div>
                 <strong>${entry.authorName || (entry.authorRole === "owner" ? "Zarządca" : "Najemca")}</strong>
                 <div class="meta">${entry.authorRole === "owner" ? "Zarządca / właściciel" : "Najemca"} · ${formatDateTime(entry.createdAt)}</div>
+                ${entry.attachments?.length ? `<div class="thread-attachments">${entry.attachments.map(conversationAttachmentMarkup).join("")}</div>` : ""}
               </div>
               <div class="notice">${entry.body || "—"}</div>
             </div>
@@ -3446,9 +3649,10 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                   <div class="entity-item">
                     <div>
                       <strong>${conversation.subject || "Wiadomość do zarządcy"}</strong>
-                      <div class="meta">${formatDateTime(conversation.updatedAt || conversation.createdAt)} · ${conversation.thread?.length || 0} wiadomości</div>
+                      <div class="meta">${formatDateTime(conversation.updatedAt || conversation.createdAt)} · ${conversation.thread?.length || 0} wiadomości · ${conversation.priority === "pilna" ? "pilna" : "standard"}</div>
                     </div>
                     <div class="inline-actions">
+                      <span class="badge ${conversation.status === "zamknięta" ? "status-closed" : conversation.priority === "pilna" ? "status-overdue" : "status-open"}">${conversation.status}</span>
                       <button class="btn secondary small" onclick="selectConversation('${conversation.id}')">Otwórz</button>
                     </div>
                   </div>
@@ -3456,15 +3660,21 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
               </div>
             </div>
             <div class="card">
-              <div class="panel-title"><h3>${active ? active.subject : "Nowa wiadomość"}</h3></div>
+              <div class="panel-title"><h3>${active ? active.subject : "Nowa wiadomość"}</h3>${active ? `<span class="badge ${active.status === "zamknięta" ? "status-closed" : active.priority === "pilna" ? "status-overdue" : "status-open"}">${active.priority} · ${active.status}</span>` : ""}</div>
               ${active ? `<div class="entity-list">${threadMarkup}</div>` : `<div class="empty-state">Utwórz pierwszą wiadomość do zarządcy.</div>`}
               <div class="section">
                 <input id="new_message_subject" placeholder="Temat wiadomości" value="${active?.subject || ""}" ${active ? "disabled" : ""} />
-                <textarea id="new_message_body" rows="5" placeholder="Napisz wiadomość do zarządcy lub właściciela"></textarea>
-                <div class="section inline-actions"><button class="btn green" onclick="sendConversationMessage()">${active ? "Odpowiedz" : "Wyślij wiadomość"}</button></div>
+                ${!active ? `<select id="new_message_priority"><option value="normalna">Normalna</option><option value="pilna">Pilna</option></select>` : ""}
+                <textarea id="new_message_body" rows="5" placeholder="Napisz wiadomość do zarządcy lub właściciela" ${active?.status === "zamknięta" ? "disabled" : ""}></textarea>
+                <div class="section notice" onpaste="handleConversationPaste(event)">
+                  <input type="file" id="conversation_files_tenant" multiple onchange="handleConversationFileInput(event)" />
+                  <div data-conversation-pending-files class="entity-list section"></div>
+                </div>
+                <div class="section inline-actions"><button class="btn green" onclick="sendConversationMessage()" ${active?.status === "zamknięta" ? "disabled" : ""}>${active ? "Odpowiedz" : "Wyślij wiadomość"}</button>${active ? `<button class="btn secondary" onclick="toggleConversationStatus('${active.id}')">${active.status === "zamknięta" ? "Otwórz ponownie" : "Zamknij wątek"}</button>` : ""}</div>
               </div>
             </div>
           </div>`;
+        renderPendingConversationFiles();
         return;
       }
 
@@ -3501,9 +3711,10 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                 <div class="entity-item">
                   <div>
                     <strong>${conversation.subject || "Rozmowa"}</strong>
-                    <div class="meta">${tenantName(conversation.tenantId)} · ${formatDateTime(conversation.updatedAt || conversation.createdAt)}</div>
+                    <div class="meta">${tenantName(conversation.tenantId)} · ${formatDateTime(conversation.updatedAt || conversation.createdAt)} · ${conversation.thread?.length || 0} wiadomości</div>
                   </div>
                   <div class="inline-actions">
+                    <span class="badge ${conversation.status === "zamknięta" ? "status-closed" : conversation.priority === "pilna" ? "status-overdue" : "status-open"}">${conversation.priority}</span>
                     <button class="btn secondary small" onclick="selectConversation('${conversation.id}')">Otwórz</button>
                   </div>
                 </div>
@@ -3515,17 +3726,26 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                 <select id="conversation_tenant"><option value="">Wybierz najemcę</option>${state.tenants.map((tenant) => `<option value="${tenant.id}">${tenant.name}</option>`).join("")}</select>
                 <input id="conversation_subject" placeholder="Temat wiadomości" />
               </div>
+              <select id="conversation_priority"><option value="normalna">Priorytet standardowy</option><option value="pilna">Priorytet pilny</option></select>
               <textarea id="conversation_body" rows="4" placeholder="Napisz wiadomość do najemcy"></textarea>
+              <div class="section notice" onpaste="handleConversationPaste(event)">
+                <input type="file" id="conversation_files_owner_new" multiple onchange="handleConversationFileInput(event)" />
+                <div data-conversation-pending-files class="entity-list section"></div>
+              </div>
               <div class="section inline-actions"><button class="btn green" onclick="createConversation()">Wyślij nową wiadomość</button></div>
             </div>
           </div>
           <div class="card">
-            <div class="panel-title"><h3>${active ? active.subject : "Wybierz rozmowę"}</h3></div>
+            <div class="panel-title"><h3>${active ? active.subject : "Wybierz rozmowę"}</h3>${active ? `<span class="badge ${active.status === "zamknięta" ? "status-closed" : active.priority === "pilna" ? "status-overdue" : "status-open"}">${active.priority} · ${active.status}</span>` : ""}</div>
             ${active ? `<div class="entity-list">${threadMarkup}</div>` : `<div class="empty-state">Po lewej wybierz rozmowę, aby odpisać najemcy.</div>`}
             ${active ? `
               <div class="section">
-                <textarea id="conversation_reply" rows="4" placeholder="Odpowiedz najemcy"></textarea>
-                <div class="section inline-actions"><button class="btn green" onclick="sendConversationMessage()">Wyślij odpowiedź</button></div>
+                <textarea id="conversation_reply" rows="4" placeholder="Odpowiedz najemcy" ${active.status === "zamknięta" ? "disabled" : ""}></textarea>
+                <div class="section notice" onpaste="handleConversationPaste(event)">
+                  <input type="file" id="conversation_files_owner_reply" multiple onchange="handleConversationFileInput(event)" ${active.status === "zamknięta" ? "disabled" : ""} />
+                  <div data-conversation-pending-files class="entity-list section"></div>
+                </div>
+                <div class="section inline-actions"><button class="btn green" onclick="sendConversationMessage()" ${active.status === "zamknięta" ? "disabled" : ""}>Wyślij odpowiedź</button><button class="btn secondary" onclick="toggleConversationPriority('${active.id}')">${active.priority === "pilna" ? "Oznacz jako standard" : "Oznacz jako pilne"}</button><button class="btn secondary" onclick="toggleConversationStatus('${active.id}')">${active.status === "zamknięta" ? "Otwórz rozmowę" : "Zamknij rozmowę"}</button></div>
               </div>
             ` : ""}
           </div>
@@ -3548,6 +3768,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             `).join("") || `<tr><td colspan="6">Brak aktywnej kolejki komunikacji.</td></tr>`}
           </tbody></table>
         </div>`;
+      renderPendingConversationFiles();
     }
 
     function renderAll() {
@@ -3590,21 +3811,71 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     async function addBuilding() {
       const name = document.getElementById("b_name").value.trim();
       if (!name) return alert("Podaj nazwę budynku.");
-      state.buildings.push({ id: uid("b"), name, address: document.getElementById("b_address").value.trim(), notes: document.getElementById("b_notes").value.trim(), createdAt: today() });
+      const payload = {
+        name,
+        address: document.getElementById("b_address").value.trim(),
+        notes: document.getElementById("b_notes").value.trim(),
+        createdAt: today()
+      };
+      if (editingBuildingId) {
+        const building = state.buildings.find((entry) => entry.id === editingBuildingId);
+        if (!building) return alert("Nie znaleziono budynku do edycji.");
+        Object.assign(building, payload);
+        editingBuildingId = null;
+      } else {
+        state.buildings.push({ id: uid("b"), ...payload });
+      }
       await save();
+    }
+    function startBuildingEdit(id) {
+      editingBuildingId = id;
+      renderProperties();
+      showPage("properties");
+    }
+    function cancelBuildingEdit() {
+      editingBuildingId = null;
+      renderProperties();
     }
     async function removeBuilding(id) {
       if (!confirm("Usunąć budynek?")) return;
       state.buildings = state.buildings.filter((x) => x.id !== id);
       state.units = state.units.filter((u) => u.buildingId !== id);
+      if (editingBuildingId === id) editingBuildingId = null;
       await save();
     }
     async function addUnit() {
       const buildingId = document.getElementById("u_building").value;
       const code = document.getElementById("u_code").value.trim();
       if (!buildingId || !code) return alert("Wybierz budynek i podaj numer lokalu.");
-      state.units.push({ id: uid("u"), buildingId, code, type: document.getElementById("u_type").value, area: Number(document.getElementById("u_area").value || 0), floor: Number(document.getElementById("u_floor").value || 0), rentDefault: Number(document.getElementById("u_rent").value || 0), serviceCharge: Number(document.getElementById("u_service").value || 0), status: document.getElementById("u_status").value, notes: "" });
+      const payload = {
+        buildingId,
+        code,
+        type: document.getElementById("u_type").value,
+        area: Number(document.getElementById("u_area").value || 0),
+        floor: Number(document.getElementById("u_floor").value || 0),
+        rentDefault: Number(document.getElementById("u_rent").value || 0),
+        serviceCharge: Number(document.getElementById("u_service").value || 0),
+        status: document.getElementById("u_status").value,
+        notes: ""
+      };
+      if (editingUnitId) {
+        const unit = state.units.find((entry) => entry.id === editingUnitId);
+        if (!unit) return alert("Nie znaleziono lokalu do edycji.");
+        Object.assign(unit, payload);
+        editingUnitId = null;
+      } else {
+        state.units.push({ id: uid("u"), ...payload });
+      }
       await save();
+    }
+    function startUnitEdit(id) {
+      editingUnitId = id;
+      renderProperties();
+      showPage("properties");
+    }
+    function cancelUnitEdit() {
+      editingUnitId = null;
+      renderProperties();
     }
     async function removeUnit(id) {
       if (!confirm("Usunąć lokal?")) return;
@@ -3613,6 +3884,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.leases = state.leases.filter((l) => l.unitId !== id);
       state.meters = state.meters.filter((m) => m.unitId !== id);
       state.meterReadings = state.meterReadings.filter((r) => state.meters.some((m) => m.id === r.meterId));
+      if (editingUnitId === id) editingUnitId = null;
+      syncLeaseAssignments();
       await save();
     }
     async function addTenant() {
@@ -3620,8 +3893,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       const email = document.getElementById("t_email").value.trim();
       if (!name) return alert("Podaj imię i nazwisko.");
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return alert("Podaj poprawny e-mail.");
-      state.tenants.push({
-        id: uid("t"),
+      const payload = {
         name,
         phone: document.getElementById("t_phone").value.trim(),
         email,
@@ -3639,8 +3911,28 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         emergencyPhone: document.getElementById("t_emergency_phone").value.trim(),
         status: "aktywny",
         notes: ""
-      });
+      };
+      if (editingTenantId) {
+        const tenant = tenantById(editingTenantId);
+        if (!tenant) return alert("Nie znaleziono najemcy do edycji.");
+        Object.assign(tenant, payload);
+        editingTenantId = null;
+      } else {
+        state.tenants.push({
+          id: uid("t"),
+          ...payload
+        });
+      }
       await save();
+    }
+    function startTenantEdit(id) {
+      editingTenantId = id;
+      renderTenants();
+      showPage("tenants");
+    }
+    function cancelTenantEdit() {
+      editingTenantId = null;
+      renderTenants();
     }
     async function saveTenantFormalData(id) {
       const tenant = tenantById(id);
@@ -3694,6 +3986,8 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       if (!confirm("Usunąć najemcę?")) return;
       state.tenants = state.tenants.filter((x) => x.id !== id);
       state.leases = state.leases.filter((l) => l.tenantId !== id);
+      if (editingTenantId === id) editingTenantId = null;
+      syncLeaseAssignments();
       await save();
     }
     function openTenantCard(id) {
@@ -3709,11 +4003,10 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       if (!tenantId || !unitId) return alert("Wybierz najemcę i lokal.");
       if (!startDate) return alert("Podaj datę rozpoczęcia umowy.");
       if (endDate && endDate < startDate) return alert("Data zakończenia nie może być wcześniejsza niż start.");
-      if (state.leases.some((lease) => lease.status === "aktywna" && (lease.unitId === unitId || lease.tenantId === tenantId))) {
+      if (state.leases.some((lease) => lease.id !== editingLeaseId && lease.status === "aktywna" && (lease.unitId === unitId || lease.tenantId === tenantId))) {
         return alert("Ta aktywna umowa koliduje z istniejącym najemcą albo lokalem.");
       }
-      state.leases.push({
-        id: uid("l"), tenantId, unitId,
+      const payload = { tenantId, unitId,
         startDate,
         endDate,
         rent: Number(document.getElementById("l_rent").value || 0),
@@ -3729,16 +4022,39 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         rentDueDay: Number(document.getElementById("l_rent_due").value || 5),
         otherDueDay: Number(document.getElementById("l_other_due").value || 10),
         notes: ""
-      });
+      };
+      if (editingLeaseId) {
+        const lease = leaseById(editingLeaseId);
+        if (!lease) return alert("Nie znaleziono umowy do edycji.");
+        Object.assign(lease, payload);
+        editingLeaseId = null;
+      } else {
+        state.leases.push({
+          id: uid("l"),
+          ...payload
+        });
+      }
       const unit = state.units.find((u) => u.id === unitId);
       if (unit) unit.status = "wynajęte";
       const tenant = state.tenants.find((t) => t.id === tenantId);
       if (tenant) tenant.unitId = unitId;
+      syncLeaseAssignments();
       await save();
+    }
+    function startLeaseEdit(id) {
+      editingLeaseId = id;
+      renderLeases();
+      showPage("leases");
+    }
+    function cancelLeaseEdit() {
+      editingLeaseId = null;
+      renderLeases();
     }
     async function removeLease(id) {
       if (!confirm("Usunąć umowę?")) return;
       state.leases = state.leases.filter((x) => x.id !== id);
+      if (editingLeaseId === id) editingLeaseId = null;
+      syncLeaseAssignments();
       await save();
     }
     async function addMeter() {
