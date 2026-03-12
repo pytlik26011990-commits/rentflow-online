@@ -616,6 +616,7 @@
       <section id="expenses" class="page hidden"></section>
       <section id="maintenance" class="page hidden"></section>
       <section id="documents" class="page hidden"></section>
+      <section id="communications" class="page hidden"></section>
       <section id="reports" class="page hidden"></section>
       <section id="settings" class="page hidden"></section>
     </main>
@@ -645,7 +646,10 @@
         utilityVAT: 23,
         lateFee: 50,
         bankAccount: "",
-        paymentDueDay: 10
+        paymentDueDay: 10,
+        reminderDaysBeforeDue: 3,
+        reminderDaysBeforeLeaseEnd: 45,
+        reminderDaysBeforeDocumentExpiry: 30
       }
     };
 
@@ -670,6 +674,7 @@
       ["expenses", "Koszty", "Koszty budynków i lokali."],
       ["maintenance", "Usterki", "Zgłoszenia, priorytety i statusy."],
       ["documents", "Dokumenty", "Rejestr umów, polis, protokołów i terminów ważności."],
+      ["communications", "Komunikacja", "Przypomnienia, kolejka kontaktu i gotowe wiadomości."],
       ["reports", "Raporty", "Obłożenie, wynik i zestawienia."],
       ["settings", "Ustawienia", "Dane firmy i eksporty."]
     ];
@@ -890,6 +895,9 @@
       state.settings.lateFee = Number(state.settings.lateFee || 50);
       state.settings.bankAccount ||= "";
       state.settings.paymentDueDay = Number(state.settings.paymentDueDay || 10);
+      state.settings.reminderDaysBeforeDue = Number(state.settings.reminderDaysBeforeDue || 3);
+      state.settings.reminderDaysBeforeLeaseEnd = Number(state.settings.reminderDaysBeforeLeaseEnd || 45);
+      state.settings.reminderDaysBeforeDocumentExpiry = Number(state.settings.reminderDaysBeforeDocumentExpiry || 30);
 
       state.leases = state.leases.map((lease) => ({
         ...lease,
@@ -1265,6 +1273,149 @@
       ];
     }
 
+    function chargeOutstandingAmount(charge) {
+      return Math.max(0, Number(charge?.amount || 0) - chargePaidAmount(charge?.id));
+    }
+
+    function leaseReminderThresholdDays() {
+      return Math.max(1, Number(state.settings.reminderDaysBeforeLeaseEnd || 45));
+    }
+
+    function documentReminderThresholdDays() {
+      return Math.max(1, Number(state.settings.reminderDaysBeforeDocumentExpiry || 30));
+    }
+
+    function dueReminderThresholdDays() {
+      return Math.max(1, Number(state.settings.reminderDaysBeforeDue || 3));
+    }
+
+    function communicationQueue() {
+      const paymentItems = state.charges
+        .filter((charge) => {
+          const outstanding = chargeOutstandingAmount(charge);
+          const days = daysUntil(charge.dueDate);
+          return outstanding > 0 && days !== null && days <= dueReminderThresholdDays();
+        })
+        .map((charge) => {
+          const lease = leaseById(charge.leaseId);
+          const tenant = tenantById(lease?.tenantId);
+          const overdue = calcChargeStatus(charge) === "zaległe";
+          return {
+            id: `charge_${charge.id}`,
+            kind: "payment",
+            severity: overdue ? "high" : "medium",
+            targetName: tenant?.name || "Najemca",
+            targetEmail: tenant?.email || "",
+            title: overdue ? "Przypomnienie o zaległej płatności" : "Przypomnienie o zbliżającej się płatności",
+            subtitle: `${charge.type} · ${lease ? leaseLabel(lease.id) : "bez umowy"}`,
+            amount: chargeOutstandingAmount(charge),
+            date: charge.dueDate,
+            tenantId: tenant?.id || "",
+            openAction: () => tenant?.id && openTenantCard(tenant.id),
+            message: paymentReminderMessage(charge, tenant, lease)
+          };
+        });
+
+      const leaseItems = expiringLeases(leaseReminderThresholdDays()).map((lease) => {
+        const tenant = tenantById(lease.tenantId);
+        return {
+          id: `lease_${lease.id}`,
+          kind: "lease",
+          severity: (daysUntil(lease.endDate) ?? 999) <= 14 ? "high" : "medium",
+          targetName: tenant?.name || "Najemca",
+          targetEmail: tenant?.email || "",
+          title: "Kończąca się umowa",
+          subtitle: leaseLabel(lease.id),
+          amount: 0,
+          date: lease.endDate,
+          tenantId: tenant?.id || "",
+          openAction: () => showPage("leases"),
+          message: leaseReminderMessage(lease, tenant)
+        };
+      });
+
+      const documentItems = expiringDocuments(documentReminderThresholdDays()).map((document) => {
+        const tenant = tenantById(document.tenantId);
+        return {
+          id: `document_${document.id}`,
+          kind: "document",
+          severity: (daysUntil(document.expiresAt) ?? 999) <= 7 ? "high" : "medium",
+          targetName: tenant?.name || "Wewnętrzne",
+          targetEmail: tenant?.email || "",
+          title: "Wygasający dokument",
+          subtitle: `${document.title} · ${document.category || "dokument"}`,
+          amount: 0,
+          date: document.expiresAt,
+          tenantId: tenant?.id || "",
+          openAction: () => showPage("documents"),
+          message: documentReminderMessage(document, tenant)
+        };
+      });
+
+      const slaItems = ticketAlerts(8).map((alert) => {
+        const ticket = findTicket(alert.id);
+        const tenant = tenantById(ticket?.tenantId);
+        return {
+          id: `ticket_${alert.id}`,
+          kind: "ticket",
+          severity: alert.severity,
+          targetName: tenant?.name || "Zespół",
+          targetEmail: tenant?.email || "",
+          title: "Sprawa serwisowa wymaga kontaktu",
+          subtitle: `${ticket?.title || "Zgłoszenie"} · ${alert.badge}`,
+          amount: 0,
+          date: alert.date,
+          tenantId: tenant?.id || "",
+          openAction: () => {
+            if (ticket?.id) {
+              selectedTicketId = ticket.id;
+              showPage("maintenance");
+            }
+          },
+          message: ticketReminderMessage(ticket, tenant, alert.badge)
+        };
+      });
+
+      return [...paymentItems, ...leaseItems, ...documentItems, ...slaItems]
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    }
+
+    function tenantReminderFeed() {
+      const dueSoonCharges = state.charges
+        .filter((charge) => chargeOutstandingAmount(charge) > 0)
+        .filter((charge) => {
+          const days = daysUntil(charge.dueDate);
+          return days !== null && days <= dueReminderThresholdDays();
+        })
+        .map((charge) => ({
+          id: charge.id,
+          title: calcChargeStatus(charge) === "zaległe" ? "Zaległa płatność" : "Płatność do opłacenia",
+          meta: `${charge.type} · termin ${charge.dueDate}`,
+          severity: calcChargeStatus(charge) === "zaległe" ? "high" : "medium",
+          amount: chargeOutstandingAmount(charge)
+        }));
+
+      const docs = expiringDocuments(documentReminderThresholdDays()).map((document) => ({
+        id: document.id,
+        title: "Wygasający dokument",
+        meta: `${document.title} · ważny do ${document.expiresAt}`,
+        severity: (daysUntil(document.expiresAt) ?? 999) <= 7 ? "high" : "medium",
+        amount: 0
+      }));
+
+      const tickets = state.tickets
+        .filter((ticket) => ticket.status !== "zamknięte")
+        .map((ticket) => ({
+          id: ticket.id,
+          title: "Sprawa w toku",
+          meta: `${ticket.title} · ${ticketSlaState(ticket).label}`,
+          severity: ticketSlaState(ticket).tone === "high" ? "high" : "medium",
+          amount: 0
+        }));
+
+      return [...dueSoonCharges, ...docs, ...tickets].slice(0, 6);
+    }
+
     function ticketPriorityClass(priority) {
       return priority === "wysoki" ? "status-overdue" : priority === "średni" ? "status-pending" : "status-active";
     }
@@ -1473,6 +1624,43 @@
       window.location.href = `mailto:${encodeURIComponent(email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
 
+    function paymentReminderMessage(charge, tenant, lease) {
+      const outstanding = chargeOutstandingAmount(charge);
+      const status = calcChargeStatus(charge) === "zaległe" ? "zaległa" : "zbliżająca się";
+      return `Dzień dobry ${tenant?.name || ""},\n\nTo ${status} płatność dotycząca ${charge.type} w kwocie ${fmt(outstanding)}.\nTermin płatności: ${charge.dueDate || "—"}.\n${lease ? `Umowa: ${leaseLabel(lease.id)}.\n` : ""}\nProsimy o uregulowanie należności lub kontakt, jeśli potrzebujesz wyjaśnień.\n\nPozdrawiamy,\n${state.settings.ownerName || state.settings.companyName || "RentFlow"}`;
+    }
+
+    function leaseReminderMessage(lease, tenant) {
+      return `Dzień dobry ${tenant?.name || ""},\n\nPrzypominamy, że umowa najmu dla ${unitLabel(lease.unitId)} kończy się ${lease.endDate || "wkrótce"}.\nJeśli chcesz przedłużyć najem lub omówić dalsze warunki, prosimy o kontakt.\n\nPozdrawiamy,\n${state.settings.ownerName || state.settings.companyName || "RentFlow"}`;
+    }
+
+    function documentReminderMessage(document, tenant) {
+      const intro = tenant ? `Dzień dobry ${tenant.name},` : "Dzień dobry,";
+      return `${intro}\n\nDokument "${document.title}" ${document.expiresAt ? `traci ważność ${document.expiresAt}` : "wymaga weryfikacji"}.\nProsimy o przygotowanie aktualizacji lub kontakt w celu uzupełnienia formalności.\n\nPozdrawiamy,\n${state.settings.ownerName || state.settings.companyName || "RentFlow"}`;
+    }
+
+    function ticketReminderMessage(ticket, tenant, slaLabel) {
+      return `Dzień dobry ${tenant?.name || ""},\n\nSprawa serwisowa "${ticket?.title || "zgłoszenie"}" jest obecnie w statusie "${ticket?.status || "otwarte"}".\nAktualny priorytet/SLA: ${slaLabel}.\nJeśli chcesz doprecyzować problem lub potwierdzić dostęp do lokalu, odpowiedz na tę wiadomość.\n\nPozdrawiamy,\n${state.settings.ownerName || state.settings.companyName || "RentFlow"}`;
+    }
+
+    function communicationItemById(id) {
+      return communicationQueue().find((item) => item.id === id);
+    }
+
+    function openCommunicationItem(id) {
+      const item = communicationItemById(id);
+      if (!item?.openAction) return;
+      item.openAction();
+    }
+
+    function sendCommunicationEmail(id) {
+      const item = communicationItemById(id);
+      if (!item) return;
+      if (!item.targetEmail) return alert("Brak adresu e-mail dla tego adresata.");
+      const subject = `${state.settings.companyName || "RentFlow"} · ${item.title}`;
+      mailtoText(item.targetEmail, subject, item.message || "");
+    }
+
     function renderSearchResults() {
       const results = globalSearchResults(globalSearch.value);
       if (!results.length) {
@@ -1549,6 +1737,7 @@
         const { due, paid } = totals();
         const balance = due - paid;
         const openTickets = state.tickets.filter((ticket) => ticket.status !== "zamknięte").length;
+        const reminders = tenantReminderFeed();
         const nextCharge = state.charges
           .slice()
           .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")))
@@ -1578,6 +1767,18 @@
               <div class="card">
                 <div class="panel-title"><h3>Ostatnie rozliczenie</h3></div>
                 ${latestSettlement ? `<div class="ops-item"><strong>${fmtMonth(latestSettlement.month)}</strong><div class="muted">${latestSettlement.unitLabel}</div><div>${fmt(latestSettlement.total)}</div></div>` : `<div class="empty-state">Brak rozliczeń miesięcznych.</div>`}
+              </div>
+              <div class="card">
+                <div class="panel-title"><h3>Wymaga uwagi</h3></div>
+                <div class="ops-list">
+                  ${reminders.length ? reminders.map((item) => `
+                    <div class="ops-item ${item.severity === "high" ? "danger-box" : ""}">
+                      <strong>${item.title}</strong>
+                      <div class="muted">${item.meta}</div>
+                      <div>${item.amount ? fmt(item.amount) : "Sprawdź szczegóły"}</div>
+                    </div>
+                  `).join("") : `<div class="empty-state">Na ten moment nie ma nic pilnego po Twojej stronie.</div>`}
+                </div>
               </div>
             </div>
           </div>
@@ -2319,7 +2520,59 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       }
 
       document.getElementById("settings").innerHTML = `
-        <div class="card"><div class="panel-title"><h3>Ustawienia</h3></div><div class="form-grid"><input id="s_company" value="${state.settings.companyName || ""}" placeholder="Nazwa firmy" /><input id="s_owner" value="${state.settings.ownerName || ""}" placeholder="Właściciel / zarządca" /><input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" /><input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" /><input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" /><input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" /><input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Domyślny dzień płatności" /></div><div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div></div>`;
+        <div class="card"><div class="panel-title"><h3>Ustawienia</h3></div><div class="form-grid"><input id="s_company" value="${state.settings.companyName || ""}" placeholder="Nazwa firmy" /><input id="s_owner" value="${state.settings.ownerName || ""}" placeholder="Właściciel / zarządca" /><input id="s_currency" value="${state.settings.baseCurrency || "PLN"}" placeholder="Waluta" /><input id="s_vat" type="number" value="${state.settings.utilityVAT || 23}" placeholder="VAT media %" /><input id="s_late" type="number" value="${state.settings.lateFee || 50}" placeholder="Opłata za zwłokę" /><input id="s_bank" value="${state.settings.bankAccount || ""}" placeholder="Numer rachunku bankowego" /><input id="s_due" type="number" value="${state.settings.paymentDueDay || 10}" placeholder="Domyślny dzień płatności" /><input id="s_reminder_due" type="number" value="${state.settings.reminderDaysBeforeDue || 3}" placeholder="Ile dni przed płatnością przypominać" /><input id="s_reminder_lease" type="number" value="${state.settings.reminderDaysBeforeLeaseEnd || 45}" placeholder="Ile dni przed końcem umowy przypominać" /><input id="s_reminder_doc" type="number" value="${state.settings.reminderDaysBeforeDocumentExpiry || 30}" placeholder="Ile dni przed końcem dokumentu przypominać" /></div><div class="section"><button class="btn green" onclick="saveSettings()">Zapisz ustawienia</button></div></div>`;
+    }
+
+    function renderCommunications() {
+      const queue = communicationQueue();
+      const paymentCount = queue.filter((item) => item.kind === "payment").length;
+      const leaseCount = queue.filter((item) => item.kind === "lease").length;
+      const documentCount = queue.filter((item) => item.kind === "document").length;
+      const ticketCount = queue.filter((item) => item.kind === "ticket").length;
+
+      document.getElementById("communications").innerHTML = `
+        <div class="grid cards">
+          <div class="card"><div class="muted">Do kontaktu dziś</div><div class="metric">${queue.length}</div><div class="small muted">kolejka przypomnień i follow-upów</div></div>
+          <div class="card"><div class="muted">Płatności</div><div class="metric">${paymentCount}</div><div class="small muted">należności do przypomnienia</div></div>
+          <div class="card"><div class="muted">Umowy i dokumenty</div><div class="metric">${leaseCount + documentCount}</div><div class="small muted">kończące się sprawy formalne</div></div>
+          <div class="card"><div class="muted">Serwis</div><div class="metric">${ticketCount}</div><div class="small muted">sprawy wymagające komunikacji</div></div>
+        </div>
+        <div class="grid two section">
+          <div class="card">
+            <div class="panel-title"><h3>Reguły przypomnień</h3></div>
+            <div class="ops-list">
+              <div class="ops-item"><strong>Płatności</strong><div class="muted">${dueReminderThresholdDays()} dni przed terminem oraz po terminie</div></div>
+              <div class="ops-item"><strong>Umowy</strong><div class="muted">${leaseReminderThresholdDays()} dni przed końcem umowy</div></div>
+              <div class="ops-item"><strong>Dokumenty</strong><div class="muted">${documentReminderThresholdDays()} dni przed wygaśnięciem dokumentu</div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="panel-title"><h3>Jak działa komunikacja</h3></div>
+            <div class="ops-list">
+              <div class="ops-item"><strong>Kolejka priorytetów</strong><div class="muted">Najpierw pokazujemy zaległości, przekroczone SLA i formalności z bliskim terminem.</div></div>
+              <div class="ops-item"><strong>Gotowe wiadomości</strong><div class="muted">Każdy rekord ma predefiniowaną treść e-maila, którą możesz wysłać jednym kliknięciem.</div></div>
+              <div class="ops-item"><strong>Przejście do sprawy</strong><div class="muted">Z każdego przypomnienia przejdziesz od razu do karty najemcy, dokumentów albo zgłoszenia.</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card section">
+          <div class="panel-title"><h3>Kolejka komunikacji</h3></div>
+          <table><thead><tr><th>Typ</th><th>Adresat</th><th>Sprawa</th><th>Termin</th><th>Status</th><th></th></tr></thead><tbody>
+            ${queue.map((item) => `
+              <tr>
+                <td><span class="badge ${item.severity === "high" ? "status-overdue" : "status-pending"}">${item.kind}</span></td>
+                <td><strong>${item.targetName}</strong><br><span class="muted small">${item.targetEmail || "bez e-maila"}</span></td>
+                <td>${item.title}<br><span class="muted small">${item.subtitle}</span>${item.amount ? `<br><strong>${fmt(item.amount)}</strong>` : ""}</td>
+                <td>${item.date ? formatDateTime(item.date) : "—"}</td>
+                <td>${item.severity === "high" ? "pilne" : "planowane"}</td>
+                <td class="inline-actions">
+                  <button class="btn secondary small" onclick="openCommunicationItem('${item.id}')">Otwórz</button>
+                  <button class="btn small" onclick="sendCommunicationEmail('${item.id}')">Wyślij e-mail</button>
+                </td>
+              </tr>
+            `).join("") || `<tr><td colspan="6">Brak aktywnej kolejki komunikacji.</td></tr>`}
+          </tbody></table>
+        </div>`;
     }
 
     function renderAll() {
@@ -2335,6 +2588,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       renderExpenses();
       renderMaintenance();
       renderDocuments();
+      renderCommunications();
       renderReports();
       renderSettings();
       updateWorkspaceChrome();
@@ -2784,6 +3038,9 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       state.settings.lateFee = Math.max(0, Number(document.getElementById("s_late").value || 50));
       state.settings.bankAccount = document.getElementById("s_bank").value.trim();
       state.settings.paymentDueDay = Math.min(31, Math.max(1, Number(document.getElementById("s_due").value || 10)));
+      state.settings.reminderDaysBeforeDue = Math.min(30, Math.max(1, Number(document.getElementById("s_reminder_due").value || 3)));
+      state.settings.reminderDaysBeforeLeaseEnd = Math.min(180, Math.max(1, Number(document.getElementById("s_reminder_lease").value || 45)));
+      state.settings.reminderDaysBeforeDocumentExpiry = Math.min(180, Math.max(1, Number(document.getElementById("s_reminder_doc").value || 30)));
       await save();
       alert("Zapisano ustawienia.");
     }
