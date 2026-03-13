@@ -2244,7 +2244,8 @@
         paymentDemand: "Wezwanie do zapłaty",
         leaseTermination: "Wypowiedzenie umowy",
         depositReceipt: "Przyjęcie kaucji",
-        paymentReceipt: "Przyjęcie czynszu i opłat"
+        paymentReceipt: "Przyjęcie czynszu i opłat",
+        welcomeEmail: "Mail startowy"
       })[kind] || "Dokument";
     }
 
@@ -2928,6 +2929,48 @@
         { title: "Przygotuj protokół odbioru i zdjęcia lokalu", category: "onboarding", visibility: "owner", dueDate: lease?.startDate || tenant?.moveInTargetDate || "", description: "Dodaj protokół zdawczo-odbiorczy oraz dokumentację zdjęciową." },
         { title: "Przekaż klucze i aktywuj portal najemcy", category: "onboarding", visibility: "shared", dueDate: lease?.startDate || tenant?.moveInTargetDate || "", description: "Przekaż dostęp do lokalu i uruchom konto najemcy w portalu." }
       ];
+    }
+
+    function generateTemporaryPassword(length = 12) {
+      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+      const bytes = new Uint32Array(length);
+      window.crypto.getRandomValues(bytes);
+      return Array.from(bytes, (value) => alphabet[value % alphabet.length]).join("");
+    }
+
+    function portalLoginUrl() {
+      return `${window.location.origin}/login`;
+    }
+
+    function createWelcomeEmailDraftRecord(tenantId, email, password) {
+      const tenant = tenantById(tenantId);
+      if (!tenant) return null;
+      const lease = activeLeaseByTenant(tenantId) || state.leases.find((entry) => entry.tenantId === tenantId);
+      const unit = lease ? unitById(lease.unitId) : tenant.unitId ? unitById(tenant.unitId) : null;
+      return {
+        id: uid("gdoc"),
+        tenantId,
+        leaseId: lease?.id || "",
+        unitId: unit?.id || "",
+        kind: "welcomeEmail",
+        title: "Mail startowy do najemcy",
+        subject: `Dostęp do portalu ${state.settings.companyName || "RentHome"} · ${tenant.name}`,
+        bodyHtml: `
+          <p>Dzień dobry ${tenant.name},</p>
+          <p>Twoje konto w portalu ${state.settings.companyName || "RentHome"} zostało uruchomione. Poniżej znajdziesz dane startowe do logowania.</p>
+          <div class="box">
+            <strong>Adres logowania:</strong> ${portalLoginUrl()}<br>
+            <strong>Login:</strong> ${email}<br>
+            <strong>Hasło tymczasowe:</strong> ${password}
+          </div>
+          <p>Po pierwszym zalogowaniu zalecamy niezwłoczną zmianę hasła. W portalu znajdziesz swoje dokumenty, wiadomości, płatności i zgłoszenia.</p>
+          <p>Jeśli pojawi się problem z dostępem, odpowiedz na tę wiadomość lub skontaktuj się z obsługą.</p>
+          <p>Pozdrawiamy,<br>${(defaultMessageSignature() || "").replace(/\n/g, "<br>")}</p>
+        `,
+        status: "draft",
+        createdAt: nowIso(),
+        updatedAt: nowIso()
+      };
     }
 
     function leaseActiveInMonth(lease, month) {
@@ -5434,7 +5477,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       showPage("tenantCard");
       if (!options.silent) {
         if (automationResult) {
-          alert(`Screening zapisany. Automatycznie uruchomiono pakiet startowy: zadania ${automationResult.createdTasks}, szkice ${automationResult.createdDrafts}${automationResult.welcomeCreated ? ", wiadomość 1" : ""}.`);
+          alert(`Screening zapisany. Automatycznie uruchomiono pakiet startowy: zadania ${automationResult.createdTasks}, szkice ${automationResult.createdDrafts}${automationResult.welcomeCreated ? ", wiadomość 1" : ""}${automationResult.accessCreated ? ", konto najemcy utworzone" : automationResult.accessActivated ? ", konto najemcy włączone" : ""}${automationResult.welcomeMailDraftCreated ? ", mail startowy przygotowany" : ""}.`);
         } else {
           alert("Screening został zapisany.");
         }
@@ -5503,9 +5546,50 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           body: `Dzień dobry ${tenant.name},\n\nuruchomiliśmy Twój pakiet startowy najmu. Po naszej stronie przygotowaliśmy onboarding, szkic umowy oraz protokół odbioru. W kolejnych krokach dopniemy podpisy, przekazanie kluczy i aktywację wszystkich dokumentów w portalu.\n\nPozdrawiamy,\n${defaultMessageSignature()}`
         });
       }
+      await loadTenantAccessOverview(true);
+      let accessCreated = false;
+      let accessActivated = false;
+      let welcomeMailDraftCreated = false;
+      let temporaryPassword = "";
+      let access = tenantAccessByTenantId(id);
+      if (!access && tenant.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tenant.email)) {
+        temporaryPassword = generateTemporaryPassword();
+        await apiPost("/api/tenant-access", {
+          tenantId: id,
+          name: tenant.name,
+          email: tenant.email.trim().toLowerCase(),
+          password: temporaryPassword
+        });
+        accessCreated = true;
+        await loadTenantAccessOverview(true);
+        access = tenantAccessByTenantId(id);
+      } else if (access && access.isActive === false) {
+        await apiPost("/api/tenant-access/status", { tenantId: id, isActive: true });
+        accessActivated = true;
+        await loadTenantAccessOverview(true);
+        access = tenantAccessByTenantId(id);
+      }
+      if (accessCreated && temporaryPassword) {
+        const existingWelcomeDraft = state.generatedDocuments.find((document) => document.tenantId === id && document.kind === "welcomeEmail");
+        if (!existingWelcomeDraft) {
+          const mailDraft = createWelcomeEmailDraftRecord(id, access?.email || tenant.email, temporaryPassword);
+          if (mailDraft) {
+            state.generatedDocuments.push(mailDraft);
+            selectedGeneratedDocumentId = mailDraft.id;
+            welcomeMailDraftCreated = true;
+          }
+        }
+      }
       tenant.starterPacketAutomatedAt = tenant.starterPacketAutomatedAt || nowIso();
-      if (createdDrafts) await save();
-      return { createdTasks, createdDrafts, welcomeCreated: !welcomeExists };
+      if (createdDrafts || welcomeMailDraftCreated) await save();
+      return {
+        createdTasks,
+        createdDrafts,
+        welcomeCreated: !welcomeExists,
+        accessCreated,
+        accessActivated,
+        welcomeMailDraftCreated
+      };
     }
     async function launchTenantStarterPacket(id) {
       const tenant = tenantById(id);
@@ -5514,7 +5598,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       const result = await executeTenantStarterPacket(id);
       renderTenantCard();
       showPage("tenantCard");
-      alert(`Pakiet startowy gotowy. Zadania: ${result.createdTasks}, szkice dokumentów: ${result.createdDrafts}${result.welcomeCreated ? ", wiadomość powitalna: 1" : ""}.`);
+      alert(`Pakiet startowy gotowy. Zadania: ${result.createdTasks}, szkice dokumentów: ${result.createdDrafts}${result.welcomeCreated ? ", wiadomość powitalna: 1" : ""}${result.accessCreated ? ", konto utworzone" : result.accessActivated ? ", konto włączone" : ""}${result.welcomeMailDraftCreated ? ", mail startowy gotowy" : ""}.`);
     }
     async function createTenantAccess(tenantId) {
       const tenant = tenantById(tenantId);
