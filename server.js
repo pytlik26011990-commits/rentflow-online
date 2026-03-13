@@ -10,7 +10,7 @@ const { buildEmptyState, buildTenantState, normalizeState, sanitizeText } = requ
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
-const SESSION_COOKIE_NAME = "rentflow.sid";
+const SESSION_COOKIE_NAME = "renthome.sid";
 const SESSION_SECRET = process.env.SESSION_SECRET || "local-dev-only-change-me";
 
 if (IS_PRODUCTION && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 24)) {
@@ -282,7 +282,7 @@ async function createOrganizationWithOwner({ companyName, name, email, password 
 
     const orgId = uid("org");
     const userId = uid("usr");
-    const slugBase = slugify(companyName) || "rentflow";
+    const slugBase = slugify(companyName) || "renthome";
     const slug = `${slugBase}-${crypto.randomUUID().slice(0, 6)}`;
     const passwordHash = await bcrypt.hash(password, 12);
 
@@ -1142,7 +1142,7 @@ process.on("uncaughtException", (error) => {
   try {
     await initDb();
     app.listen(PORT, () => {
-      console.log(`RentFlow działa na porcie ${PORT}`);
+      console.log(`RentHome działa na porcie ${PORT}`);
     });
   } catch (error) {
     logServerError("Application startup failed", error);

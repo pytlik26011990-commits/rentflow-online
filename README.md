@@ -1,4 +1,4 @@
-# RentFlow Online
+# RentHome Online
 
 Prosta aplikacja do zarzadzania najmem oparta o `Express`, sesje w `PostgreSQL` i frontend bez frameworka.
 
@@ -28,7 +28,7 @@ Aplikacja domyslnie startuje na `http://localhost:3000`.
 ## Zmienne srodowiskowe
 
 ```bash
-DATABASE_URL=postgres://user:password@localhost:5432/rentflow
+DATABASE_URL=postgres://user:password@localhost:5432/renthome
 SESSION_SECRET=ustaw-dlugi-sekret-do-sesji
 NODE_ENV=development
 PORT=3000

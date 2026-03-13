@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RentFlow V9</title>
+  <title>RentHome</title>
   <style>
     :root {
       --bg: #f3efe7;
@@ -693,7 +693,7 @@
     <aside>
       <div class="brand-wrap">
         <div class="eyebrow">Rent Operations Suite</div>
-        <div class="brand">RentFlow</div>
+        <div class="brand">RentHome</div>
         <div class="sub">Panel operacyjny do zarządzania portfelem najmu, płatnościami, mediami i obsługą najemców.</div>
         <div class="portfolio-chip">
           <strong id="sidebarCompany">Portfolio</strong>
@@ -781,7 +781,7 @@
       settlements: [],
       periodSettlements: [],
       settings: {
-        companyName: "RentFlow V9",
+        companyName: "RentHome",
         ownerName: "Zarządca",
         ownerAddress: "",
         ownerDocument: "",
@@ -1235,7 +1235,7 @@
       state.settlements ||= [];
       state.periodSettlements ||= [];
       state.settings ||= {};
-      state.settings.companyName ||= "RentFlow V9";
+      state.settings.companyName ||= "RentHome";
       state.settings.ownerName ||= "";
       state.settings.ownerAddress ||= "";
       state.settings.ownerDocument ||= "";
@@ -2174,7 +2174,7 @@
 
     function defaultMessageSignature() {
       return state.settings.defaultMessageSignature
-        || `${state.settings.ownerName || state.settings.companyName || "RentFlow"}${state.settings.companyPhone ? `\nTel: ${state.settings.companyPhone}` : ""}${state.settings.companyEmail ? `\nE-mail: ${state.settings.companyEmail}` : ""}`;
+        || `${state.settings.ownerName || state.settings.companyName || "RentHome"}${state.settings.companyPhone ? `\nTel: ${state.settings.companyPhone}` : ""}${state.settings.companyEmail ? `\nE-mail: ${state.settings.companyEmail}` : ""}`;
     }
 
     function supportContactLine() {
@@ -3038,7 +3038,7 @@
 
       return {
         "{{today}}": templateValue(documentDateLabel()),
-        "{{company_name}}": templateValue(state.settings.companyName || "RentFlow"),
+        "{{company_name}}": templateValue(state.settings.companyName || "RentHome"),
         "{{owner_name}}": templateValue(state.settings.ownerName || state.settings.companyName || "—"),
         "{{owner_address}}": templateValue(state.settings.ownerAddress || "—"),
         "{{owner_document}}": templateValue(state.settings.ownerDocument || "—"),
@@ -3232,16 +3232,13 @@
       return htmlDocumentShell(record.title || "Dokument", `<h1>${record.title || "Dokument"}</h1>${record.bodyHtml || ""}`);
     }
 
-    function openGeneratedDocumentDraft(kind, tenantId) {
+    function createGeneratedDocumentRecord(kind, tenantId) {
       const builder = generatedDocumentBuilders()[kind];
-      if (!builder) return;
+      if (!builder) return null;
       const draft = builder(tenantId);
-      if (!draft) {
-        alert("Brakuje danych do wygenerowania szkicu dokumentu. Uzupełnij najemcę, lokal, umowę lub płatności.");
-        return;
-      }
+      if (!draft) return null;
       const context = leaseDocumentContext(tenantId);
-      const record = {
+      return {
         id: uid("gdoc"),
         tenantId,
         leaseId: context.lease?.id || "",
@@ -3254,6 +3251,14 @@
         createdAt: nowIso(),
         updatedAt: nowIso()
       };
+    }
+
+    function openGeneratedDocumentDraft(kind, tenantId) {
+      const record = createGeneratedDocumentRecord(kind, tenantId);
+      if (!record) {
+        alert("Brakuje danych do wygenerowania szkicu dokumentu. Uzupełnij najemcę, lokal, umowę lub płatności.");
+        return;
+      }
       state.generatedDocuments.push(record);
       selectedGeneratedDocumentId = record.id;
       renderTenantCard();
@@ -3344,7 +3349,7 @@
       const item = communicationItemById(id);
       if (!item) return;
       if (!item.targetEmail) return alert("Brak adresu e-mail dla tego adresata.");
-      const subject = `${state.settings.companyName || "RentFlow"} · ${item.title}`;
+      const subject = `${state.settings.companyName || "RentHome"} · ${item.title}`;
       mailtoText(item.targetEmail, subject, item.message || "");
     }
 
@@ -3513,7 +3518,7 @@
       const { totalUnits, vacantUnits, occupancy } = occupancyOverview();
       const { net, overdue } = totals();
       const isTenant = currentUser?.role === "tenant";
-      document.getElementById("sidebarCompany").textContent = state.settings.companyName || "RentFlow";
+      document.getElementById("sidebarCompany").textContent = state.settings.companyName || "RentHome";
       document.getElementById("sidebarSummary").textContent = isTenant
         ? `${totalUnits || 1} lokal · saldo ${fmt(totals().due - totals().paid)}`
         : `${roleLabel(currentUser?.role || "owner")} · ${totalUnits} lokali · ${occupancy}% obłożenia`;
@@ -3957,7 +3962,7 @@
       ` : `<div class="empty-state">Aby wygenerować dokumenty, najemca musi mieć przypisaną umowę i lokal.</div>`;
 
       document.getElementById("tenantCard").innerHTML = `
-        <div class="card"><div class="panel-title"><h3>${currentUser?.role === "tenant" ? "Mój profil najmu" : "Karta najemcy"}</h3></div><div class="form-grid two">${currentUser?.role === "tenant" ? `<div class="notice">Najemca: <strong>${tenant.name}</strong><br>Lokal: <strong>${tenant.unitId ? unitLabel(tenant.unitId) : "—"}</strong><br>E-mail: <strong>${tenant.email || currentUser.email || "—"}</strong></div><div class="notice">Właściciel / zarządca: <strong>${state.settings.ownerName || state.settings.companyName || "RentFlow"}</strong><br>Numer konta: <strong>${state.settings.bankAccount || "—"}</strong><br>Domyślny termin płatności: <strong>do ${state.settings.paymentDueDay || 10}. dnia miesiąca</strong></div>` : `<select id="tenant_card_select" onchange="openTenantCard(this.value)">${state.tenants.map(t => `<option value="${t.id}" ${t.id === tenant.id ? "selected" : ""}>${t.name}</option>`).join("")}</select><div class="notice">Najemca: <strong>${tenant.name}</strong><br>Lokal: <strong>${tenant.unitId ? unitLabel(tenant.unitId) : "—"}</strong><br>E-mail: <strong>${tenant.email || "—"}</strong></div>`}</div></div>
+        <div class="card"><div class="panel-title"><h3>${currentUser?.role === "tenant" ? "Mój profil najmu" : "Karta najemcy"}</h3></div><div class="form-grid two">${currentUser?.role === "tenant" ? `<div class="notice">Najemca: <strong>${tenant.name}</strong><br>Lokal: <strong>${tenant.unitId ? unitLabel(tenant.unitId) : "—"}</strong><br>E-mail: <strong>${tenant.email || currentUser.email || "—"}</strong></div><div class="notice">Właściciel / zarządca: <strong>${state.settings.ownerName || state.settings.companyName || "RentHome"}</strong><br>Numer konta: <strong>${state.settings.bankAccount || "—"}</strong><br>Domyślny termin płatności: <strong>do ${state.settings.paymentDueDay || 10}. dnia miesiąca</strong></div>` : `<select id="tenant_card_select" onchange="openTenantCard(this.value)">${state.tenants.map(t => `<option value="${t.id}" ${t.id === tenant.id ? "selected" : ""}>${t.name}</option>`).join("")}</select><div class="notice">Najemca: <strong>${tenant.name}</strong><br>Lokal: <strong>${tenant.unitId ? unitLabel(tenant.unitId) : "—"}</strong><br>E-mail: <strong>${tenant.email || "—"}</strong></div>`}</div></div>
         <div class="grid three-col section">
           <div class="card"><div class="muted small">Saldo należności</div><div class="metric ${ledger.balance > 0 ? "negative" : ledger.balance < 0 ? "positive" : ""}" style="font-size:24px">${fmt(ledger.balance)}</div></div>
           <div class="card"><div class="muted small">Naliczenia razem</div><div class="metric" style="font-size:24px">${fmt(ledger.charges)}</div></div>
@@ -4014,7 +4019,7 @@
                 <select id="tenant_screening_decision"><option ${tenant.screeningDecision === "do decyzji" ? "selected" : ""}>do decyzji</option><option ${tenant.screeningDecision === "akceptuj" ? "selected" : ""}>akceptuj</option><option ${tenant.screeningDecision === "warunkowo" ? "selected" : ""}>warunkowo</option><option ${tenant.screeningDecision === "odrzuć" ? "selected" : ""}>odrzuć</option></select>
               </div>
               <textarea id="tenant_screening_notes" rows="4" placeholder="Notatki z rozmów, referencji, ryzyka i ustaleń">${tenant.screeningNotes || ""}</textarea>
-              <div class="section inline-actions"><button class="btn green" onclick="saveTenantScreening('${tenant.id}')">Zapisz screening</button><button class="btn secondary" onclick="generateTenantOnboardingTasks('${tenant.id}')">Utwórz onboarding</button></div>
+              <div class="section inline-actions"><button class="btn green" onclick="saveTenantScreening('${tenant.id}')">Zapisz screening</button><button class="btn secondary" onclick="generateTenantOnboardingTasks('${tenant.id}')">Utwórz onboarding</button><button class="btn secondary" onclick="launchTenantStarterPacket('${tenant.id}')">Pakiet startowy</button></div>
               <div class="section notice">Na podstawie tych danych system podpowiada decyzję oraz może wygenerować checklistę onboardingową dla Ciebie i najemcy.</div>
             </div>
             <div class="card">
@@ -4656,7 +4661,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             <div class="panel-title"><h3>Profil użytkownika</h3></div>
             <div class="form-grid two">
               <div class="notice">Imię i nazwisko: <strong>${tenant?.name || currentUser?.name || "—"}</strong><br>E-mail: <strong>${tenant?.email || currentUser?.email || "—"}</strong><br>Telefon: <strong>${tenant?.phone || "—"}</strong><br>Adres: <strong>${tenantFormalAddress(tenant)}</strong></div>
-              <div class="notice">Firma / właściciel: <strong>${state.settings.companyName || "RentFlow"}</strong><br>Kontakt operacyjny: <strong>${state.settings.ownerName || "Biuro obsługi"}</strong><br>Adres właściciela: <strong>${state.settings.ownerAddress || "—"}</strong><br>Numer konta: <strong>${state.settings.bankAccount || "—"}</strong><br>Wsparcie: <strong>${[state.settings.supportEmail || state.settings.companyEmail, state.settings.supportPhone || state.settings.companyPhone, state.settings.supportHours].filter(Boolean).join(" · ") || "—"}</strong></div>
+              <div class="notice">Firma / właściciel: <strong>${state.settings.companyName || "RentHome"}</strong><br>Kontakt operacyjny: <strong>${state.settings.ownerName || "Biuro obsługi"}</strong><br>Adres właściciela: <strong>${state.settings.ownerAddress || "—"}</strong><br>Numer konta: <strong>${state.settings.bankAccount || "—"}</strong><br>Wsparcie: <strong>${[state.settings.supportEmail || state.settings.companyEmail, state.settings.supportPhone || state.settings.companyPhone, state.settings.supportHours].filter(Boolean).join(" · ") || "—"}</strong></div>
             </div>
           </div>`;
         return;
@@ -4668,7 +4673,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
             <div class="panel-title"><h3>Profil członka zespołu</h3></div>
             <div class="form-grid two">
               <div class="notice">Imię i nazwisko: <strong>${currentUser?.name || "—"}</strong><br>E-mail: <strong>${currentUser?.email || "—"}</strong><br>Rola: <strong>${roleLabel(currentUser?.role || "")}</strong></div>
-              <div class="notice">Firma: <strong>${state.settings.companyName || "RentFlow"}</strong><br>Kontakt operacyjny: <strong>${state.settings.ownerName || "Biuro obsługi"}</strong><br>Wsparcie: <strong>${[state.settings.supportEmail || state.settings.companyEmail, state.settings.supportPhone || state.settings.companyPhone, state.settings.supportHours].filter(Boolean).join(" · ") || "—"}</strong></div>
+              <div class="notice">Firma: <strong>${state.settings.companyName || "RentHome"}</strong><br>Kontakt operacyjny: <strong>${state.settings.ownerName || "Biuro obsługi"}</strong><br>Wsparcie: <strong>${[state.settings.supportEmail || state.settings.companyEmail, state.settings.supportPhone || state.settings.companyPhone, state.settings.supportHours].filter(Boolean).join(" · ") || "—"}</strong></div>
             </div>
           </div>`;
         return;
@@ -5421,7 +5426,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       await save();
       showPage("tenantCard");
     }
-    async function generateTenantOnboardingTasks(id) {
+    async function generateTenantOnboardingTasks(id, options = {}) {
       const tenant = tenantById(id);
       if (!tenant) return alert("Nie znaleziono najemcy.");
       const lease = activeLeaseByTenant(id) || state.leases.find((entry) => entry.tenantId === id);
@@ -5445,10 +5450,49 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         });
         created += 1;
       });
-      if (!created) return alert("Checklista onboardingowa dla tego najemcy już istnieje.");
+      if (!created) {
+        if (!options.silent) alert("Checklista onboardingowa dla tego najemcy już istnieje.");
+        return 0;
+      }
       await save();
-      showPage("tasks");
-      alert(`Dodano ${created} zadań onboardingowych.`);
+      if (!options.silent) {
+        showPage("tasks");
+        alert(`Dodano ${created} zadań onboardingowych.`);
+      }
+      return created;
+    }
+    async function launchTenantStarterPacket(id) {
+      const tenant = tenantById(id);
+      if (!tenant) return alert("Nie znaleziono najemcy.");
+      await saveTenantScreening(id);
+      const lease = activeLeaseByTenant(id) || state.leases.find((entry) => entry.tenantId === id);
+      const createdTasks = await generateTenantOnboardingTasks(id, { silent: true });
+      const draftKinds = ["leaseAgreement", "handoverProtocol"];
+      let createdDrafts = 0;
+      draftKinds.forEach((kind) => {
+        const alreadyExists = state.generatedDocuments.some((document) => document.tenantId === id && document.kind === kind);
+        if (alreadyExists) return;
+        const record = createGeneratedDocumentRecord(kind, id);
+        if (!record) return;
+        state.generatedDocuments.push(record);
+        selectedGeneratedDocumentId = record.id;
+        createdDrafts += 1;
+      });
+      const welcomeSubject = `Pakiet startowy najmu · ${tenant.name}`;
+      const welcomeExists = state.messages.some((message) => message.tenantId === id && message.subject === welcomeSubject);
+      if (!welcomeExists) {
+        await deliverOwnerMessageToTenantPortal({
+          tenantId: id,
+          leaseId: lease?.id || "",
+          unitId: lease?.unitId || tenant.unitId || "",
+          subject: welcomeSubject,
+          body: `Dzień dobry ${tenant.name},\n\nuruchomiliśmy Twój pakiet startowy najmu. Po naszej stronie przygotowaliśmy onboarding, szkic umowy oraz protokół odbioru. W kolejnych krokach dopniemy podpisy, przekazanie kluczy i aktywację wszystkich dokumentów w portalu.\n\nPozdrawiamy,\n${defaultMessageSignature()}`
+        });
+      }
+      if (createdDrafts) await save();
+      renderTenantCard();
+      showPage("tenantCard");
+      alert(`Pakiet startowy gotowy. Zadania: ${createdTasks}, szkice dokumentów: ${createdDrafts}${welcomeExists ? "" : ", wiadomość powitalna: 1"}.`);
     }
     async function createTenantAccess(tenantId) {
       const tenant = tenantById(tenantId);
@@ -6198,7 +6242,7 @@ Pozostało: ${fmt(summary.taxRemaining)}`;
     }
 
     async function saveSettings() {
-      state.settings.companyName = document.getElementById("s_company").value.trim() || "RentFlow";
+      state.settings.companyName = document.getElementById("s_company").value.trim() || "RentHome";
       state.settings.ownerName = document.getElementById("s_owner").value.trim();
       state.settings.ownerAddress = document.getElementById("s_owner_address").value.trim();
       state.settings.ownerDocument = document.getElementById("s_owner_document").value.trim();
@@ -6339,7 +6383,7 @@ Pozostało: ${fmt(summary.taxRemaining)}`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
-    function exportJSON() { downloadFile("rentflow_backup.json", JSON.stringify(state, null, 2), "application/json"); }
+    function exportJSON() { downloadFile("renthome_backup.json", JSON.stringify(state, null, 2), "application/json"); }
     function csv(rows) {
       if (!rows.length) return "";
       const headers = Object.keys(rows[0]);

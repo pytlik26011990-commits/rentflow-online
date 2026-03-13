@@ -1,7 +1,7 @@
 {
-  "name": "rentflow-v3",
+  "name": "renthome",
   "version": "3.0.0",
-  "description": "RentFlow V3 - system zarządzania najmem z logowaniem i PostgreSQL",
+  "description": "RentHome - system zarządzania najmem z logowaniem i PostgreSQL",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
