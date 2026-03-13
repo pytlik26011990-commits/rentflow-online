@@ -4,6 +4,7 @@ const path = require("path");
 const session = require("express-session");
 const pgSession = require("connect-pg-simple")(session);
 const bcrypt = require("bcryptjs");
+const nodemailer = require("nodemailer");
 const { pool, initDb } = require("./db");
 const { buildEmptyState, buildTenantState, normalizeState, sanitizeText } = require("./lib/state");
 
@@ -26,6 +27,54 @@ function logServerError(context, error, extra = {}) {
     message: error?.message || String(error),
     stack: error?.stack || null,
     ...extra
+  });
+}
+
+function smtpConfig() {
+  const host = String(process.env.SMTP_HOST || "").trim();
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = String(process.env.SMTP_USER || "").trim();
+  const pass = String(process.env.SMTP_PASS || "");
+  const from = String(process.env.SMTP_FROM || user || "").trim();
+  const replyTo = String(process.env.SMTP_REPLY_TO || "").trim();
+  if (!host || !port || !user || !pass || !from) return null;
+  return {
+    host,
+    port,
+    secure: String(process.env.SMTP_SECURE || "").toLowerCase() === "true" || port === 465,
+    auth: { user, pass },
+    from,
+    replyTo
+  };
+}
+
+let mailTransport = null;
+function getMailTransport() {
+  const config = smtpConfig();
+  if (!config) return null;
+  if (!mailTransport) {
+    mailTransport = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: config.auth
+    });
+  }
+  return { transport: mailTransport, config };
+}
+
+async function sendPlatformEmail({ to, subject, text = "", html = "" }) {
+  const mailer = getMailTransport();
+  if (!mailer) {
+    throw new Error("Brak konfiguracji SMTP. Ustaw SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS oraz SMTP_FROM.");
+  }
+  await mailer.transport.sendMail({
+    from: mailer.config.from,
+    replyTo: mailer.config.replyTo || undefined,
+    to,
+    subject,
+    text: text || undefined,
+    html: html || undefined
   });
 }
 
@@ -988,6 +1037,37 @@ app.post("/api/tenant/messages/read", requireAuth, requireTenant, async (req, re
   } catch (error) {
     logServerError("Tenant message read failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null, tenantId: req.session?.user?.tenantId || null });
     return res.status(500).json({ error: "Nie udało się oznaczyć rozmowy jako przeczytanej." });
+  }
+});
+
+app.post("/api/email/send", requireAuth, async (req, res) => {
+  try {
+    if (req.session.user?.role === "tenant") {
+      return res.status(403).json({ error: "Najemca nie może wysyłać maili z tego poziomu." });
+    }
+    const to = String(req.body.to || "").trim().toLowerCase();
+    const subjectResult = ensureRequiredText(req.body.subject, "Temat wiadomości");
+    const text = String(req.body.text || "").trim();
+    const html = String(req.body.html || "").trim();
+    if (!to || subjectResult.error || (!text && !html)) {
+      return res.status(400).json({ error: "Podaj adres odbiorcy, temat oraz treść wiadomości." });
+    }
+    if (!isValidEmail(to)) {
+      return res.status(400).json({ error: "Podaj poprawny adres e-mail odbiorcy." });
+    }
+    await sendPlatformEmail({
+      to,
+      subject: subjectResult.value,
+      text,
+      html
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    logServerError("Platform email send failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null });
+    const message = error?.message?.includes("SMTP")
+      ? error.message
+      : "Nie udało się wysłać wiadomości e-mail.";
+    return res.status(500).json({ error: message });
   }
 });
 

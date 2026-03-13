@@ -3261,6 +3261,10 @@
       window.location.href = `mailto:${encodeURIComponent(email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
 
+    async function sendPlatformEmail(to, subject, { text = "", html = "" } = {}) {
+      await apiPost("/api/email/send", { to, subject, text, html });
+    }
+
     function generatedDocumentBuilders() {
       return {
         leaseAgreement: buildLeaseAgreementDraft,
@@ -3350,14 +3354,19 @@
       copyToClipboard(stripHtml(html));
     }
 
-    function sendSelectedGeneratedDocument() {
+    async function sendSelectedGeneratedDocument() {
       const record = findGeneratedDocument(selectedGeneratedDocumentId);
       if (!record) return alert("Wybierz szkic dokumentu.");
       const tenant = tenantById(record.tenantId);
       if (!tenant?.email) return alert("Najemca nie ma wpisanego adresu e-mail.");
       const html = document.getElementById("generated_doc_editor")?.innerHTML || record.bodyHtml;
       const subject = document.getElementById("generated_doc_subject")?.value.trim() || record.subject || record.title;
-      mailtoText(tenant.email, subject, stripHtml(html));
+      try {
+        await sendPlatformEmail(tenant.email, subject, { text: stripHtml(html), html });
+        alert("Wiadomość została wysłana z aplikacji.");
+      } catch (error) {
+        alert(error.message || "Nie udało się wysłać wiadomości e-mail.");
+      }
     }
 
     function paymentReminderMessage(charge, tenant, lease) {
@@ -3389,12 +3398,17 @@
       item.openAction();
     }
 
-    function sendCommunicationEmail(id) {
+    async function sendCommunicationEmail(id) {
       const item = communicationItemById(id);
       if (!item) return;
       if (!item.targetEmail) return alert("Brak adresu e-mail dla tego adresata.");
       const subject = `${state.settings.companyName || "RentHome"} · ${item.title}`;
-      mailtoText(item.targetEmail, subject, item.message || "");
+      try {
+        await sendPlatformEmail(item.targetEmail, subject, { text: item.message || "" });
+        alert("E-mail został wysłany z aplikacji.");
+      } catch (error) {
+        alert(error.message || "Nie udało się wysłać e-maila.");
+      }
     }
 
     async function selectConversation(id) {
@@ -5846,7 +5860,21 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       await save();
     }
     function copySettlementMessage() { const settlement = findSettlement(selectedSettlementId); if (!settlement) return; copyToClipboard(settlementMessage(settlement)); }
-    function sendSettlementMail() { const settlement = findSettlement(selectedSettlementId); if (!settlement) return; const tenant = tenantById(settlement.tenantId); mailtoText(tenant?.email || "", `Rozliczenie najmu za ${fmtMonth(settlement.month)}`, settlementMessage(settlement)); }
+    async function sendSettlementMail() {
+      const settlement = findSettlement(selectedSettlementId);
+      if (!settlement) return;
+      const tenant = tenantById(settlement.tenantId);
+      if (!tenant?.email) return alert("Najemca nie ma wpisanego adresu e-mail.");
+      try {
+        await sendPlatformEmail(tenant.email, `Rozliczenie najmu za ${fmtMonth(settlement.month)}`, {
+          text: settlementMessage(settlement),
+          html: settlementPrintableHtml(settlement)
+        });
+        alert("Rozliczenie zostało wysłane e-mailem.");
+      } catch (error) {
+        alert(error.message || "Nie udało się wysłać rozliczenia.");
+      }
+    }
     async function sendSettlementToPortal() {
       const settlement = findSettlement(selectedSettlementId);
       if (!settlement) return alert("Wybierz rozliczenie.");
@@ -5868,7 +5896,21 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
     }
     function printSettlement() { const settlement = findSettlement(selectedSettlementId); if (!settlement) return; openPrintWindow(settlementPrintableHtml(settlement)); }
     function copyPeriodSettlementMessage() { const settlement = findPeriodSettlement(selectedPeriodSettlementId); if (!settlement) return; copyToClipboard(periodSettlementMessage(settlement)); }
-    function sendPeriodSettlementMail() { const settlement = findPeriodSettlement(selectedPeriodSettlementId); if (!settlement) return; const tenant = tenantById(settlement.tenantId); mailtoText(tenant?.email || "", `Rozliczenie okresowe mediów ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}`, periodSettlementMessage(settlement)); }
+    async function sendPeriodSettlementMail() {
+      const settlement = findPeriodSettlement(selectedPeriodSettlementId);
+      if (!settlement) return;
+      const tenant = tenantById(settlement.tenantId);
+      if (!tenant?.email) return alert("Najemca nie ma wpisanego adresu e-mail.");
+      try {
+        await sendPlatformEmail(tenant.email, `Rozliczenie okresowe mediów ${fmtMonth(settlement.fromMonth)} - ${fmtMonth(settlement.toMonth)}`, {
+          text: periodSettlementMessage(settlement),
+          html: periodSettlementPrintableHtml(settlement)
+        });
+        alert("Rozliczenie okresowe zostało wysłane e-mailem.");
+      } catch (error) {
+        alert(error.message || "Nie udało się wysłać rozliczenia okresowego.");
+      }
+    }
     async function sendPeriodSettlementToPortal() {
       const settlement = findPeriodSettlement(selectedPeriodSettlementId);
       if (!settlement) return alert("Wybierz rozliczenie okresowe.");

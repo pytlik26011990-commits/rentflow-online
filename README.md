@@ -32,7 +32,16 @@ DATABASE_URL=postgres://user:password@localhost:5432/renthome
 SESSION_SECRET=ustaw-dlugi-sekret-do-sesji
 NODE_ENV=development
 PORT=3000
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=mailer@example.com
+SMTP_PASS=haslo-do-skrzynki
+SMTP_FROM=RentHome <mailer@example.com>
+SMTP_REPLY_TO=biuro@example.com
 ```
+
+Mail wychodzacy z aplikacji wymaga poprawnej konfiguracji SMTP. Po ustawieniu tych zmiennych przyciski `Wyślij e-mail` w dokumentach, rozliczeniach i komunikacji wysyłają wiadomości bezpośrednio z backendu.
 
 W produkcji `SESSION_SECRET` musi miec co najmniej 24 znaki.
 
