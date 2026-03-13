@@ -1314,7 +1314,8 @@
         debtCheckStatus: tenant?.debtCheckStatus || "nie rozpoczęto",
         screeningStatus: tenant?.screeningStatus || "w toku",
         screeningDecision: tenant?.screeningDecision || "do decyzji",
-        screeningNotes: tenant?.screeningNotes || ""
+        screeningNotes: tenant?.screeningNotes || "",
+        starterPacketAutomatedAt: tenant?.starterPacketAutomatedAt || ""
       }));
 
       state.tickets = state.tickets.map(normalizeTicket);
@@ -5405,9 +5406,10 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       await save();
       showPage("tenantCard");
     }
-    async function saveTenantScreening(id) {
+    async function saveTenantScreening(id, options = {}) {
       const tenant = tenantById(id);
       if (!tenant) return;
+      const previousDecision = tenant.screeningDecision || "do decyzji";
       tenant.monthlyIncome = Number(document.getElementById("tenant_screening_income")?.value || 0);
       tenant.moveInTargetDate = document.getElementById("tenant_screening_move_in")?.value || "";
       tenant.employmentType = document.getElementById("tenant_screening_employment")?.value.trim() || "";
@@ -5423,8 +5425,21 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       tenant.screeningStatus = document.getElementById("tenant_screening_status")?.value || "w toku";
       tenant.screeningDecision = document.getElementById("tenant_screening_decision")?.value || "do decyzji";
       tenant.screeningNotes = document.getElementById("tenant_screening_notes")?.value.trim() || "";
+      let automationResult = null;
+      if (!options.skipAutomation && tenant.screeningDecision === "akceptuj" && (!tenant.starterPacketAutomatedAt || previousDecision !== "akceptuj")) {
+        automationResult = await executeTenantStarterPacket(id, { source: "screening" });
+      }
       await save();
+      renderTenantCard();
       showPage("tenantCard");
+      if (!options.silent) {
+        if (automationResult) {
+          alert(`Screening zapisany. Automatycznie uruchomiono pakiet startowy: zadania ${automationResult.createdTasks}, szkice ${automationResult.createdDrafts}${automationResult.welcomeCreated ? ", wiadomość 1" : ""}.`);
+        } else {
+          alert("Screening został zapisany.");
+        }
+      }
+      return automationResult;
     }
     async function generateTenantOnboardingTasks(id, options = {}) {
       const tenant = tenantById(id);
@@ -5461,10 +5476,9 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
       }
       return created;
     }
-    async function launchTenantStarterPacket(id) {
+    async function executeTenantStarterPacket(id, options = {}) {
       const tenant = tenantById(id);
-      if (!tenant) return alert("Nie znaleziono najemcy.");
-      await saveTenantScreening(id);
+      if (!tenant) throw new Error("Nie znaleziono najemcy.");
       const lease = activeLeaseByTenant(id) || state.leases.find((entry) => entry.tenantId === id);
       const createdTasks = await generateTenantOnboardingTasks(id, { silent: true });
       const draftKinds = ["leaseAgreement", "handoverProtocol"];
@@ -5489,10 +5503,18 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
           body: `Dzień dobry ${tenant.name},\n\nuruchomiliśmy Twój pakiet startowy najmu. Po naszej stronie przygotowaliśmy onboarding, szkic umowy oraz protokół odbioru. W kolejnych krokach dopniemy podpisy, przekazanie kluczy i aktywację wszystkich dokumentów w portalu.\n\nPozdrawiamy,\n${defaultMessageSignature()}`
         });
       }
+      tenant.starterPacketAutomatedAt = tenant.starterPacketAutomatedAt || nowIso();
       if (createdDrafts) await save();
+      return { createdTasks, createdDrafts, welcomeCreated: !welcomeExists };
+    }
+    async function launchTenantStarterPacket(id) {
+      const tenant = tenantById(id);
+      if (!tenant) return alert("Nie znaleziono najemcy.");
+      await saveTenantScreening(id, { silent: true, skipAutomation: true });
+      const result = await executeTenantStarterPacket(id);
       renderTenantCard();
       showPage("tenantCard");
-      alert(`Pakiet startowy gotowy. Zadania: ${createdTasks}, szkice dokumentów: ${createdDrafts}${welcomeExists ? "" : ", wiadomość powitalna: 1"}.`);
+      alert(`Pakiet startowy gotowy. Zadania: ${result.createdTasks}, szkice dokumentów: ${result.createdDrafts}${result.welcomeCreated ? ", wiadomość powitalna: 1" : ""}.`);
     }
     async function createTenantAccess(tenantId) {
       const tenant = tenantById(tenantId);
