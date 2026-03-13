@@ -6,7 +6,14 @@ const pgSession = require("connect-pg-simple")(session);
 const bcrypt = require("bcryptjs");
 const nodemailer = require("nodemailer");
 const { pool, initDb } = require("./db");
-const { buildEmptyState, buildTenantState, normalizeState, sanitizeText } = require("./lib/state");
+const {
+  buildEmptyState,
+  buildTenantState,
+  filterStateByBuildings,
+  mergeScopedState,
+  normalizeState,
+  sanitizeText
+} = require("./lib/state");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -159,9 +166,43 @@ async function saveOrganizationState(orgId, companyName, state) {
   return nextState;
 }
 
+function isGlobalAdminRole(role) {
+  return ["owner", "superadmin"].includes(role);
+}
+
+function assignedBuildingIdsForUser(user) {
+  if (!user) return [];
+  const buildingIds = user.permissions?.buildingIds;
+  return Array.isArray(buildingIds)
+    ? buildingIds.map((entry) => sanitizeText(entry || "")).filter(Boolean)
+    : [];
+}
+
+function accessibleBuildingIdsForUser(user, state) {
+  if (!user || !state) return [];
+  if (isGlobalAdminRole(user.role)) {
+    return state.buildings.map((entry) => entry.id);
+  }
+  return assignedBuildingIdsForUser(user).filter((buildingId) => state.buildings.some((entry) => entry.id === buildingId));
+}
+
+function userCanAccessTenant(user, state, tenantId) {
+  if (!user || !state || !tenantId) return false;
+  if (user.role === "tenant") return user.tenantId === tenantId;
+  if (isGlobalAdminRole(user.role)) return true;
+  const buildingIds = accessibleBuildingIdsForUser(user, state);
+  const unitIds = state.units.filter((entry) => buildingIds.includes(entry.buildingId)).map((entry) => entry.id);
+  return state.tenants.some((entry) => entry.id === tenantId && (!entry.unitId || unitIds.includes(entry.unitId)));
+}
+
 function canAccessTicket(user, ticket, state) {
   if (!user || !ticket) return false;
-  if (["owner", "manager", "accountant", "technician"].includes(user.role)) return true;
+  if (isGlobalAdminRole(user.role)) return true;
+  if (["property_owner", "property_manager", "leasing_agent"].includes(user.role)) {
+    const buildingIds = accessibleBuildingIdsForUser(user, state);
+    const unit = state.units.find((entry) => entry.id === ticket.unitId);
+    return !!(unit && buildingIds.includes(unit.buildingId));
+  }
   if (user.role !== "tenant" || !user.tenantId) return false;
   if (ticket.tenantId === user.tenantId) return true;
   const tenantState = buildTenantState(state, user.tenantId);
@@ -172,33 +213,75 @@ function capabilitiesForRole(role) {
   const matrix = {
     owner: {
       manageUsers: true,
+      manageTenantAccess: true,
       stateWrite: true,
       ticketWorkflow: true,
-      fullWorkspace: true
+      fullWorkspace: true,
+      globalAccess: true
+    },
+    superadmin: {
+      manageUsers: true,
+      manageTenantAccess: true,
+      stateWrite: true,
+      ticketWorkflow: true,
+      fullWorkspace: true,
+      globalAccess: true
+    },
+    property_owner: {
+      manageUsers: false,
+      manageTenantAccess: true,
+      stateWrite: true,
+      ticketWorkflow: true,
+      fullWorkspace: true,
+      globalAccess: false
+    },
+    property_manager: {
+      manageUsers: false,
+      manageTenantAccess: true,
+      stateWrite: true,
+      ticketWorkflow: true,
+      fullWorkspace: true,
+      globalAccess: false
     },
     manager: {
       manageUsers: false,
+      manageTenantAccess: true,
       stateWrite: true,
       ticketWorkflow: true,
-      fullWorkspace: true
+      fullWorkspace: true,
+      globalAccess: false
+    },
+    leasing_agent: {
+      manageUsers: false,
+      manageTenantAccess: true,
+      stateWrite: true,
+      ticketWorkflow: true,
+      fullWorkspace: true,
+      globalAccess: false
     },
     accountant: {
       manageUsers: false,
+      manageTenantAccess: false,
       stateWrite: true,
       ticketWorkflow: false,
-      fullWorkspace: true
+      fullWorkspace: true,
+      globalAccess: false
     },
     technician: {
       manageUsers: false,
+      manageTenantAccess: false,
       stateWrite: false,
       ticketWorkflow: true,
-      fullWorkspace: false
+      fullWorkspace: false,
+      globalAccess: false
     },
     tenant: {
       manageUsers: false,
+      manageTenantAccess: false,
       stateWrite: false,
       ticketWorkflow: false,
-      fullWorkspace: false
+      fullWorkspace: false,
+      globalAccess: false
     }
   };
 
@@ -206,7 +289,7 @@ function capabilitiesForRole(role) {
 }
 
 function defaultPermissionsForRole(role) {
-  const ownerAll = {
+  const fullWorkspace = {
     dashboard: true,
     properties: true,
     tenants: true,
@@ -225,8 +308,31 @@ function defaultPermissionsForRole(role) {
     settings: true
   };
   const matrix = {
-    owner: ownerAll,
-    manager: { ...ownerAll, settings: false },
+    owner: { ...fullWorkspace, buildingIds: [] },
+    superadmin: { ...fullWorkspace, buildingIds: [] },
+    property_owner: { ...fullWorkspace, settings: false, buildingIds: [] },
+    property_manager: { ...fullWorkspace, settings: false, buildingIds: [] },
+    manager: { ...fullWorkspace, settings: false, buildingIds: [] },
+    leasing_agent: {
+      dashboard: true,
+      properties: true,
+      tenants: true,
+      tenantCard: true,
+      leases: true,
+      meters: true,
+      settlements: true,
+      periodSettlements: true,
+      payments: true,
+      expenses: false,
+      maintenance: true,
+      documents: true,
+      tasks: true,
+      communications: true,
+      taxes: false,
+      reports: true,
+      settings: false,
+      buildingIds: []
+    },
     accountant: {
       dashboard: true,
       properties: false,
@@ -242,8 +348,10 @@ function defaultPermissionsForRole(role) {
       documents: true,
       tasks: false,
       communications: true,
+      taxes: true,
       reports: true,
-      settings: false
+      settings: false,
+      buildingIds: []
     },
     technician: {
       dashboard: true,
@@ -260,28 +368,35 @@ function defaultPermissionsForRole(role) {
       documents: true,
       tasks: true,
       communications: true,
+      taxes: false,
       reports: true,
-      settings: false
+      settings: false,
+      buildingIds: []
     },
-    tenant: {}
+    tenant: { buildingIds: [] }
   };
 
   return matrix[role] || {};
 }
 
 function mergeUserAccess(role, permissions = {}) {
+  const defaultPermissions = defaultPermissionsForRole(role);
+  const incomingPermissions = permissions && typeof permissions === "object" ? permissions : {};
   return {
     capabilities: capabilitiesForRole(role),
     permissions: {
-      ...defaultPermissionsForRole(role),
-      ...(permissions && typeof permissions === "object" ? permissions : {})
+      ...defaultPermissions,
+      ...incomingPermissions,
+      buildingIds: Array.isArray(incomingPermissions.buildingIds)
+        ? incomingPermissions.buildingIds.map((entry) => sanitizeText(entry || "")).filter(Boolean)
+        : defaultPermissions.buildingIds || []
     }
   };
 }
 
 function requireOwner(req, res, next) {
-  if (!req.session.user || req.session.user.role !== "owner") {
-    return res.status(403).json({ error: "Ta operacja jest dostępna tylko dla właściciela." });
+  if (!req.session.user || !isGlobalAdminRole(req.session.user.role)) {
+    return res.status(403).json({ error: "Ta operacja jest dostępna tylko dla superadministratora." });
   }
 
   return next();
@@ -342,7 +457,7 @@ async function createOrganizationWithOwner({ companyName, name, email, password 
     );
     await client.query(
       "INSERT INTO users (id, org_id, name, email, password_hash, role) VALUES ($1, $2, $3, $4, $5, $6)",
-      [userId, orgId, name, email, passwordHash, "owner"]
+      [userId, orgId, name, email, passwordHash, "superadmin"]
     );
     await client.query(
       "INSERT INTO app_states (org_id, state) VALUES ($1, $2::jsonb)",
@@ -356,9 +471,9 @@ async function createOrganizationWithOwner({ companyName, name, email, password 
         orgId,
         email,
         name,
-        role: "owner",
+        role: "superadmin",
         companyName,
-        permissions: defaultPermissionsForRole("owner"),
+        permissions: defaultPermissionsForRole("superadmin"),
         isActive: true,
         lastLoginAt: null
       }
@@ -581,7 +696,7 @@ app.get("/api/team-users", requireAuth, requireOwner, async (req, res) => {
 
 app.post("/api/team-users", requireAuth, requireOwner, async (req, res) => {
   try {
-    const role = ["manager", "accountant", "technician"].includes(req.body.role) ? req.body.role : "";
+    const role = ["property_owner", "property_manager", "leasing_agent"].includes(req.body.role) ? req.body.role : "";
     const nameResult = ensureRequiredText(req.body.name, "Imię i nazwisko");
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
@@ -605,7 +720,7 @@ app.post("/api/team-users", requireAuth, requireOwner, async (req, res) => {
 
       if (existing.rows.length) {
         const row = existing.rows[0];
-        if (row.org_id !== req.session.user.orgId || row.role === "tenant" || row.role === "owner") {
+        if (row.org_id !== req.session.user.orgId || row.role === "tenant" || isGlobalAdminRole(row.role)) {
           await client.query("ROLLBACK");
           return res.status(400).json({ error: "Ten e-mail jest już zajęty przez konto, którego nie można zamienić na konto zespołu." });
         }
@@ -644,7 +759,7 @@ app.post("/api/team-users/status", requireAuth, requireOwner, async (req, res) =
     }
 
     const result = await pool.query(
-      "UPDATE users SET is_active = $1 WHERE org_id = $2 AND id = $3 AND role IN ('manager', 'accountant', 'technician') RETURNING id",
+      "UPDATE users SET is_active = $1 WHERE org_id = $2 AND id = $3 AND role IN ('property_owner', 'property_manager', 'leasing_agent') RETURNING id",
       [isActive, req.session.user.orgId, userId]
     );
 
@@ -667,7 +782,7 @@ app.post("/api/team-users/delete", requireAuth, requireOwner, async (req, res) =
     }
 
     const result = await pool.query(
-      "DELETE FROM users WHERE org_id = $1 AND id = $2 AND role IN ('manager', 'accountant', 'technician') RETURNING id",
+      "DELETE FROM users WHERE org_id = $1 AND id = $2 AND role IN ('property_owner', 'property_manager', 'leasing_agent') RETURNING id",
       [req.session.user.orgId, userId]
     );
 
@@ -682,7 +797,7 @@ app.post("/api/team-users/delete", requireAuth, requireOwner, async (req, res) =
   }
 });
 
-app.post("/api/tenant-access", requireAuth, requireOwner, async (req, res) => {
+app.post("/api/tenant-access", requireAuth, requireCapability("manageTenantAccess"), async (req, res) => {
   try {
     const tenantId = sanitizeText(req.body.tenantId || "");
     const email = String(req.body.email || "").trim().toLowerCase();
@@ -705,6 +820,9 @@ app.post("/api/tenant-access", requireAuth, requireOwner, async (req, res) => {
     const tenant = state.tenants.find((entry) => entry.id === tenantId);
     if (!tenant) {
       return res.status(404).json({ error: "Nie znaleziono najemcy o podanym identyfikatorze." });
+    }
+    if (!userCanAccessTenant(req.session.user, state, tenantId)) {
+      return res.status(403).json({ error: "To konto nie ma dostępu do tego najemcy." });
     }
 
     const client = await pool.connect();
@@ -770,8 +888,12 @@ app.post("/api/tenant-access", requireAuth, requireOwner, async (req, res) => {
   }
 });
 
-app.get("/api/tenant-access-overview", requireAuth, requireOwner, async (req, res) => {
+app.get("/api/tenant-access-overview", requireAuth, requireCapability("manageTenantAccess"), async (req, res) => {
   try {
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state) {
+      return res.status(404).json({ error: "Nie znaleziono danych organizacji." });
+    }
     const result = await pool.query(
       `
       SELECT id, tenant_id, name, email, last_login_at, is_active, created_at
@@ -790,19 +912,23 @@ app.get("/api/tenant-access-overview", requireAuth, requireOwner, async (req, re
       lastLoginAt: row.last_login_at,
       isActive: row.is_active !== false,
       createdAt: row.created_at
-    })));
+    })).filter((row) => userCanAccessTenant(req.session.user, state, row.tenantId)));
   } catch (error) {
     logServerError("Tenant access overview failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null });
     return res.status(500).json({ error: "Nie udało się pobrać dostępu najemców." });
   }
 });
 
-app.post("/api/tenant-access/status", requireAuth, requireOwner, async (req, res) => {
+app.post("/api/tenant-access/status", requireAuth, requireCapability("manageTenantAccess"), async (req, res) => {
   try {
     const tenantId = sanitizeText(req.body.tenantId || "");
     const isActive = req.body.isActive !== false;
     if (!tenantId) {
       return res.status(400).json({ error: "Brakuje identyfikatora najemcy." });
+    }
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state || !userCanAccessTenant(req.session.user, state, tenantId)) {
+      return res.status(403).json({ error: "To konto nie ma dostępu do tego najemcy." });
     }
 
     const result = await pool.query(
@@ -821,11 +947,15 @@ app.post("/api/tenant-access/status", requireAuth, requireOwner, async (req, res
   }
 });
 
-app.post("/api/tenant-access/delete", requireAuth, requireOwner, async (req, res) => {
+app.post("/api/tenant-access/delete", requireAuth, requireCapability("manageTenantAccess"), async (req, res) => {
   try {
     const tenantId = sanitizeText(req.body.tenantId || "");
     if (!tenantId) {
       return res.status(400).json({ error: "Brakuje identyfikatora najemcy." });
+    }
+    const state = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+    if (!state || !userCanAccessTenant(req.session.user, state, tenantId)) {
+      return res.status(403).json({ error: "To konto nie ma dostępu do tego najemcy." });
     }
 
     const result = await pool.query(
@@ -855,7 +985,11 @@ app.get("/api/state", requireAuth, async (req, res) => {
       return res.json(buildTenantState(state, req.session.user.tenantId));
     }
 
-    return res.json(state);
+    if (req.session.user.capabilities?.globalAccess || isGlobalAdminRole(req.session.user.role)) {
+      return res.json(state);
+    }
+
+    return res.json(filterStateByBuildings(state, accessibleBuildingIdsForUser(req.session.user, state)));
   } catch (error) {
     logServerError("State fetch failed", error, { requestId: req.requestId, orgId: req.session?.user?.orgId || null, role: req.session?.user?.role || null });
     return res.status(500).json({ error: "Nie udało się pobrać danych." });
@@ -864,7 +998,17 @@ app.get("/api/state", requireAuth, async (req, res) => {
 
 app.post("/api/state", requireAuth, requireCapability("stateWrite"), async (req, res) => {
   try {
-    await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, req.body);
+    if (req.session.user.capabilities?.globalAccess || isGlobalAdminRole(req.session.user.role)) {
+      await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, req.body);
+    } else {
+      const currentState = await getOrganizationState(req.session.user.orgId, req.session.user.companyName);
+      if (!currentState) {
+        return res.status(404).json({ error: "Brak danych organizacji." });
+      }
+      const buildingIds = accessibleBuildingIdsForUser(req.session.user, currentState);
+      const mergedState = mergeScopedState(currentState, req.body, buildingIds);
+      await saveOrganizationState(req.session.user.orgId, req.session.user.companyName, mergedState);
+    }
 
     return res.json({ ok: true, savedAt: new Date().toISOString() });
   } catch (error) {

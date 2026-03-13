@@ -940,12 +940,28 @@
 
     function roleLabel(role) {
       return ({
-        owner: "Właściciel",
-        manager: "Manager",
+        owner: "Superadministrator",
+        superadmin: "Superadministrator",
+        property_owner: "Właściciel obiektu",
+        property_manager: "Zarządca obiektu",
+        leasing_agent: "Wynajmujący",
+        manager: "Zarządca obiektu",
         accountant: "Księgowość",
         technician: "Techniczny",
         tenant: "Najemca"
       })[role] || role;
+    }
+
+    function isRootRole(role) {
+      return role === "owner" || role === "superadmin";
+    }
+
+    function buildingScopeSummary(buildingIds = []) {
+      if (!Array.isArray(buildingIds) || !buildingIds.length) return "wszystkie budynki";
+      const names = buildingIds
+        .map((id) => state.buildings.find((entry) => entry.id === id)?.name || "")
+        .filter(Boolean);
+      return names.length ? names.join(", ") : "wybrane budynki";
     }
 
     function syncMeterFormState() {
@@ -988,29 +1004,45 @@
 
     function defaultCapabilitiesForRole(role) {
       return ({
-        owner: { manageUsers: true, stateWrite: true, ticketWorkflow: true, fullWorkspace: true },
-        manager: { manageUsers: false, stateWrite: true, ticketWorkflow: true, fullWorkspace: true },
-        accountant: { manageUsers: false, stateWrite: true, ticketWorkflow: false, fullWorkspace: true },
-        technician: { manageUsers: false, stateWrite: false, ticketWorkflow: true, fullWorkspace: false },
-        tenant: { manageUsers: false, stateWrite: false, ticketWorkflow: false, fullWorkspace: false }
-      })[role] || { manageUsers: false, stateWrite: false, ticketWorkflow: false, fullWorkspace: false };
+        owner: { manageUsers: true, manageTenantAccess: true, stateWrite: true, ticketWorkflow: true, fullWorkspace: true, globalAccess: true },
+        superadmin: { manageUsers: true, manageTenantAccess: true, stateWrite: true, ticketWorkflow: true, fullWorkspace: true, globalAccess: true },
+        property_owner: { manageUsers: false, manageTenantAccess: true, stateWrite: true, ticketWorkflow: true, fullWorkspace: true, globalAccess: false },
+        property_manager: { manageUsers: false, manageTenantAccess: true, stateWrite: true, ticketWorkflow: true, fullWorkspace: true, globalAccess: false },
+        leasing_agent: { manageUsers: false, manageTenantAccess: true, stateWrite: true, ticketWorkflow: true, fullWorkspace: true, globalAccess: false },
+        manager: { manageUsers: false, manageTenantAccess: true, stateWrite: true, ticketWorkflow: true, fullWorkspace: true, globalAccess: false },
+        accountant: { manageUsers: false, manageTenantAccess: false, stateWrite: true, ticketWorkflow: false, fullWorkspace: true, globalAccess: false },
+        technician: { manageUsers: false, manageTenantAccess: false, stateWrite: false, ticketWorkflow: true, fullWorkspace: false, globalAccess: false },
+        tenant: { manageUsers: false, manageTenantAccess: false, stateWrite: false, ticketWorkflow: false, fullWorkspace: false, globalAccess: false }
+      })[role] || { manageUsers: false, manageTenantAccess: false, stateWrite: false, ticketWorkflow: false, fullWorkspace: false, globalAccess: false };
     }
 
     function defaultPermissionsForRole(role) {
       return ({
         owner: {
-          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, taxes: true, reports: true, settings: true
+          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, taxes: true, reports: true, settings: true, buildingIds: []
+        },
+        superadmin: {
+          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, taxes: true, reports: true, settings: true, buildingIds: []
+        },
+        property_owner: {
+          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, taxes: true, reports: true, settings: false, buildingIds: []
+        },
+        property_manager: {
+          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, taxes: true, reports: true, settings: false, buildingIds: []
+        },
+        leasing_agent: {
+          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: false, maintenance: true, documents: true, tasks: true, communications: true, taxes: false, reports: true, settings: false, buildingIds: []
         },
         manager: {
-          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, taxes: true, reports: true, settings: false
+          dashboard: true, properties: true, tenants: true, tenantCard: true, leases: true, meters: true, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: true, documents: true, tasks: true, communications: true, taxes: true, reports: true, settings: false, buildingIds: []
         },
         accountant: {
-          dashboard: true, properties: false, tenants: true, tenantCard: true, leases: true, meters: false, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: false, documents: true, tasks: false, communications: true, taxes: true, reports: true, settings: false
+          dashboard: true, properties: false, tenants: true, tenantCard: true, leases: true, meters: false, settlements: true, periodSettlements: true, payments: true, expenses: true, maintenance: false, documents: true, tasks: false, communications: true, taxes: true, reports: true, settings: false, buildingIds: []
         },
         technician: {
-          dashboard: true, properties: false, tenants: false, tenantCard: false, leases: false, meters: false, settlements: false, periodSettlements: false, payments: false, expenses: false, maintenance: true, documents: true, tasks: true, communications: true, taxes: false, reports: true, settings: false
+          dashboard: true, properties: false, tenants: false, tenantCard: false, leases: false, meters: false, settlements: false, periodSettlements: false, payments: false, expenses: false, maintenance: true, documents: true, tasks: true, communications: true, taxes: false, reports: true, settings: false, buildingIds: []
         },
-        tenant: {}
+        tenant: { buildingIds: [] }
       })[role] || {};
     }
 
@@ -4034,7 +4066,7 @@
           <div class="card"><div class="panel-title"><h3>Rozliczenia miesięczne</h3></div><table><thead><tr><th>Miesiąc</th><th>Razem</th></tr></thead><tbody>${tenantSettlements.map(s => `<tr><td>${fmtMonth(s.month)}</td><td>${fmt(s.total)}</td></tr>`).join("") || `<tr><td colspan="2">Brak</td></tr>`}</tbody></table></div>
           <div class="card"><div class="panel-title"><h3>Rozliczenia okresowe</h3></div><table><thead><tr><th>Okres</th><th>Wynik</th></tr></thead><tbody>${tenantPeriodSettlements.map(s => `<tr><td>${fmtMonth(s.fromMonth)} - ${fmtMonth(s.toMonth)}</td><td class="${s.finalDifference > 0 ? "negative" : s.finalDifference < 0 ? "positive" : ""}">${fmt(s.finalDifference)}</td></tr>`).join("") || `<tr><td colspan="2">Brak</td></tr>`}</tbody></table></div>
         </div>
-        ${currentUser?.role === "owner" ? `
+        ${currentUser?.role !== "tenant" && hasCapability("stateWrite") ? `
           <div class="grid two section">
             <div class="card">
               <div class="panel-title"><h3>Dane formalne najemcy</h3></div>
@@ -4122,7 +4154,7 @@
             </div>
           </div>
         ` : ""}
-        ${currentUser?.role === "owner" ? `
+        ${hasCapability("manageTenantAccess") ? `
           <div class="card section">
             <div class="panel-title"><h3>Dostęp dla najemcy</h3></div>
             <div class="form-grid three">
@@ -4845,14 +4877,18 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
               <input id="team_email" type="email" placeholder="E-mail do logowania" />
               <input id="team_password" type="password" placeholder="Hasło tymczasowe" />
               <select id="team_role" onchange="applyRolePermissionPreset(this.value)">
-                <option value="manager">Manager</option>
-                <option value="accountant">Księgowość</option>
-                <option value="technician">Techniczny</option>
+                <option value="property_owner">Właściciel obiektu</option>
+                <option value="property_manager">Zarządca obiektu</option>
+                <option value="leasing_agent">Wynajmujący</option>
               </select>
+            </div>
+            <div class="section notice">Zakres budynków dla tego konta:</div>
+            <div class="form-grid two section">
+              ${state.buildings.length ? state.buildings.map((building) => `<label><input id="team_building_${building.id}" type="checkbox" /> ${building.name}</label>`).join("") : `<div class="empty-state">Najpierw dodaj budynki, aby przypisać zakres do konta.</div>`}
             </div>
             <div class="section notice">Szczegółowe moduły dla nowego konta zespołu:</div>
             <div class="form-grid two section">
-              ${Object.keys(teamPagePermissionKeys).map((key) => `<label><input id="perm_${key}" type="checkbox" ${defaultPermissionsForRole("manager")[key] ? "checked" : ""} /> ${permissionLabel(key)}</label>`).join("")}
+              ${Object.keys(teamPagePermissionKeys).map((key) => `<label><input id="perm_${key}" type="checkbox" ${defaultPermissionsForRole("property_manager")[key] ? "checked" : ""} /> ${permissionLabel(key)}</label>`).join("")}
             </div>
             <div class="section inline-actions">
               <button class="btn green" onclick="saveTeamUser()">Dodaj / zaktualizuj konto</button>
@@ -4863,16 +4899,16 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
                 <div class="entity-item">
                   <div>
                     <strong>${user.name}</strong>
-                    <div class="meta">${user.email} · ${roleLabel(user.role)}${user.role === "owner" ? " · konto główne" : ""} · ostatnie logowanie: ${user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "jeszcze nigdy"}</div>
+                    <div class="meta">${user.email} · ${roleLabel(user.role)}${isRootRole(user.role) ? " · konto główne" : ""} · zakres: ${buildingScopeSummary(user.permissions?.buildingIds)} · ostatnie logowanie: ${user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "jeszcze nigdy"}</div>
                   </div>
                   <div class="inline-actions">
-                    <span class="badge ${user.isActive ? (user.role === "owner" ? "status-active" : user.role === "technician" ? "status-open" : "status-pending") : "status-closed"}">${user.isActive ? roleLabel(user.role) : "wyłączone"}</span>
-                    ${user.role !== "owner" ? `<button class="btn secondary small" onclick="toggleTeamUserStatus('${user.id}', ${user.isActive ? "false" : "true"})">${user.isActive ? "Wyłącz" : "Włącz"}</button><button class="btn secondary small" onclick="deleteTeamUser('${user.id}')">Usuń</button>` : ""}
+                    <span class="badge ${user.isActive ? (isRootRole(user.role) ? "status-active" : user.role === "technician" ? "status-open" : "status-pending") : "status-closed"}">${user.isActive ? roleLabel(user.role) : "wyłączone"}</span>
+                    ${!isRootRole(user.role) ? `<button class="btn secondary small" onclick="toggleTeamUserStatus('${user.id}', ${user.isActive ? "false" : "true"})">${user.isActive ? "Wyłącz" : "Włącz"}</button><button class="btn secondary small" onclick="deleteTeamUser('${user.id}')">Usuń</button>` : ""}
                   </div>
                 </div>
               `).join("") : `<div class="empty-state">Nie ma jeszcze dodatkowych kont zespołu.</div>`}
             </div>
-            <div class="section notice">Role możesz dodatkowo ograniczyć modułami. Konto wyłączone nie zaloguje się do systemu, ale pozostaje zachowane w historii.</div>
+            <div class="section notice">Role możesz ograniczyć modułami i budynkami. Konto wyłączone nie zaloguje się do systemu, ale pozostaje zachowane w historii.</div>
           </div>
         ` : ""}`;
     }
@@ -5044,7 +5080,7 @@ ${settlement.finalDifference > 0 ? "Do dopłaty" : settlement.finalDifference < 
         document.getElementById("taxes").innerHTML = `
           <div class="card">
             <div class="panel-title"><h3>Moduł podatkowy</h3></div>
-            <div class="notice">Ten moduł jest dostępny tylko dla właściciela, managera lub księgowości.</div>
+            <div class="notice">Ten moduł jest dostępny dla superadministratora, właściciela obiektu, zarządcy, wynajmującego lub księgowości.</div>
           </div>`;
         return;
       }
@@ -6458,7 +6494,7 @@ Pozostało: ${fmt(summary.taxRemaining)}`;
     }
 
     async function loadTenantAccessOverview(silent = false) {
-      if (currentUser?.role !== "owner") {
+      if (!hasCapability("manageTenantAccess")) {
         tenantAccessOverview = [];
         return;
       }
@@ -6478,10 +6514,16 @@ Pozostało: ${fmt(summary.taxRemaining)}`;
       const name = document.getElementById("team_name")?.value.trim() || "";
       const email = document.getElementById("team_email")?.value.trim().toLowerCase() || "";
       const password = document.getElementById("team_password")?.value || "";
-      const role = document.getElementById("team_role")?.value || "manager";
-      const permissions = Object.fromEntries(Object.keys(teamPagePermissionKeys).map((key) => [key, !!document.getElementById(`perm_${key}`)?.checked]));
+      const role = document.getElementById("team_role")?.value || "property_manager";
+      const permissions = {
+        ...Object.fromEntries(Object.keys(teamPagePermissionKeys).map((key) => [key, !!document.getElementById(`perm_${key}`)?.checked])),
+        buildingIds: state.buildings.filter((building) => document.getElementById(`team_building_${building.id}`)?.checked).map((building) => building.id)
+      };
       if (!name || !email || password.length < 8) {
         return alert("Podaj imię i nazwisko, e-mail oraz hasło min. 8 znaków.");
+      }
+      if (state.buildings.length && !permissions.buildingIds.length) {
+        return alert("Wybierz co najmniej jeden budynek dla tego konta.");
       }
       try {
         await apiPost("/api/team-users", { name, email, password, role, permissions });
